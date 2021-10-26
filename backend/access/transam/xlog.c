@@ -970,6 +970,17 @@ static void WALInsertLockAcquireExclusive(void);
 static void WALInsertLockRelease(void);
 static void WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt);
 
+
+void CreateXlogReplayMemoryContext(void)
+{
+    if (!XLogReplayContext) {
+        XLogReplayContext = AllocSetContextCreate(TopMemoryContext,
+                                                  "XLogReplayContext",
+                                                  ALLOCSET_DEFAULT_SIZES);
+    }
+    return;
+}
+
 /*
  * Insert an XLOG record represented by an already-constructed chain of data
  * chunks.  This is a low-level routine; to construct the WAL record header
@@ -2418,9 +2429,13 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	bool		finishing_seg;
 	bool		use_existent;
 	int			curridx;
+	int         endidx;
 	int			npages;
 	int			startidx;
 	uint32		startoffset;
+	int         replay_buffer_len;
+	char*       replay_buffer;
+	char*       cont_buffer;
 
 	/* We should always be inside a critical section here */
 	Assert(CritSectionCount > 0);
@@ -2449,6 +2464,35 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	 * page, or last partially written page.
 	 */
 	curridx = XLogRecPtrToBufIdx(LogwrtResult.Write);
+	//! endidx is the cache block number of end position
+	//! if endidx is smaller than startidx, that means this write reaches the end
+	//! of the cache and then back to start of cache
+    endidx = XLogRecPtrToBufIdx(WriteRqst.Write);
+
+    if(endidx >= startidx) {
+        replay_buffer_len = (endidx-startidx+1) * (Size)XLOG_BLCKSZ;
+//            replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+        replay_buffer = malloc(replay_buffer_len);
+        memcpy(replay_buffer, XLogCtl->pages + startidx * (Size)XLOG_BLCKSZ, (endidx-startidx+1)*(Size)BLCKSZ);
+    }
+    else {
+        replay_buffer_len = ((XLogCtl->XLogCacheBlck-endidx+1) + (startidx+1)) * XLOG_BLCKSZ;
+        replay_buffer = malloc(replay_buffer_len);
+//        replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+        memcpy(replay_buffer, XLogCtl->pages + startidx*(Size)XLOG_BLCKSZ,
+               (XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ);
+        cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
+        memcpy(cont_buffer, XLogCtl->pages, (startidx+1)*(Size)XLOG_BLCKSZ);
+    }
+
+    XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
+
+    free(replay_buffer);
+
+//        if(XLogReplayContext == NULL) {
+//            CreateXlogReplayMemoryContext();
+//            MemoryContextAllowInCriticalSection(XLogReplayContext, true);
+//        }
 
 	while (LogwrtResult.Write < WriteRqst.Write)
 	{
@@ -6493,6 +6537,8 @@ StartupXLOG(void)
 				 errmsg("out of memory"),
 				 errdetail("Failed while allocating a WAL reading processor.")));
 	xlogreader->system_identifier = ControlFile->system_identifier;
+
+    XLogReplayModuleInit();
 
 	/*
 	 * Allocate two page buffers dedicated to WAL consistency checks.  We do
@@ -12705,9 +12751,10 @@ XLogRequestWalReceiverReply(void)
 	doRequestWalReceiverReply = true;
 }
 
+
 XLogReaderState *replayReader = NULL;
 
-void XLogRelayModuleInit(void)
+void XLogReplayModuleInit(void)
 {
 
     XLogPageReadPrivate private;
@@ -12719,12 +12766,14 @@ void XLogRelayModuleInit(void)
                                           .segment_open = NULL,
                                           .segment_close = wal_segment_close),
                                &private);
-    if (!xlogreader)
+    if (!replayReader)
         ereport(ERROR,
                 (errcode(ERRCODE_OUT_OF_MEMORY),
                         errmsg("out of memory"),
                         errdetail("Failed while allocating a WAL reading processor.")));
 
+    replayReader->readRecordBuf = palloc((XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ);
+    replayReader->readRecordBufSize = (XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ;
     int rmid;
     for (rmid = 0; rmid <= RM_MAX_ID; rmid++)
     {
@@ -12736,338 +12785,32 @@ void XLogRelayModuleInit(void)
 }
 
 void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
-    XLogBeginRead(replayReader, reqFrom);
 
+    if(replayReader == NULL) {
+        XLogReplayModuleInit();
+    }
+
+    XLogBeginRead(replayReader, reqFrom);
+    char msg[100];
+    sprintf(msg, "[XlogReplay] dataLen = %d\n\n", dataLen);
+    ereport(LOG, (errmsg(msg)));
     int totalLen = 0;
     while (dataLen > totalLen) {
         int readLen = 0;
-
-        if (readLen = XLogReadSingleRecord(&data) && readLen < 0) {
+        if (readLen = XLogReadSingleRecord(replayReader, &data) && readLen < 0) {
             ereport(ERROR,
                     (errcode(ERRCODE_OUT_OF_MEMORY),
                             errmsg("XLogReadSingleRecord Failed"),
                             errdetail("XLogReadSingleRecord return value is negative")));
         }
-
+        sprintf(msg, "[XlogReplay] ReadLen = %d\n\n", readLen);
+        ereport(LOG, (errmsg(msg)));
+        //printf("[XLogReplay] Read a record, readLen = %d\n", readLen);
+        //LogRecord *record = (XLogRecord*)replayReader->readRecordBuf;
+        //printf("[XLogReplay] Xlog readLen = %d and xlog header's totalLen = %d\n", readLen, record->xl_tot_len);
         //! info&heap_insert   -> redo
         totalLen += readLen;
     }
     return;
 }
 
-/*
- * This function will return how many bytes has been read from this record
- *
- */
-int XLogReadSingleRecord(char** dataptr) {
-    char* data = *dataptr;
-    XLogRecord *record;
-    XLogRecPtr	targetPagePtr;
-    bool		randAccess;
-    uint32		len,
-            total_len;
-    uint32		targetRecOff;
-    uint32		pageHeaderSize;
-    bool		gotheader;
-    int			readOff;
-    XLogRecPtr RecPtr;
-
-    /*
-     * randAccess indicates whether to verify the previous-record pointer of
-     * the record we're reading.  We only do this if we're reading
-     * sequentially, which is what we initially assume.
-     */
-    randAccess = false;
-
-    /* reset error state */
-    *errormsg = NULL;
-    replayReader->errormsg_buf[0] = '\0';
-
-    ResetDecoder(replayReader);
-
-    RecPtr = replayReader->EndRecPtr;
-
-    replayReader->currRecPtr = RecPtr;
-
-    //! targetPagePtr is ths start address of *page*
-    targetPagePtr = RecPtr - (RecPtr % XLOG_BLCKSZ);
-    //! page offset
-    targetRecOff = RecPtr % XLOG_BLCKSZ;
-
-    /*
-     * Read the page containing the record into state->readBuf. Request enough
-     * byte to cover the whole record header, or at least the part of it that
-     * fits on the same page.
-     */
-    //! this will at least read a pageHeader
-    readOff = ReplayReadPageInternal(data, targetPagePtr,
-                               Min(targetRecOff + SizeOfXLogRecord, XLOG_BLCKSZ));
-    if (readOff < 0)
-        goto err;
-
-    /*
-     * ReadPageInternal always returns at least the page header, so we can
-     * examine it now.
-     */
-    pageHeaderSize = XLogPageHeaderSize((XLogPageHeader) replayReader->readBuf);
-    if (targetRecOff == 0)
-    {
-        /*
-         * At page start, so skip over page header.
-         */
-        RecPtr += pageHeaderSize;
-        targetRecOff = pageHeaderSize;
-    }
-    else if (targetRecOff < pageHeaderSize)
-    {
-        report_invalid_record(state, "invalid record offset at %X/%X",
-                              (uint32) (RecPtr >> 32), (uint32) RecPtr);
-        goto err;
-    }
-
-    if ((((XLogPageHeader) replayReader->readBuf)->xlp_info & XLP_FIRST_IS_CONTRECORD) &&
-        targetRecOff == pageHeaderSize)
-    {
-        report_invalid_record(state, "contrecord is requested by %X/%X",
-                              (uint32) (RecPtr >> 32), (uint32) RecPtr);
-        goto err;
-    }
-
-    /* ReadPageInternal has verified the page header */
-    Assert(pageHeaderSize <= readOff);
-
-    /*
-     * Read the record length.
-     *
-     * NB: Even though we use an XLogRecord pointer here, the whole record
-     * header might not fit on this page. xl_tot_len is the first field of the
-     * struct, so it must be on this page (the records are MAXALIGNed), but we
-     * cannot access any other fields until we've verified that we got the
-     * whole header.
-     */
-    record = (XLogRecord *) (replayReader->readBuf + RecPtr % XLOG_BLCKSZ);
-    total_len = record->xl_tot_len;
-
-    /*
-     * If the whole record header is on this page, validate it immediately.
-     * Otherwise do just a basic sanity check on xl_tot_len, and validate the
-     * rest of the header after reading it from the next page.  The xl_tot_len
-     * check is necessary here to ensure that we enter the "Need to reassemble
-     * record" code path below; otherwise we might fail to apply
-     * ValidXLogRecordHeader at all.
-     */
-    /*!
-     * targetRecOff is the length of previous record in the current page.
-     * XLOG_BLCKSZ-SizeOfXLogRecord is the maximum size length of previous record
-     * when this page containing the complete Record header.
-     *
-     * This if condition also equal to SizeOfXLogRecord <= XLOG_BLCKSZ - targetRecOff
-     */
-    if (targetRecOff <= XLOG_BLCKSZ - SizeOfXLogRecord)
-    {
-        if (!ValidXLogRecordHeader(state, RecPtr, state->ReadRecPtr, record,
-                                   randAccess))
-            goto err;
-        gotheader = true;
-    }
-    else
-    {
-        /* XXX: more validation should be done here */
-        if (total_len < SizeOfXLogRecord)
-        {
-            report_invalid_record(state,
-                                  "invalid record length at %X/%X: wanted %u, got %u",
-                                  (uint32) (RecPtr >> 32), (uint32) RecPtr,
-                                  (uint32) SizeOfXLogRecord, total_len);
-            goto err;
-        }
-        gotheader = false;
-    }
-
-    //! to determine whether the whole xlog is in the remaining part
-    len = XLOG_BLCKSZ - RecPtr % XLOG_BLCKSZ;
-    //! part of log is in the next page.
-    if (total_len > len)
-    {
-        /* Need to reassemble record */
-        char	   *contdata;
-        XLogPageHeader pageHeader;
-        char	   *buffer;
-        uint32		gotlen;
-
-        /*
-         * Enlarge readRecordBuf as needed.
-         */
-        if (total_len > replayReader->readRecordBufSize &&
-            !allocate_recordbuf(replayReader, total_len))
-        {
-            /* We treat this as a "bogus data" condition */
-            report_invalid_record(replayReader, "record length %u at %X/%X too long",
-                                  total_len,
-                                  (uint32) (RecPtr >> 32), (uint32) RecPtr);
-            goto err;
-        }
-
-        /* Copy the first fragment of the record from the first page. */
-        memcpy(replayReader->readRecordBuf,
-               replayReader->readBuf + RecPtr % XLOG_BLCKSZ, len);
-        buffer = replayReader->readRecordBuf + len;
-        gotlen = len;
-
-        do
-        {
-            data += XLOG_BLCKSZ;
-            /* Calculate pointer to beginning of next page */
-            targetPagePtr += XLOG_BLCKSZ;
-
-            /* Wait for the next page to become available */
-            readOff = ReplayReadPageInternal(data, targetPagePtr,
-                                       Min(total_len - gotlen + SizeOfXLogShortPHD,
-                                           XLOG_BLCKSZ));
-
-            if (readOff < 0)
-                goto err;
-
-            Assert(SizeOfXLogShortPHD <= readOff);
-
-            /* Check that the continuation on next page looks valid */
-            pageHeader = (XLogPageHeader) replayReader->readBuf;
-            if (!(pageHeader->xlp_info & XLP_FIRST_IS_CONTRECORD))
-            {
-                report_invalid_record(replayReader,
-                                      "there is no contrecord flag at %X/%X",
-                                      (uint32) (RecPtr >> 32), (uint32) RecPtr);
-                goto err;
-            }
-
-            /*
-             * Cross-check that xlp_rem_len agrees with how much of the record
-             * we expect there to be left.
-             */
-            /*!
-             *  pageHeader also remember how much remaining length of previous record.
-             */
-            if (pageHeader->xlp_rem_len == 0 ||
-                total_len != (pageHeader->xlp_rem_len + gotlen))
-            {
-                report_invalid_record(replayReader,
-                                      "invalid contrecord length %u at %X/%X",
-                                      pageHeader->xlp_rem_len,
-                                      (uint32) (RecPtr >> 32), (uint32) RecPtr);
-                goto err;
-            }
-
-            /* Append the continuation from this page to the buffer */
-            pageHeaderSize = XLogPageHeaderSize(pageHeader);
-
-            /*!
-             *  In the previous ReadPageInternal(), it can't determine it's a shortPHD
-             *  or a longPHD. After read in the shortPHD length data, it can determine
-             *  the exact kind and length of PHD.
-             */
-            if (readOff < pageHeaderSize)
-                readOff = ReadPageInternal(replayReader, targetPagePtr,
-                                           pageHeaderSize);
-
-            Assert(pageHeaderSize <= readOff);
-
-            contdata = (char *) replayReader->readBuf + pageHeaderSize;
-            len = XLOG_BLCKSZ - pageHeaderSize;
-            if (pageHeader->xlp_rem_len < len)
-                len = pageHeader->xlp_rem_len;
-
-            if (readOff < pageHeaderSize + len)
-                readOff = ReadPageInternal(replayReader, targetPagePtr,
-                                           pageHeaderSize + len);
-
-            memcpy(buffer, (char *) contdata, len);
-            buffer += len;
-            gotlen += len;
-
-            /* If we just reassembled the record header, validate it. */
-            if (!gotheader)
-            {
-                record = (XLogRecord *) replayReader->readRecordBuf;
-                if (!ValidXLogRecordHeader(replayReader, RecPtr, replayReader->ReadRecPtr,
-                                           record, randAccess))
-                    goto err;
-                gotheader = true;
-            }
-        } while (gotlen < total_len);
-
-        Assert(gotheader);
-
-        record = (XLogRecord *) replayReader->readRecordBuf;
-        if (!ValidXLogRecord(replayReader, record, RecPtr))
-            goto err;
-
-        pageHeaderSize = XLogPageHeaderSize((XLogPageHeader) replayReader->readBuf);
-        replayReader->ReadRecPtr = RecPtr;
-        replayReader->EndRecPtr = targetPagePtr + pageHeaderSize
-                           + MAXALIGN(pageHeader->xlp_rem_len);
-    }
-    else
-    {
-        /* Wait for the record data to become available */
-        readOff = ReadPageInternal(replayReader, targetPagePtr,
-                                   Min(targetRecOff + total_len, XLOG_BLCKSZ));
-        if (readOff < 0)
-            goto err;
-
-        /* Record does not cross a page boundary */
-        if (!ValidXLogRecord(replayReader, record, RecPtr))
-            goto err;
-
-        //!!!!!!! readRecordBuf??
-        replayReader->EndRecPtr = RecPtr + MAXALIGN(total_len);
-
-        replayReader->ReadRecPtr = RecPtr;
-    }
-
-    /*!
-     * Special processing if it's an XLOG SWITCH record
-     */
-    if (record->xl_rmid == RM_XLOG_ID &&
-        (record->xl_info & ~XLR_INFO_MASK) == XLOG_SWITCH)
-    {
-        /* Pretend it extends to end of segment */
-        replayReader->EndRecPtr += replayReader->segcxt.ws_segsize - 1;
-        replayReader->EndRecPtr -= XLogSegmentOffset(replayReader->EndRecPtr, replayReader->segcxt.ws_segsize);
-    }
-
-    if (DecodeXLogRecord(replayReader, record, errormsg))
-        return replayReader->EndRecPtr-RecPtr;
-    else
-        return 0;
-
-    err:
-
-    /*
-     * Invalidate the read state. We might read from a different source after
-     * failure.
-     */
-    XLogReaderInvalReadState(replayReader);
-
-    if (replayReader->errormsg_buf[0] != '\0')
-        *errormsg = replayReader->errormsg_buf;
-
-    return 0;
-}
-
-/*!
- *  This function will read at most XLOG_BLKSZ data from *data and write into
- *  replayReader's readBuf.
- *  The return value is how many data has been read.
- *  This function will also set replayReader's timeline.
- *
- *  For here, I copy the logic of func (XLogPageRead). This function will always read
- *  XLOG_BLKSZ data from segment file (I think the reason is file system need at least read a page).
- *  However, because the data is not stored in file system, I think there is no need to read at least
- *  XLOG_BLKSZ.
- */
-int ReplayReadPageInternal(char *data, XLogRecPtr targetPagePtr, int minReadLen) {
-    Assert(minReadLen <= XLOG_BLCKSZ);
-    memcpy(replayReader->readBuf, data, XLOG_BLCKSZ);
-    replayReader->seg.ws_tli = curFileTLI;
-    return XLOG_BLCKSZ;
-}
