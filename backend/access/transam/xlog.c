@@ -2484,7 +2484,7 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
         cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
         memcpy(cont_buffer, XLogCtl->pages, (endidx+1)*(Size)XLOG_BLCKSZ);
     }
-    memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
+    //memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
     char msg[100];
     sprintf(msg, "[XlogWrite] buffer_len=%d\n\n", replay_buffer_len);
     ereport(LOG, (errmsg(msg)));
