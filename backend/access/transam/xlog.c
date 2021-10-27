@@ -2476,15 +2476,18 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
         memcpy(replay_buffer, XLogCtl->pages + startidx * (Size)XLOG_BLCKSZ, (endidx-startidx+1)*(Size)BLCKSZ);
     }
     else {
-        replay_buffer_len = ((XLogCtl->XLogCacheBlck-endidx+1) + (startidx+1)) * XLOG_BLCKSZ;
+        replay_buffer_len = ((XLogCtl->XLogCacheBlck-startidx+1) + (endidx+1)) * XLOG_BLCKSZ;
         replay_buffer = malloc(replay_buffer_len);
 //        replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
         memcpy(replay_buffer, XLogCtl->pages + startidx*(Size)XLOG_BLCKSZ,
                (XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ);
         cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
-        memcpy(cont_buffer, XLogCtl->pages, (startidx+1)*(Size)XLOG_BLCKSZ);
+        memcpy(cont_buffer, XLogCtl->pages, (endidx+1)*(Size)XLOG_BLCKSZ);
     }
-
+    memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
+    char msg[100];
+    sprintf(msg, "[XlogWrite] buffer_len=%d\n\n", replay_buffer_len);
+    ereport(LOG, (errmsg(msg)));
     XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
 
     free(replay_buffer);
@@ -12792,7 +12795,7 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
 
     XLogBeginRead(replayReader, reqFrom);
     char msg[100];
-    sprintf(msg, "[XlogReplay] dataLen = %d\n\n", dataLen);
+    sprintf(msg, "[XlogReplay] dataLen = %d, start=%d, data=%d, XlogSize=%d, cacheSize=%d\n\n", dataLen, reqFrom, strlen(data), XLOG_BLCKSZ, XLogCtl->XLogCacheBlck);
     ereport(LOG, (errmsg(msg)));
     int totalLen = 0;
     while (dataLen > totalLen) {
@@ -12805,6 +12808,7 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
         }
         sprintf(msg, "[XlogReplay] ReadLen = %d\n\n", readLen);
         ereport(LOG, (errmsg(msg)));
+        return;
         //printf("[XLogReplay] Read a record, readLen = %d\n", readLen);
         //LogRecord *record = (XLogRecord*)replayReader->readRecordBuf;
         //printf("[XLogReplay] Xlog readLen = %d and xlog header's totalLen = %d\n", readLen, record->xl_tot_len);

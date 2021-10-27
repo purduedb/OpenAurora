@@ -27,6 +27,7 @@
 #include "common/pg_lzcompress.h"
 #include "replication/origin.h"
 //#include "utils/palloc.h"
+#include "utils/elog.h"
 
 #ifndef FRONTEND
 #include "miscadmin.h"
@@ -1669,6 +1670,7 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
     int			readOff;
     char	   *errormsg;
     XLogRecPtr RecPtr;
+    char msg[100];
 
     /*
      * randAccess indicates whether to verify the previous-record pointer of
@@ -1722,6 +1724,9 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
                               (uint32) (RecPtr >> 32), (uint32) RecPtr);
         goto err;
     }
+
+//    sprintf(msg, "[XLogReadSingleRecord] ReadOff = %d, pageHeaderSize = %d\n\n", readOff, pageHeaderSize);
+//    ereport(LOG, (errmsg(msg)));
 
     if ((((XLogPageHeader) replayReader->readBuf)->xlp_info & XLP_FIRST_IS_CONTRECORD) &&
         targetRecOff == pageHeaderSize)
@@ -1906,7 +1911,7 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
     }
     else
     {
-        if (!allocate_recordbuf(replayReader, total_len))
+        if (replayReader->readRecordBufSize < total_len && !allocate_recordbuf(replayReader, total_len))
         {
             /* We treat this as a "bogus data" condition */
             report_invalid_record(replayReader, "record length %u at %X/%X too long",
