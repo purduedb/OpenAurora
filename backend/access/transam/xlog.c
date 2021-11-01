@@ -89,7 +89,7 @@ extern uint32 bootstrap_data_checksum_version;
 int			max_wal_size_mb = 1024; /* 1 GB */
 int			min_wal_size_mb = 80;	/* 80 MB */
 int			wal_keep_size_mb = 0;
-int			XLOGbuffers = -1;
+int			XLOGbuffers = -1; //! the number of disk-page buffers in shared memory for WAL
 int			XLogArchiveTimeout = 0;
 int			XLogArchiveMode = ARCHIVE_MODE_OFF;
 char	   *XLogArchiveCommand = NULL;
@@ -969,6 +969,17 @@ static void WALInsertLockAcquire(void);
 static void WALInsertLockAcquireExclusive(void);
 static void WALInsertLockRelease(void);
 static void WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt);
+
+
+void CreateXlogReplayMemoryContext(void)
+{
+    if (!XLogReplayContext) {
+        XLogReplayContext = AllocSetContextCreate(TopMemoryContext,
+                                                  "XLogReplayContext",
+                                                  ALLOCSET_DEFAULT_SIZES);
+    }
+    return;
+}
 
 /*
  * Insert an XLOG record represented by an already-constructed chain of data
@@ -2418,9 +2429,13 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	bool		finishing_seg;
 	bool		use_existent;
 	int			curridx;
+	int         endidx;
 	int			npages;
 	int			startidx;
 	uint32		startoffset;
+	int         replay_buffer_len;
+	char*       replay_buffer;
+	char*       cont_buffer;
 
 	/* We should always be inside a critical section here */
 	Assert(CritSectionCount > 0);
@@ -2449,6 +2464,38 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	 * page, or last partially written page.
 	 */
 	curridx = XLogRecPtrToBufIdx(LogwrtResult.Write);
+	//! endidx is the cache block number of end position
+	//! if endidx is smaller than startidx, that means this write reaches the end
+	//! of the cache and then back to start of cache
+    endidx = XLogRecPtrToBufIdx(WriteRqst.Write);
+
+    if(endidx >= startidx) {
+        replay_buffer_len = (endidx-startidx+1) * (Size)XLOG_BLCKSZ;
+//            replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+        replay_buffer = malloc(replay_buffer_len);
+        memcpy(replay_buffer, XLogCtl->pages + startidx * (Size)XLOG_BLCKSZ, (endidx-startidx+1)*(Size)BLCKSZ);
+    }
+    else {
+        replay_buffer_len = ((XLogCtl->XLogCacheBlck-startidx+1) + (endidx+1)) * XLOG_BLCKSZ;
+        replay_buffer = malloc(replay_buffer_len);
+//        replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+        memcpy(replay_buffer, XLogCtl->pages + startidx*(Size)XLOG_BLCKSZ,
+               (XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ);
+        cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
+        memcpy(cont_buffer, XLogCtl->pages, (endidx+1)*(Size)XLOG_BLCKSZ);
+    }
+    //memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
+    char msg[100];
+    sprintf(msg, "[XlogWrite] buffer_len=%d\n\n", replay_buffer_len);
+    ereport(LOG, (errmsg(msg)));
+    XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
+
+    free(replay_buffer);
+
+//        if(XLogReplayContext == NULL) {
+//            CreateXlogReplayMemoryContext();
+//            MemoryContextAllowInCriticalSection(XLogReplayContext, true);
+//        }
 
 	while (LogwrtResult.Write < WriteRqst.Write)
 	{
@@ -6493,6 +6540,8 @@ StartupXLOG(void)
 				 errmsg("out of memory"),
 				 errdetail("Failed while allocating a WAL reading processor.")));
 	xlogreader->system_identifier = ControlFile->system_identifier;
+
+    XLogReplayModuleInit();
 
 	/*
 	 * Allocate two page buffers dedicated to WAL consistency checks.  We do
@@ -12704,3 +12753,68 @@ XLogRequestWalReceiverReply(void)
 {
 	doRequestWalReceiverReply = true;
 }
+
+
+XLogReaderState *replayReader = NULL;
+
+void XLogReplayModuleInit(void)
+{
+
+    XLogPageReadPrivate private;
+
+    MemSet(&private, 0, sizeof(XLogPageReadPrivate));
+    replayReader =
+            XLogReaderAllocate(wal_segment_size, NULL,
+                               XL_ROUTINE(.page_read = &XLogPageRead,
+                                          .segment_open = NULL,
+                                          .segment_close = wal_segment_close),
+                               &private);
+    if (!replayReader)
+        ereport(ERROR,
+                (errcode(ERRCODE_OUT_OF_MEMORY),
+                        errmsg("out of memory"),
+                        errdetail("Failed while allocating a WAL reading processor.")));
+
+    replayReader->readRecordBuf = palloc((XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ);
+    replayReader->readRecordBufSize = (XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ;
+    int rmid;
+    for (rmid = 0; rmid <= RM_MAX_ID; rmid++)
+    {
+        if (RmgrTable[rmid].rm_startup != NULL)
+            RmgrTable[rmid].rm_startup();
+    }
+
+    return;
+}
+
+void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
+
+    if(replayReader == NULL) {
+        XLogReplayModuleInit();
+    }
+
+    XLogBeginRead(replayReader, reqFrom);
+    char msg[100];
+    sprintf(msg, "[XlogReplay] dataLen = %d, start=%d, data=%d, XlogSize=%d, cacheSize=%d\n\n", dataLen, reqFrom, strlen(data), XLOG_BLCKSZ, XLogCtl->XLogCacheBlck);
+    ereport(LOG, (errmsg(msg)));
+    int totalLen = 0;
+    while (dataLen > totalLen) {
+        int readLen = 0;
+        if (readLen = XLogReadSingleRecord(replayReader, &data) && readLen < 0) {
+            ereport(ERROR,
+                    (errcode(ERRCODE_OUT_OF_MEMORY),
+                            errmsg("XLogReadSingleRecord Failed"),
+                            errdetail("XLogReadSingleRecord return value is negative")));
+        }
+        sprintf(msg, "[XlogReplay] ReadLen = %d\n\n", readLen);
+        ereport(LOG, (errmsg(msg)));
+        return;
+        //printf("[XLogReplay] Read a record, readLen = %d\n", readLen);
+        //LogRecord *record = (XLogRecord*)replayReader->readRecordBuf;
+        //printf("[XLogReplay] Xlog readLen = %d and xlog header's totalLen = %d\n", readLen, record->xl_tot_len);
+        //! info&heap_insert   -> redo
+        totalLen += readLen;
+    }
+    return;
+}
+

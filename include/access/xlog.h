@@ -351,6 +351,10 @@ extern void XLogRequestWalReceiverReply(void);
 extern void assign_max_wal_size(int newval, void *extra);
 extern void assign_checkpoint_completion_target(double newval, void *extra);
 
+extern void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen);
+extern void CreateXlogReplayMemoryContext(void);
+extern void XLogReplayModuleInit(void);
+
 /*
  * Routines to start, stop, and get status of a base backup.
  */

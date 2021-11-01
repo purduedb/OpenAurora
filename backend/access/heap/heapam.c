@@ -1831,6 +1831,8 @@ void
 heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 			int options, BulkInsertState bistate)
 {
+    //ereport(LOG,
+    //        (errmsg("\n\n\nheap_insert start!!")));
 	TransactionId xid = GetCurrentTransactionId();
 	HeapTuple	heaptup;
 	Buffer		buffer;
@@ -1896,7 +1898,7 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	 * If you do add PageSetPrunable here, add it in heap_xlog_insert too.
 	 */
 
-	MarkBufferDirty(buffer);
+	//! MarkBufferDirty(buffer);
 
 	/* XLOG stuff */
 	if (RelationNeedsWAL(relation))
@@ -8805,6 +8807,7 @@ void
 heap_redo(XLogReaderState *record)
 {
 	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    printf("heap_redo start, XLOG_HEAP_OPMAST = %d\n", info&XLOG_HEAP_OPMASK);
 
 	/*
 	 * These operations don't overwrite MVCC data so no conflict processing is
