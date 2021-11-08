@@ -2486,7 +2486,7 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
     }
     //memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
     char msg[100];
-    sprintf(msg, "[XlogWrite] buffer_len=%d\n\n", replay_buffer_len);
+    sprintf(msg, "[XlogWrite] buffer_len=%d, targe_char1=%d, targe_char2=%d,targe_char3=%d,targe_char4=%d,targe_char5=%d\n\n", replay_buffer_len,replay_buffer[0], replay_buffer[1],replay_buffer[2],replay_buffer[3],replay_buffer[4]);
     ereport(LOG, (errmsg(msg)));
     XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
 
@@ -12800,18 +12800,17 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
     int totalLen = 0;
     while (dataLen > totalLen) {
         int readLen = 0;
+		XLogRecord *record = NULL;
         if (readLen = XLogReadSingleRecord(replayReader, &data) && readLen < 0) {
             ereport(ERROR,
                     (errcode(ERRCODE_OUT_OF_MEMORY),
                             errmsg("XLogReadSingleRecord Failed"),
                             errdetail("XLogReadSingleRecord return value is negative")));
         }
-        sprintf(msg, "[XlogReplay] ReadLen = %d\n\n", readLen);
-        ereport(LOG, (errmsg(msg)));
-        return;
-        //printf("[XLogReplay] Read a record, readLen = %d\n", readLen);
-        //LogRecord *record = (XLogRecord*)replayReader->readRecordBuf;
+        record = (XLogRecord*)replayReader->readRecordBuf;
         //printf("[XLogReplay] Xlog readLen = %d and xlog header's totalLen = %d\n", readLen, record->xl_tot_len);
+		sprintf(msg, "[XlogReplay] ReadLen = %d, XLog_type = %d, XLog_info = %d\n\n", readLen, record->xl_rmid, record->xl_info);
+        ereport(LOG, (errmsg(msg)));
         //! info&heap_insert   -> redo
         totalLen += readLen;
     }

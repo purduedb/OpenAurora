@@ -1677,10 +1677,10 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
      * the record we're reading.  We only do this if we're reading
      * sequentially, which is what we initially assume.
      */
-    randAccess = false;
+    randAccess = true;
 
     /* reset error state */
-    *errormsg = NULL;
+    errormsg = NULL;
     replayReader->errormsg_buf[0] = '\0';
 
     ResetDecoder(replayReader);
@@ -1961,7 +1961,7 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
     XLogReaderInvalReadState(replayReader);
 
     if (replayReader->errormsg_buf[0] != '\0')
-        *errormsg = replayReader->errormsg_buf;
+        errormsg = replayReader->errormsg_buf;
 
     return 0;
 }
