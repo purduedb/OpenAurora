@@ -27,7 +27,6 @@
 #include "common/pg_lzcompress.h"
 #include "replication/origin.h"
 //#include "utils/palloc.h"
-#include "utils/elog.h"
 
 #ifndef FRONTEND
 #include "miscadmin.h"
@@ -1640,12 +1639,13 @@ XLogRecGetFullXid(XLogReaderState *record)
 int ReplayReadPageInternal(XLogReaderState *replayReader, char *data, XLogRecPtr targetPagePtr, int minReadLen) {
 
     // Here use segoff to represent the start position of last read
-    if(replayReader->segoff == targetPagePtr && minReadLen <= replayReader->readLen) {
-        return replayReader->readLen;
-    }
+//    if(replayReader->segoff == targetPagePtr && minReadLen <= replayReader->readLen) {
+//        return replayReader->readLen;
+//    }
 
     Assert(minReadLen <= XLOG_BLCKSZ);
     memcpy(replayReader->readBuf, data, XLOG_BLCKSZ);
+//    printf("**************7879879879879879879\n\n");
 
     replayReader->segoff = targetPagePtr;
     replayReader->readLen = XLOG_BLCKSZ;
@@ -1670,7 +1670,7 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
     int			readOff;
     char	   *errormsg;
     XLogRecPtr RecPtr;
-    char msg[100];
+    char msg[300];
 
     /*
      * randAccess indicates whether to verify the previous-record pointer of
@@ -1710,6 +1710,9 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
      * examine it now.
      */
     pageHeaderSize = XLogPageHeaderSize((XLogPageHeader) replayReader->readBuf);
+
+    printf("[XLogReadSingleRecord] pageHeaderSize is %d \n\n", pageHeaderSize);
+
     if (targetRecOff == 0)
     {
         /*
@@ -1725,8 +1728,6 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
         goto err;
     }
 
-//    sprintf(msg, "[XLogReadSingleRecord] ReadOff = %d, pageHeaderSize = %d\n\n", readOff, pageHeaderSize);
-//    ereport(LOG, (errmsg(msg)));
 
     if ((((XLogPageHeader) replayReader->readBuf)->xlp_info & XLP_FIRST_IS_CONTRECORD) &&
         targetRecOff == pageHeaderSize)
@@ -1751,6 +1752,8 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
     record = (XLogRecord *) (replayReader->readBuf + RecPtr % XLOG_BLCKSZ);
     total_len = record->xl_tot_len;
 
+    printf("[XLogReadSingleRecord] the record total_len is %d, RecPtr = %lld\n", total_len, replayReader->readBuf);
+
     /*
      * If the whole record header is on this page, validate it immediately.
      * Otherwise do just a basic sanity check on xl_tot_len, and validate the
@@ -1768,6 +1771,7 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
      */
     if (targetRecOff <= XLOG_BLCKSZ - SizeOfXLogRecord)
     {
+        printf("[XLogReadSingleRecord] this page has the complete page header\n");
         if (!ValidXLogRecordHeader(replayReader, RecPtr, replayReader->ReadRecPtr, record,
                                    randAccess))
             goto err;
@@ -1786,6 +1790,9 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
         }
         gotheader = false;
     }
+
+    printf("[XLogReadSingleRecord] This page contain XLogRecord Header? %d\n\n", gotheader);
+
 
     //! to determine whether the whole xlog is in the remaining part
     len = XLOG_BLCKSZ - RecPtr % XLOG_BLCKSZ;
@@ -1947,12 +1954,17 @@ int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr) {
         replayReader->EndRecPtr -= XLogSegmentOffset(replayReader->EndRecPtr, replayReader->segcxt.ws_segsize);
     }
 
-    if (DecodeXLogRecordForReplay(replayReader, record, errormsg))
-        return replayReader->EndRecPtr-RecPtr;
+    printf("[XLogReadSingleRecord] Function complete, the EndPos = %d, and the StartPos = %d\n", replayReader->EndRecPtr, RecPtr);
+
+    if (DecodeXLogRecordForReplay(replayReader, record, errormsg)){
+        return (int)((replayReader->EndRecPtr)-RecPtr);
+    }
     else
         return 0;
 
     err:
+
+    printf("[XLogReadSingleRecord] goto err: return 0\n\n");
 
     /*
      * Invalidate the read state. We might read from a different source after

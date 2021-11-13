@@ -354,6 +354,7 @@ extern void assign_checkpoint_completion_target(double newval, void *extra);
 extern void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen);
 extern void CreateXlogReplayMemoryContext(void);
 extern void XLogReplayModuleInit(void);
+extern void XLogReplayBufferInit(void);
 
 /*
  * Routines to start, stop, and get status of a base backup.
