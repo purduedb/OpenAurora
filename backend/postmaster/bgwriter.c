@@ -137,6 +137,9 @@ BackgroundWriterMain(void)
 
 	WritebackContextInit(&wb_context, &bgwriter_flush_after);
 
+	XLogReplayBufferInit();
+    XLogReplayModuleInit();
+
 	/*
 	 * If an exception is encountered, processing resumes here.
 	 *

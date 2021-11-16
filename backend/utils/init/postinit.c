@@ -650,6 +650,9 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 		 * result.
 		 */
 		(void) RecoveryInProgress();
+
+		XLogReplayBufferInit();
+    	XLogReplayModuleInit();
 	}
 	else
 	{

@@ -228,6 +228,9 @@ CheckpointerMain(void)
 												 ALLOCSET_DEFAULT_SIZES);
 	MemoryContextSwitchTo(checkpointer_context);
 
+	XLogReplayBufferInit();
+    XLogReplayModuleInit();
+	
 	/*
 	 * If an exception is encountered, processing resumes here.
 	 *

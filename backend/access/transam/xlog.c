@@ -12860,7 +12860,6 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
                             errmsg("XLogReadSingleRecord Failed"),
                             errdetail("XLogReadSingleRecord return value is negative")));
         }
-
         //! info&heap_insert   -> redo
         totalLen += readLen;
     }
