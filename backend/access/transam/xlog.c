@@ -2483,8 +2483,11 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	char*       replay_buffer;
 	char*       cont_buffer;
 
-	/* We should always be inside a critical section here */
+#ifndef STORAGE_NODE
+
+    /* We should always be inside a critical section here */
 	Assert(CritSectionCount > 0);
+#endif
 
 	/*
 	 * Update local LogwrtResult (caller probably did this already, but...)

@@ -20,6 +20,9 @@
  *
  *-------------------------------------------------------------------------
  */
+//! This flag will disable critical_section related code
+#define STORAGE_NODE
+
 #ifndef MISCADMIN_H
 #define MISCADMIN_H
 

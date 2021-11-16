@@ -148,13 +148,15 @@ XLogEnsureRecordSpace(int max_block_id, int ndatas)
 {
 	int			nbuffers;
 
-	/*
+#ifndef STORAGE_NODE
+    /*
 	 * This must be called before entering a critical section, because
 	 * allocating memory inside a critical section can fail. repalloc() will
 	 * check the same, but better to check it here too so that we fail
 	 * consistently even if the arrays happen to be large enough already.
 	 */
 	Assert(CritSectionCount == 0);
+#endif
 
 	/* the minimum values can't be decreased */
 	if (max_block_id < XLR_NORMAL_MAX_BLOCK_ID)
@@ -1018,9 +1020,11 @@ log_newpage_buffer(Buffer buffer, bool page_std)
 	ForkNumber	forkNum;
 	BlockNumber blkno;
 
-	/* Shared buffers should be modified in a critical section. */
-	Assert(CritSectionCount > 0);
+#ifndef STORAGE_NODE
 
+    /* Shared buffers should be modified in a critical section. */
+	Assert(CritSectionCount > 0);
+#endif
 	BufferGetTag(buffer, &rnode, &forkNum, &blkno);
 
 	return log_newpage(&rnode, forkNum, blkno, page, page_std);
