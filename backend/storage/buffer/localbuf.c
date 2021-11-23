@@ -309,6 +309,27 @@ MarkLocalBufferDirty(Buffer buffer)
 	buf_state |= BM_DIRTY;
 
 	pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+
+	SMgrRelation oreln;
+	Page		localpage = (char *) LocalBufferBlockPointers[-((bufHdr)->buf_id + 2)];
+
+	buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+	/* Find smgr relation for buffer */
+	oreln = smgropen(bufHdr->tag.rnode, MyBackendId);
+
+	PageSetChecksumInplace(localpage, bufHdr->tag.blockNum);
+
+	/* And write... */
+	smgrwrite(oreln,
+			  bufHdr->tag.forkNum,
+			  bufHdr->tag.blockNum,
+			  localpage,
+			  false);
+
+	/* Mark not-dirty now in case we error out below */
+	buf_state &= ~BM_DIRTY;
+	pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
 }
 
 /*

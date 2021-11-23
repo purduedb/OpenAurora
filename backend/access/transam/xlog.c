@@ -79,6 +79,8 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
+#include "access/heapam_xlog.h"
+
 extern uint32 bootstrap_data_checksum_version;
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
@@ -12864,6 +12866,12 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
                             errdetail("XLogReadSingleRecord return value is negative")));
         }
         //! info&heap_insert   -> redo
+		if (replayReader != NULL && replayReader->decoded_record->xl_rmid == 10)
+		{
+			uint8		info = XLogRecGetInfo(replayReader) & ~XLR_INFO_MASK;
+			if ((info & XLOG_HEAP_OPMASK) == XLOG_HEAP_INSERT)
+				heap_redo(replayReader);
+		}
         totalLen += readLen;
     }
     return;
