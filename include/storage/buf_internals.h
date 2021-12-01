@@ -338,4 +338,7 @@ extern void DropRelFileNodeLocalBuffers(RelFileNode rnode, ForkNumber forkNum,
 extern void DropRelFileNodeAllLocalBuffers(RelFileNode rnode);
 extern void AtEOXact_LocalBuffers(bool isCommit);
 
+extern Page GetLocalBufferPage(BufferTag *buftag);
+extern char TempPage[BLCKSZ];
+
 #endif							/* BUFMGR_INTERNALS_H */

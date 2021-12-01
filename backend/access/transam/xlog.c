@@ -12869,7 +12869,7 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
 		if (replayReader != NULL && replayReader->decoded_record->xl_rmid == 10)
 		{
 			uint8		info = XLogRecGetInfo(replayReader) & ~XLR_INFO_MASK;
-			if ((info & XLOG_HEAP_OPMASK) == XLOG_HEAP_INSERT)
+			if ((info & XLOG_HEAP_OPMASK) == XLOG_HEAP_INSERT || (info & XLOG_HEAP_OPMASK) == XLOG_HEAP_DELETE)
 				heap_redo(replayReader);
 		}
         totalLen += readLen;

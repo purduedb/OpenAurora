@@ -52,6 +52,7 @@ static HTAB *LocalBufHash = NULL;
 static void InitLocalBuffers(void);
 static Block GetLocalBufferStorage(void);
 
+char TempPage[BLCKSZ];
 
 /*
  * PrefetchLocalBuffer -
@@ -330,6 +331,8 @@ MarkLocalBufferDirty(Buffer buffer)
 	/* Mark not-dirty now in case we error out below */
 	buf_state &= ~BM_DIRTY;
 	pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+
+	memcpy(TempPage, LocalBufHdrGetBlock(bufHdr), BLCKSZ);
 }
 
 /*
