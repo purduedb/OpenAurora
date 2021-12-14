@@ -12,8 +12,6 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Roadmaps
 
-### Expected to finish in 02/15/2022.
-
 ### MileStone 1
 * Decouple the log-replay functions to a new module, called "Replay Module".
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk).
@@ -68,9 +66,9 @@ make install
 ```
 
 ## How to run
-* Running commands are inherited from PostgreSQL
+* Create a database
 
-## 
+
 
 
 ## Architecture
