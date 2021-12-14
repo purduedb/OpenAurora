@@ -12,12 +12,12 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Roadmaps
 
-### Milestone 1 (10/25/2021)
+### Milestone 1 (Done)
 * Decouple the log-replay functions to a new module, called "Replay Module".
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk).
 * Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk).
 
-### Milestone 2 (12/18/2021)
+### Milestone 2 (Done)
 * Decouple compute from storage
 * Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
 * Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
