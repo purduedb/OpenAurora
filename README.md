@@ -11,6 +11,7 @@ Features
 * Sinle-master-multi-replica
 
 Roadmaps
+
 Expected to finish in 02/15/2022.
 
 MileStone 1#
@@ -44,7 +45,14 @@ MileStone 6#
 * Deploy a load balancer to balancer storage node workload. 
 
 Building
-* 如何build software
+
+* Running configure script to choose the options and configure source tree.
+* ./configure --prefix=$project_dir
+* Type make or make all to build the project
+* Type make install to install OpenAurora
 
 How to run
-* 如何build software
+* Running commands is inherited from PostgreSQL
+
+Architecture
+
