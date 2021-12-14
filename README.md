@@ -47,9 +47,17 @@ Cloud-native databases are designed from the ground up to take the full advantag
 ## Building
 
 * Running configure script to choose the options and configure source tree.
-* ./configure --prefix=$project_dir
-* Type make or make all to build the project
-* Type make install to install OpenAurora
+```bash
+./configure --prefix=$project_dir
+```
+* Type 
+```bash
+make 
+```
+to build the project
+* Type ```bash
+make install
+```to install OpenAurora
 
 ## How to run
 * Running commands is inherited from PostgreSQL
