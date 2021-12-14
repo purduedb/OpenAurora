@@ -66,8 +66,19 @@ make install
 ```
 
 ## Create a database
-Using a following command to create a 
+Using a following command to create a database named <strong> mydb </strong>.
+```bash
+createdb mydb
+```
+If you see a message similar to:
 
+```bash
+createdb: command not found
+```
+then OpenAurora was not installed properly. Try calling the command with an absolute path instead:
+```bash
+$ $project_dir/bin/createdb mydb
+```
 
 
 
