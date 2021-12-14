@@ -44,20 +44,26 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Implement a gossip protocol to guarantee consistency among different storage nodes.
 * Deploy a load balancer to balancer storage node workload. 
 
+## Getting the Source
+```bash
+git clone https://github.com/px1900/OpenAurora.git
+```
+
 ## Building
 
 * Running configure script to choose the options and configure source tree.
 ```bash
 ./configure --prefix=$project_dir
 ```
-* Type 
+* Build project
 ```bash
 make 
 ```
-to build the project
-* Type ```bash
+
+* Install OpenAurora
+```bash
 make install
-```to install OpenAurora
+```
 
 ## How to run
 * Running commands is inherited from PostgreSQL
