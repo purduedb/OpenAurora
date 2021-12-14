@@ -10,6 +10,9 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Optimized for new hardware, e.g., RDMA and 3D Xpoint
 * Single-master-multi-replica
 
+## Architecture
+<img src="OpenAurora-Arch.png" alt="drawing" width="600"/>
+
 ## Roadmaps
 
 ### Milestone 1 (Done)
