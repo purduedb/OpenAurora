@@ -66,7 +66,7 @@ make install
 ```
 
 ## How to run
-* Running commands is inherited from PostgreSQL
+* Running commands are inherited from PostgreSQL
 
 
 ## Architecture
