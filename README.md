@@ -11,7 +11,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Single-master-multi-replica
 
 ## Architecture
-<img src="OpenAurora-Arch.png" alt="drawing" width="600"/>
+<img src="OpenAurora-Arch.png" alt="drawing" width="700"/>
 
 ## Roadmaps
 
