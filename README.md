@@ -8,7 +8,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Log-is-the-database
 * Asynchronous processing
 * Optimized for new hardware, e.g., RDMA and 3D Xpoint
-* Sinle-master-multi-replica
+* Single-master-multi-replica
 
 ## Roadmaps
 
