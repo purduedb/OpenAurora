@@ -69,4 +69,5 @@ make install
 * Running commands is inherited from PostgreSQL
 
 
-
+## Architecture
+<img src="Aurora-Arch.png" alt="drawing" width="600"/>
