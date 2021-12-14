@@ -14,32 +14,32 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ### Expected to finish in 02/15/2022.
 
-### MileStone 1#
+### MileStone 1
 * Decouple the log-replay functions to a new module, called "Replay Module".
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk).
 * Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk).
 
-### MileStone 2#
+### MileStone 2
 * Decouple compute from storage
 * Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
 * Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
 
 
-### MileStone 3#
+### MileStone 3
 * Deploy a K/V store (RocksDB) inside PostgreSql.
 * Transform InitDB function to initialize DB environment in K/V store.
 * Implement a buffer manager in storage node.
 * Replay module replays the XLog and store the pages data into K/V store.
 * Storage manager read page data from K/V Store.
 
-### MileStone 4#
+### MileStone 4
 * Replace metadata to K/V store.
 * Apply a page MVCC in this project.
 
-### MileStone 5#
+### MileStone 5
 * Support multi-user: one primary node, several replica
 
-### MileStone 6#
+### MileStone 6
 * Implement distributed storage layer.
 * Implement a gossip protocol to guarantee consistency among different storage nodes.
 * Deploy a load balancer to balancer storage node workload. 
