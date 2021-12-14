@@ -85,6 +85,11 @@ You can access your database by:
 
 * Running a PostgreSQL interactive terminal program, which allows you to interactively enter, edit, and execute SQL commands.
 * Using an existing graphical frontend tool like pgAdmin or an office suite with ODBC or JDBC support to create and manipulate a database.
-* Writing a custom application, using one of the several available language bindings. You can turn to this [Tutorial](https://www.postgresql.org/docs/14/client-interfaces.html "PostgreSQL Client Interfaces") 
+* Writing a custom application, using one of the several available language bindings. You can turn to this [Tutorial](https://www.postgresql.org/docs/14/client-interfaces.html "PostgreSQL Client Interfaces").
+
+You can access your created database via interactive terminal with the following command:
+```bash
+psql mydb
+```
 
 
