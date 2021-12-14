@@ -65,11 +65,9 @@ make
 make install
 ```
 
-## How to run
-* Create a database
+## Create a database
+Using a following command to create a 
 
 
 
 
-## Architecture
-<img src="Aurora-Arch.png" alt="drawing" width="600"/>
