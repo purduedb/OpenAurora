@@ -51,6 +51,8 @@ git clone https://github.com/px1900/OpenAurora.git
 
 ## Building
 
+This project is based on [PostgreSql 13.0](https://www.postgresql.org/docs/13/release-13.html "PostgreSQL-13.0") 
+
 * Running configure script to choose the options and configure source tree.
 ```bash
 ./configure --prefix=$project_dir
@@ -67,6 +69,8 @@ make install
 
 ## How to run
 * Running commands are inherited from PostgreSQL
+
+## 
 
 
 ## Architecture
