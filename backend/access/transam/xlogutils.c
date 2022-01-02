@@ -564,7 +564,9 @@ XLogRedoAction
 XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
 					  Buffer *buf)
 {
-	return XLogReadBufferForReplayExtended(record, block_id, RBM_NORMAL,
+//	return XLogReadBufferForReplayExtended(record, block_id, RBM_NORMAL,
+//										 false, buf);
+	return XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
 										 false, buf);
 }
 
@@ -577,8 +579,10 @@ XLogInitBufferForRedo(XLogReaderState *record, uint8 block_id)
 {
 	Buffer		buf;
 
-	XLogReadBufferForReplayExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
-								  &buf);
+//	XLogReadBufferForReplayExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
+//								  &buf);
+	XLogReadBufferForRedoExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
+									&buf);
 	return buf;
 }
 

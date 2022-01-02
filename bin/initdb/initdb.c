@@ -114,6 +114,11 @@ static const char *const auth_methods_local[] = {
 	NULL
 };
 
+//! test_initdb_dir
+static char *test_initdb_pg_data = NULL;
+static char *test_initdb_xlog_dir = NULL;
+
+
 /*
  * these values are passed in by makefile defines
  */
@@ -569,6 +574,45 @@ popen_check(const char *command, const char *mode)
 	return cmdfd;
 }
 
+
+static void
+test_initdb_cleanup_directories_atexit() {
+    if (success)
+        return;
+
+    if (!noclean) {
+        if (made_new_pgdata) {
+            pg_log_info("removing data directory \"%s\"", test_initdb_pg_data);
+            if (!rmtree(test_initdb_pg_data, true))
+                pg_log_error("failed to remove data directory");
+        } else if (found_existing_pgdata) {
+            pg_log_info("removing contents of data directory \"%s\"",
+                        test_initdb_pg_data);
+            if (!rmtree(test_initdb_pg_data, false))
+                pg_log_error("failed to remove contents of data directory");
+        }
+
+        if (made_new_xlogdir) {
+            pg_log_info("removing WAL directory \"%s\"", test_initdb_xlog_dir);
+            if (!rmtree(test_initdb_xlog_dir, true))
+                pg_log_error("failed to remove WAL directory");
+        } else if (found_existing_xlogdir) {
+            pg_log_info("removing contents of WAL directory \"%s\"", test_initdb_xlog_dir);
+            if (!rmtree(test_initdb_xlog_dir, false))
+                pg_log_error("failed to remove contents of WAL directory");
+        }
+        /* otherwise died during startup, do nothing! */
+    } else {
+        if (made_new_pgdata || found_existing_pgdata)
+            pg_log_info("data directory \"%s\" not removed at user's request",
+                        test_initdb_pg_data);
+
+        if (made_new_xlogdir || found_existing_xlogdir)
+            pg_log_info("WAL directory \"%s\" not removed at user's request",
+                        test_initdb_xlog_dir);
+
+    }
+}
 /*
  * clean up any files we created on failure
  * if we created the data directory remove it too
@@ -853,6 +897,29 @@ write_version_file(const char *extrapath)
 		exit(1);
 	}
 	free(path);
+
+
+    FILE	   *version_file2;
+    char	   *path2;
+
+    if (extrapath == NULL)
+        path2 = psprintf("%s/PG_VERSION", test_initdb_pg_data);
+    else
+        path2 = psprintf("%s/%s/PG_VERSION", test_initdb_pg_data, extrapath);
+
+    if ((version_file2 = fopen(path2, PG_BINARY_W)) == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path2);
+        exit(1);
+    }
+    if (fprintf(version_file2, "%s\n", PG_MAJORVERSION) < 0 ||
+        fclose(version_file2))
+    {
+        pg_log_error("could not write file \"%s\": %m", path2);
+        exit(1);
+    }
+    free(path2);
+
 }
 
 /*
@@ -878,6 +945,22 @@ set_null_conf(void)
 		exit(1);
 	}
 	free(path);
+
+
+	char *path2;
+    path2 = psprintf("%s/postgresql.conf", test_initdb_pg_data);
+    conf_file = fopen(path2, PG_BINARY_W);
+    if (conf_file == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path2);
+        exit(1);
+    }
+    if (fclose(conf_file))
+    {
+        pg_log_error("could not write file \"%s\": %m", path2);
+        exit(1);
+    }
+    free(path2);
 }
 
 /*
@@ -1071,7 +1154,7 @@ setup_config(void)
 	char		path[MAXPGPATH];
 	char	   *autoconflines[3];
 
-	fputs(_("creating configuration files ... "), stdout);
+    fputs(_("creating configuration files ... "), stdout);
 	fflush(stdout);
 
 	/* postgresql.conf */
@@ -1351,6 +1434,303 @@ setup_config(void)
 	free(conflines);
 
 	check_ok();
+}
+
+
+static void
+setup_config2(void)
+{
+    char	  **conflines;
+    char		repltok[MAXPGPATH];
+    char		path[MAXPGPATH];
+    char	   *autoconflines[3];
+
+    char		path2[MAXPGPATH];
+
+
+    fputs(_("creating configuration files ... "), stdout);
+    fflush(stdout);
+
+    /* postgresql.conf */
+
+    conflines = readfile(conf_file);
+
+    snprintf(repltok, sizeof(repltok), "max_connections = %d", n_connections);
+    conflines = replace_token(conflines, "#max_connections = 100", repltok);
+
+    if ((n_buffers * (BLCKSZ / 1024)) % 1024 == 0)
+        snprintf(repltok, sizeof(repltok), "shared_buffers = %dMB",
+                 (n_buffers * (BLCKSZ / 1024)) / 1024);
+    else
+        snprintf(repltok, sizeof(repltok), "shared_buffers = %dkB",
+                 n_buffers * (BLCKSZ / 1024));
+    conflines = replace_token(conflines, "#shared_buffers = 32MB", repltok);
+
+#ifdef HAVE_UNIX_SOCKETS
+    snprintf(repltok, sizeof(repltok), "#unix_socket_directories = '%s'",
+             DEFAULT_PGSOCKET_DIR);
+#else
+    snprintf(repltok, sizeof(repltok), "#unix_socket_directories = ''");
+#endif
+    conflines = replace_token(conflines, "#unix_socket_directories = '/tmp'",
+                              repltok);
+
+#if DEF_PGPORT != 5432
+    snprintf(repltok, sizeof(repltok), "#port = %d", DEF_PGPORT);
+	conflines = replace_token(conflines, "#port = 5432", repltok);
+#endif
+
+    /* set default max_wal_size and min_wal_size */
+    snprintf(repltok, sizeof(repltok), "min_wal_size = %s",
+             pretty_wal_size(DEFAULT_MIN_WAL_SEGS));
+    conflines = replace_token(conflines, "#min_wal_size = 80MB", repltok);
+
+    snprintf(repltok, sizeof(repltok), "max_wal_size = %s",
+             pretty_wal_size(DEFAULT_MAX_WAL_SEGS));
+    conflines = replace_token(conflines, "#max_wal_size = 1GB", repltok);
+
+    snprintf(repltok, sizeof(repltok), "lc_messages = '%s'",
+             escape_quotes(lc_messages));
+    conflines = replace_token(conflines, "#lc_messages = 'C'", repltok);
+
+    snprintf(repltok, sizeof(repltok), "lc_monetary = '%s'",
+             escape_quotes(lc_monetary));
+    conflines = replace_token(conflines, "#lc_monetary = 'C'", repltok);
+
+    snprintf(repltok, sizeof(repltok), "lc_numeric = '%s'",
+             escape_quotes(lc_numeric));
+    conflines = replace_token(conflines, "#lc_numeric = 'C'", repltok);
+
+    snprintf(repltok, sizeof(repltok), "lc_time = '%s'",
+             escape_quotes(lc_time));
+    conflines = replace_token(conflines, "#lc_time = 'C'", repltok);
+
+    switch (locale_date_order(lc_time))
+    {
+        case DATEORDER_YMD:
+            strcpy(repltok, "datestyle = 'iso, ymd'");
+            break;
+        case DATEORDER_DMY:
+            strcpy(repltok, "datestyle = 'iso, dmy'");
+            break;
+        case DATEORDER_MDY:
+        default:
+            strcpy(repltok, "datestyle = 'iso, mdy'");
+            break;
+    }
+    conflines = replace_token(conflines, "#datestyle = 'iso, mdy'", repltok);
+
+    snprintf(repltok, sizeof(repltok),
+             "default_text_search_config = 'pg_catalog.%s'",
+             escape_quotes(default_text_search_config));
+    conflines = replace_token(conflines,
+                              "#default_text_search_config = 'pg_catalog.simple'",
+                              repltok);
+
+    if (default_timezone)
+    {
+        snprintf(repltok, sizeof(repltok), "timezone = '%s'",
+                 escape_quotes(default_timezone));
+        conflines = replace_token(conflines, "#timezone = 'GMT'", repltok);
+        snprintf(repltok, sizeof(repltok), "log_timezone = '%s'",
+                 escape_quotes(default_timezone));
+        conflines = replace_token(conflines, "#log_timezone = 'GMT'", repltok);
+    }
+
+    snprintf(repltok, sizeof(repltok), "dynamic_shared_memory_type = %s",
+             dynamic_shared_memory_type);
+    conflines = replace_token(conflines, "#dynamic_shared_memory_type = posix",
+                              repltok);
+
+#if DEFAULT_BACKEND_FLUSH_AFTER > 0
+    snprintf(repltok, sizeof(repltok), "#backend_flush_after = %dkB",
+			 DEFAULT_BACKEND_FLUSH_AFTER * (BLCKSZ / 1024));
+	conflines = replace_token(conflines, "#backend_flush_after = 0",
+							  repltok);
+#endif
+
+#if DEFAULT_BGWRITER_FLUSH_AFTER > 0
+    snprintf(repltok, sizeof(repltok), "#bgwriter_flush_after = %dkB",
+			 DEFAULT_BGWRITER_FLUSH_AFTER * (BLCKSZ / 1024));
+	conflines = replace_token(conflines, "#bgwriter_flush_after = 0",
+							  repltok);
+#endif
+
+#if DEFAULT_CHECKPOINT_FLUSH_AFTER > 0
+    snprintf(repltok, sizeof(repltok), "#checkpoint_flush_after = %dkB",
+			 DEFAULT_CHECKPOINT_FLUSH_AFTER * (BLCKSZ / 1024));
+	conflines = replace_token(conflines, "#checkpoint_flush_after = 0",
+							  repltok);
+#endif
+
+#ifndef USE_PREFETCH
+    conflines = replace_token(conflines,
+                              "#effective_io_concurrency = 1",
+                              "#effective_io_concurrency = 0");
+#endif
+
+#ifdef WIN32
+    conflines = replace_token(conflines,
+							  "#update_process_title = on",
+							  "#update_process_title = off");
+#endif
+
+    if (strcmp(authmethodlocal, "scram-sha-256") == 0 ||
+        strcmp(authmethodhost, "scram-sha-256") == 0)
+    {
+        conflines = replace_token(conflines,
+                                  "#password_encryption = md5",
+                                  "password_encryption = scram-sha-256");
+    }
+
+    /*
+     * If group access has been enabled for the cluster then it makes sense to
+     * ensure that the log files also allow group access.  Otherwise a backup
+     * from a user in the group would fail if the log files were not
+     * relocated.
+     */
+    if (pg_dir_create_mode == PG_DIR_MODE_GROUP)
+    {
+        conflines = replace_token(conflines,
+                                  "#log_file_mode = 0600",
+                                  "log_file_mode = 0640");
+    }
+
+
+    snprintf(path2, sizeof(path2), "%s/postgresql.conf", test_initdb_pg_data);
+
+    writefile(path2, conflines);
+    if (chmod(path2, pg_file_create_mode) != 0)
+    {
+        pg_log_error("could not change permissions of \"%s\": %m", path2);
+        exit(1);
+    }
+
+    /*
+     * create the automatic configuration file to store the configuration
+     * parameters set by ALTER SYSTEM command. The parameters present in this
+     * file will override the value of parameters that exists before parse of
+     * this file.
+     */
+    autoconflines[0] = pg_strdup("# Do not edit this file manually!\n");
+    autoconflines[1] = pg_strdup("# It will be overwritten by the ALTER SYSTEM command.\n");
+    autoconflines[2] = NULL;
+
+
+    sprintf(path2, "%s/postgresql.auto.conf", test_initdb_pg_data);
+
+    writefile(path2, autoconflines);
+    if (chmod(path2, pg_file_create_mode) != 0)
+    {
+        pg_log_error("could not change permissions of \"%s\": %m", path2);
+        exit(1);
+    }
+
+
+    free(conflines);
+
+
+    /* pg_hba.conf */
+
+    conflines = readfile(hba_file);
+
+#ifndef HAVE_UNIX_SOCKETS
+    conflines = filter_lines_with_token(conflines, "@remove-line-for-nolocal@");
+#else
+    conflines = replace_token(conflines, "@remove-line-for-nolocal@", "");
+#endif
+
+#ifdef HAVE_IPV6
+
+    /*
+     * Probe to see if there is really any platform support for IPv6, and
+     * comment out the relevant pg_hba line if not.  This avoids runtime
+     * warnings if getaddrinfo doesn't actually cope with IPv6.  Particularly
+     * useful on Windows, where executables built on a machine with IPv6 may
+     * have to run on a machine without.
+     */
+    {
+        struct addrinfo *gai_result;
+        struct addrinfo hints;
+        int			err = 0;
+
+#ifdef WIN32
+        /* need to call WSAStartup before calling getaddrinfo */
+		WSADATA		wsaData;
+
+		err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
+
+        /* for best results, this code should match parse_hba_line() */
+        hints.ai_flags = AI_NUMERICHOST;
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = 0;
+        hints.ai_protocol = 0;
+        hints.ai_addrlen = 0;
+        hints.ai_canonname = NULL;
+        hints.ai_addr = NULL;
+        hints.ai_next = NULL;
+
+        if (err != 0 ||
+            getaddrinfo("::1", NULL, &hints, &gai_result) != 0)
+        {
+            conflines = replace_token(conflines,
+                                      "host    all             all             ::1",
+                                      "#host    all             all             ::1");
+            conflines = replace_token(conflines,
+                                      "host    replication     all             ::1",
+                                      "#host    replication     all             ::1");
+        }
+    }
+#else							/* !HAVE_IPV6 */
+    /* If we didn't compile IPV6 support at all, always comment it out */
+	conflines = replace_token(conflines,
+							  "host    all             all             ::1",
+							  "#host    all             all             ::1");
+	conflines = replace_token(conflines,
+							  "host    replication     all             ::1",
+							  "#host    replication     all             ::1");
+#endif							/* HAVE_IPV6 */
+
+    /* Replace default authentication methods */
+    conflines = replace_token(conflines,
+                              "@authmethodhost@",
+                              authmethodhost);
+    conflines = replace_token(conflines,
+                              "@authmethodlocal@",
+                              authmethodlocal);
+
+    conflines = replace_token(conflines,
+                              "@authcomment@",
+                              (strcmp(authmethodlocal, "trust") == 0 || strcmp(authmethodhost, "trust") == 0) ? AUTHTRUST_WARNING : "");
+
+    snprintf(path2, sizeof(path2), "%s/pg_hba.conf", test_initdb_pg_data);
+
+    writefile(path2, conflines);
+    if (chmod(path2, pg_file_create_mode) != 0)
+    {
+        pg_log_error("could not change permissions of \"%s\": %m", path2);
+        exit(1);
+    }
+
+    free(conflines);
+
+    /* pg_ident.conf */
+
+    conflines = readfile(ident_file);
+
+    snprintf(path2, sizeof(path2), "%s/pg_ident.conf", test_initdb_pg_data);
+
+    writefile(path2, conflines);
+    if (chmod(path2, pg_file_create_mode) != 0)
+    {
+        pg_log_error("could not change permissions of \"%s\": %m", path2);
+        exit(1);
+    }
+
+    free(conflines);
+
+    check_ok();
 }
 
 
@@ -2712,6 +3092,66 @@ create_data_directory(void)
 			pg_log_error("could not access directory \"%s\": %m", pg_data);
 			exit(1);
 	}
+
+    switch ((ret = pg_check_dir(test_initdb_pg_data)))
+    {
+        case 0:
+            /* PGDATA not there, must create it */
+            printf(_("creating directory %s ... "),
+                   test_initdb_pg_data);
+            fflush(stdout);
+
+            if (pg_mkdir_p(test_initdb_pg_data, pg_dir_create_mode) != 0)
+            {
+                pg_log_error("could not create directory \"%s\": %m", test_initdb_pg_data);
+                exit(1);
+            }
+            else
+                check_ok();
+
+            made_new_pgdata = true;
+            break;
+
+        case 1:
+            /* Present but empty, fix permissions and use it */
+            printf(_("fixing permissions on existing directory %s ... "),
+                   test_initdb_pg_data);
+            fflush(stdout);
+
+            if (chmod(test_initdb_pg_data, pg_dir_create_mode) != 0)
+            {
+                pg_log_error("could not change permissions of directory \"%s\": %m",
+                             test_initdb_pg_data);
+                exit(1);
+            }
+            else
+                check_ok();
+
+            found_existing_pgdata = true;
+            break;
+
+        case 2:
+        case 3:
+        case 4:
+            /* Present and not empty */
+            pg_log_error("directory \"%s\" exists but is not empty", test_initdb_pg_data);
+            if (ret != 4)
+                warn_on_mount_point(ret);
+            else
+                fprintf(stderr,
+                        _("If you want to create a new database system, either remove or empty\n"
+                          "the directory \"%s\" or run %s\n"
+                          "with an argument other than \"%s\".\n"),
+                        test_initdb_pg_data, progname, test_initdb_pg_data);
+            exit(1);			/* no further message needed */
+
+        default:
+            /* Trouble accessing directory */
+            pg_log_error("could not access directory \"%s\": %m", test_initdb_pg_data);
+            exit(1);
+    }
+
+
 }
 
 
@@ -2720,9 +3160,11 @@ void
 create_xlog_or_symlink(void)
 {
 	char	   *subdirloc;
+	char       *subdirloc2;
 
 	/* form name of the place for the subdirectory or symlink */
 	subdirloc = psprintf("%s/pg_wal", pg_data);
+    subdirloc2 = psprintf("%s/pg_wal", test_initdb_pg_data);
 
 	if (xlog_dir)
 	{
@@ -2816,9 +3258,17 @@ create_xlog_or_symlink(void)
 						 subdirloc);
 			exit(1);
 		}
+
+        if (mkdir(subdirloc2, pg_dir_create_mode) < 0)
+        {
+            pg_log_error("could not create directory \"%s\": %m",
+                         subdirloc);
+            exit(1);
+        }
 	}
 
 	free(subdirloc);
+	free(subdirloc2);
 }
 
 
@@ -2881,6 +3331,25 @@ initialize_data_directory(void)
 		free(path);
 	}
 
+    for (i = 0; i < lengthof(subdirs); i++)
+    {
+        char	   *path;
+
+        path = psprintf("%s/%s", test_initdb_pg_data, subdirs[i]);
+
+        /*
+         * The parent directory already exists, so we only need mkdir() not
+         * pg_mkdir_p() here, which avoids some failure modes; cf bug #13853.
+         */
+        if (mkdir(path, pg_dir_create_mode) < 0)
+        {
+            pg_log_error("could not create directory \"%s\": %m", path);
+            exit(1);
+        }
+
+        free(path);
+    }
+
 	check_ok();
 
 	/* Top level PG_VERSION is checked by bootstrapper, so make it first */
@@ -2892,6 +3361,7 @@ initialize_data_directory(void)
 
 	/* Now create all the text config files */
 	setup_config();
+    setup_config2();
 
 	/* Bootstrap template1 */
 	bootstrap_template1();
@@ -3004,6 +3474,10 @@ main(int argc, char *argv[])
 	 * POSIX says we must do this before any other usage of these files.
 	 */
 	setvbuf(stdout, NULL, PG_IOLBF, 0);
+
+
+    test_initdb_pg_data = "/Users/rainman/pgsql/data_dir/db_data2";
+    test_initdb_xlog_dir = "/Users/rainman/pgsql/data_dir/db_data2/pg_wal";
 
 	pg_logging_init(argv[0]);
 	progname = get_progname(argv[0]);
@@ -3151,6 +3625,7 @@ main(int argc, char *argv[])
 	}
 
 	atexit(cleanup_directories_atexit);
+	atexit(test_initdb_cleanup_directories_atexit);
 
 	/* If we only need to fsync, just do it and exit */
 	if (sync_only)

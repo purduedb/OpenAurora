@@ -1207,7 +1207,7 @@ XLogInsertRecord(XLogRecData *rdata,
 	/*!
 	 *  Here to Replay XLog
 	 */
-    XLogReplay(StartPos, EndPos, XLogReplayBuffer, EndPos-StartPos);
+//    XLogReplay(StartPos, EndPos, XLogReplayBuffer, EndPos-StartPos);
 
 	/*
 	 * Update shared LogwrtRqst.Write, if we crossed page boundary.
