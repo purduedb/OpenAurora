@@ -15,38 +15,47 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Incoming Progress
 
-### 2022/01/05
+### 2022/01/05 - 2022/01/20
 #### Goal
 * Disaggregate storage layer and compute layer
 #### What need to do
 * Transform InitDB to create database into a remote server
 * Compute node can read server node's meta data and page data
 * Use postgresql replication code to connect storage node and compute node
+* Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
+* Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
 #### Potential Risk
 After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
 
-### Milestone 2 (Done)
-* Decouple compute from storage
-* Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
-* Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
+### 2022/01/21 - 2022/01/31
+#### Goal
+* Replace the PostgreSql storage engine with a K/V store
+#### What need to do
+* Deploy RocksDB engine in PostgreSql storage layer
+* Transform meta data writing and reading file into accessing K/V store
+* Transform page data writing and reading file into accessing K/V store
+* Developing RPC interfaces and related strategy functions
 
 
-### Milestone 3 (12/30/2021)
-* Deploy a K/V store (RocksDB) inside PostgreSql.
-* Transform InitDB function to initialize DB environment in K/V store.
-* Implement a buffer manager in storage node.
-* Replay module replays the XLog and store the pages data into K/V store.
-* Storage manager read page data from K/V Store.
+### 2022/02/01 - 2022/02/10
+#### Goal
+* Replace PostgreSql's tuple level MVCC with page level MVCC
+#### What need to do
+* Transform PostgreSql storage/page related data structures and functions
+* Develop a page MVCC with the K/V store
 
-### Milestone 4 (02/04/2022)
-* Replace metadata to K/V store.
-* Apply a page MVCC in this project.
+### 2022/02/11 - 2022/02/17
+#### Goal 
+* Support multi-client: one-primary-several-replicas
+#### What need to do
+* Develop a load balancer to disseminate query requests to different compute nodes
+* Disseminate primary node's write requests to all replicas
 
-### Milestone 5 (02/22/2022)
-* Support multi-user: one primary node, several replica
-
-### Milestone 6 (03/15/2022)
-* Implement distributed storage layer.
+### 2022/02/18 - 2022/03/15
+#### Goal
+* Support distributed storage layer.
+#### What need to do
+* Deploy distributed K/V storage in a distributed storage environment.
 * Implement a gossip protocol to guarantee consistency among different storage nodes.
 * Deploy a load balancer to balancer storage node workload. 
 
