@@ -16,9 +16,9 @@ Cloud-native databases are designed from the ground up to take the full advantag
 ## Incoming Progress
 
 ### 2022/01/05 - 2022/01/20
-#### Goal
+**Goal**
 * Disaggregate storage layer and compute layer
-#### What need to do
+**What need to do**
 * Transform InitDB to create database into a remote server
 * Compute node can read server node's meta data and page data
 * Use postgresql replication code to connect storage node and compute node
