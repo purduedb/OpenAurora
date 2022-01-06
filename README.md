@@ -16,15 +16,15 @@ Cloud-native databases are designed from the ground up to take the full advantag
 ## Incoming Progress
 
 ### 2022/01/05 - 2022/01/20
-**Goal**
+** Goal **
 * Disaggregate storage layer and compute layer
-**What need to do**
+** What need to do **
 * Transform InitDB to create database into a remote server
 * Compute node can read server node's meta data and page data
 * Use postgresql replication code to connect storage node and compute node
 * Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
 * Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
-**Potential Risk**
+** Potential Risk **
 * After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
 
 ### 2022/01/21 - 2022/01/31
