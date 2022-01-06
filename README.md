@@ -24,13 +24,13 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Use postgresql replication code to connect storage node and compute node
 * Compute node services includs: SQL parser, SQL optimizer, transaction manager, access method, execution engine, buffer memoger, replication module, storage manager API.
 * Storage node services include: storage manager, replay module, vaccum service, PostgreSql storage engine.
-#### Potential Risk
-After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
+**Potential Risk**
+* After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
 
 ### 2022/01/21 - 2022/01/31
-#### Goal
+**Goal**
 * Replace the PostgreSql storage engine with a K/V store
-#### What need to do
+**What need to do**
 * Deploy RocksDB engine in PostgreSql storage layer
 * Transform meta data writing and reading file into accessing K/V store
 * Transform page data writing and reading file into accessing K/V store
@@ -38,23 +38,23 @@ After decoupled compute layer and storage layer, some services like vacuum servi
 
 
 ### 2022/02/01 - 2022/02/10
-#### Goal
+**Goal**
 * Replace PostgreSql's tuple level MVCC with page level MVCC
-#### What need to do
+**What need to do**
 * Transform PostgreSql storage/page related data structures and functions
 * Develop a page MVCC with the K/V store
 
 ### 2022/02/11 - 2022/02/17
-#### Goal 
+**Goal**
 * Support multi-client: one-primary-several-replicas
-#### What need to do
+**What need to do**
 * Develop a load balancer to disseminate query requests to different compute nodes
 * Disseminate primary node's write requests to all replicas
 
 ### 2022/02/18 - 2022/03/15
-#### Goal
+**Goal**
 * Support distributed storage layer.
-#### What need to do
+**What need to do**
 * Deploy distributed K/V storage in a distributed storage environment.
 * Implement a gossip protocol to guarantee consistency among different storage nodes.
 * Deploy a load balancer to balancer storage node workload. 
