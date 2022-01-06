@@ -28,7 +28,8 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 **Potential Risk**
 * After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
-
+  
+  
 ### 2022/01/21 - 2022/01/31
 **Goal**
 * Replace the PostgreSql storage engine with a K/V store
@@ -38,7 +39,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Transform meta data writing and reading file into accessing K/V store
 * Transform page data writing and reading file into accessing K/V store
 * Developing RPC interfaces and related strategy functions
-
+  
 
 ### 2022/02/01 - 2022/02/10
 **Goal**
@@ -48,6 +49,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Transform PostgreSql storage/page related data structures and functions
 * Develop a page MVCC with the K/V store
 
+  
 ### 2022/02/11 - 2022/02/17
 **Goal**
 * Support multi-client: one-primary-several-replicas
@@ -56,6 +58,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Develop a load balancer to disseminate query requests to different compute nodes
 * Disseminate primary node's write requests to all replicas
 
+  
 ### 2022/02/18 - 2022/03/15
 **Goal**
 * Support distributed storage layer.
