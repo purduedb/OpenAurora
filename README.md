@@ -13,12 +13,17 @@ Cloud-native databases are designed from the ground up to take the full advantag
 ## Architecture
 <img src="OpenAurora-Arch.png" alt="drawing" width="700"/>
 
-## Roadmaps
+## Incoming Progress
 
-### Milestone 1 (Done)
-* Decouple the log-replay functions to a new module, called "Replay Module".
-* Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk).
-* Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk).
+### 2022/01/05
+#### Goal
+* Disaggregate storage layer and compute layer
+#### What need to do
+* Transform InitDB to create database into a remote server
+* Compute node can read server node's meta data and page data
+* Use postgresql replication code to connect storage node and compute node
+#### Potential Risk
+After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
 
 ### Milestone 2 (Done)
 * Decouple compute from storage
