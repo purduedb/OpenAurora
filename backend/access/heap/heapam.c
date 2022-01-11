@@ -69,6 +69,7 @@
 #include "utils/snapmgr.h"
 #include "utils/spccache.h"
 
+#include "storage/buf_internals.h"
 
 static HeapTuple heap_prepare_insert(Relation relation, HeapTuple tup,
 									 TransactionId xid, CommandId cid, int options);
@@ -1839,6 +1840,8 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	Buffer		vmbuffer = InvalidBuffer;
 	bool		all_visible_cleared = false;
 
+	Page localpage, sharedpage;
+
 	/*
 	 * Fill in tuple header fields and toast the tuple if necessary.
 	 *
@@ -1898,7 +1901,7 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	 * If you do add PageSetPrunable here, add it in heap_xlog_insert too.
 	 */
 
-	//! MarkBufferDirty(buffer);
+	MarkBufferDirty(buffer);
 
 	/* XLOG stuff */
 	if (RelationNeedsWAL(relation))
@@ -1977,6 +1980,11 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	}
 
 	END_CRIT_SECTION();
+
+	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
+	sharedpage = BufferGetPage(buffer);
+
+	memcpy(sharedpage, TempPage, BLCKSZ);
 
 	UnlockReleaseBuffer(buffer);
 	if (vmbuffer != InvalidBuffer)
@@ -2761,6 +2769,11 @@ l1:
 	}
 
 	END_CRIT_SECTION();
+
+	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
+	Page sharedpage = BufferGetPage(buffer);
+
+	memcpy(sharedpage, TempPage, BLCKSZ);
 
 	LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 

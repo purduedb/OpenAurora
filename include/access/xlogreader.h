@@ -298,6 +298,9 @@ extern bool WALRead(XLogReaderState *state,
 extern bool DecodeXLogRecord(XLogReaderState *state, XLogRecord *record,
 							 char **errmsg);
 
+extern bool DecodeXLogRecordForReplay(XLogReaderState *state, XLogRecord *record,
+                             char **errmsg);
+
 extern int ReplayReadPageInternal(XLogReaderState *replayReader, char *data, XLogRecPtr targetPagePtr, int minReadLen);
 
 extern int XLogReadSingleRecord(XLogReaderState *replayReader, char** dataptr);

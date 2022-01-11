@@ -30,6 +30,7 @@
 #include "utils/hsearch.h"
 #include "utils/rel.h"
 
+#include "storage/buf_internals.h"
 
 /* GUC variable */
 bool		ignore_invalid_pages = false;
@@ -251,6 +252,275 @@ XLogCheckInvalidPages(void)
 	invalid_page_tab = NULL;
 }
 
+/*
+ * XLogReadBufferForReplay_common
+ *		Read a page during XLOG replay
+ *
+ * This is functionally comparable to ReadBufferExtended. There's some
+ * differences in the behavior wrt. the "mode" argument:
+ *
+ * In RBM_NORMAL mode, if the page doesn't exist, or contains all-zeroes, we
+ * return InvalidBuffer. In this case the caller should silently skip the
+ * update on this page. (In this situation, we expect that the page was later
+ * dropped or truncated. If we don't see evidence of that later in the WAL
+ * sequence, we'll complain at the end of WAL replay.)
+ *
+ * In RBM_ZERO_* modes, if the page doesn't exist, the relation is extended
+ * with all-zeroes pages up to the given block number.
+ *
+ * In RBM_NORMAL_NO_LOG mode, we return InvalidBuffer if the page doesn't
+ * exist, and we don't check for all-zeroes.  Thus, no log entry is made
+ * to imply that the page should be dropped or truncated later.
+ *
+ * NB: A redo function should normally not call this directly. To get a page
+ * to modify, use XLogReadBufferForRedoExtended instead. It is important that
+ * all pages modified by a WAL record are registered in the WAL records, or
+ * they will be invisible to tools that that need to know which pages are
+ * modified.
+ */
+Buffer
+XLogReadBufferForReplay_common(RelFileNode rnode, ForkNumber forknum,
+					   BlockNumber blkno, ReadBufferMode mode)
+{
+	BlockNumber lastblock;
+	Buffer		buffer;
+	SMgrRelation smgr;
+	BufferDesc *bufHdr;
+	Block bufBlock;
+	bool found;
+
+	Assert(blkno != P_NEW);
+
+	/* Open the relation at smgr level */
+	smgr = smgropen(rnode, MyBackendId);
+
+	/*
+	 * Create the target file if it doesn't already exist.  This lets us cope
+	 * if the replay sequence contains writes to a relation that is later
+	 * deleted.  (The original coding of this routine would instead suppress
+	 * the writes, but that seems like it risks losing valuable data if the
+	 * filesystem loses an inode during a crash.  Better to write the data
+	 * until we are actually told to delete the file.)
+	 */
+	smgrcreate(smgr, forknum, true);
+
+	lastblock = smgrnblocks(smgr, forknum);
+
+	if (blkno < lastblock)
+	{
+		/* page exists in file */
+		bufHdr = LocalBufferAlloc(smgr, forknum, blkno, &found);
+		if (found)
+			return BufferDescriptorGetBuffer(bufHdr);
+		
+		/* buf_id  -2, -3, ..., */
+		bufBlock = LocalBufferBlockPointers[-((bufHdr)->buf_id + 2)];
+		/*
+		 * Read in the page, unless the caller intends to overwrite it and
+		 * just wants us to allocate a buffer.
+		 */
+		if (mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK)
+			MemSet((char *) bufBlock, 0, BLCKSZ);
+		else
+		{
+			smgrread(smgr, forknum, blkno, (char *) bufBlock);
+
+			/* check for garbage data */
+			if (!PageIsVerified((Page) bufBlock, blkno))
+			{
+				if (mode == RBM_ZERO_ON_ERROR || zero_damaged_pages)
+				{
+					ereport(WARNING,
+							(errcode(ERRCODE_DATA_CORRUPTED),
+							 errmsg("invalid page in block %u of relation %s; zeroing out page",
+									blkno,
+									relpath(smgr->smgr_rnode, forknum))));
+					MemSet((char *) bufBlock, 0, BLCKSZ);
+				}
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_DATA_CORRUPTED),
+							 errmsg("invalid page in block %u of relation %s",
+									blkno,
+									relpath(smgr->smgr_rnode, forknum))));
+			}
+		}
+
+		/* Only need to adjust flags */
+		uint32		buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+		buf_state |= BM_VALID;
+		pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+
+		return BufferDescriptorGetBuffer(bufHdr);
+
+	}
+	else
+	{
+		/* hm, page doesn't exist in file */
+		if (mode == RBM_NORMAL)
+		{
+			return InvalidBuffer;
+		}
+		if (mode == RBM_NORMAL_NO_LOG)
+			return InvalidBuffer;
+		/* OK to extend the file */
+		buffer = InvalidBuffer;
+		do
+		{
+			BlockNumber blockNum = smgrnblocks(smgr, forknum);
+
+			if (buffer != InvalidBuffer)
+				ReleaseBuffer(buffer);
+
+			bufHdr = LocalBufferAlloc(smgr, forknum, blockNum, &found);
+
+			/*
+		 	* We get here only in the corner case where we are trying to extend
+			* the relation but we found a pre-existing buffer marked BM_VALID.
+		 	* This can happen because mdread doesn't complain about reads beyond
+		 	* EOF (when zero_damaged_pages is ON) and so a previous attempt to
+		 	* read a block beyond EOF could have left a "valid" zero-filled
+		 	* buffer.  Unfortunately, we have also seen this case occurring
+		 	* because of buggy Linux kernels that sometimes return an
+		 	* lseek(SEEK_END) result that doesn't account for a recent write. In
+		 	* that situation, the pre-existing buffer would contain valid data
+		 	* that we don't want to overwrite.  Since the legitimate case should
+		 	* always have left a zero-filled buffer, complain if not PageIsNew.
+		 	*/
+			if (found)
+			{
+				bufBlock = LocalBufferBlockPointers[-((bufHdr)->buf_id + 2)];
+				if (!PageIsNew((Page) bufBlock))
+				ereport(ERROR,
+					(errmsg("unexpected data beyond EOF in block %u of relation %s",
+							blockNum, relpath(smgr->smgr_rnode, forknum)),
+					 errhint("This has been seen to occur with buggy kernels; consider updating your system.")));
+
+				/* Only need to adjust flags */
+				uint32		buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+				Assert(buf_state & BM_VALID);
+				buf_state &= ~BM_VALID;
+				pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+			}
+
+			Assert(!(pg_atomic_read_u32(&bufHdr->state) & BM_VALID));	/* spinlock not needed */
+
+			bufBlock = LocalBufferBlockPointers[-((bufHdr)->buf_id + 2)];
+
+			/* new buffers are zero-filled */
+			MemSet((char *) bufBlock, 0, BLCKSZ);
+			/* don't set checksum for all-zero page */
+			smgrextend(smgr, forknum, blockNum, (char *) bufBlock, false);
+
+			/* Only need to adjust flags */
+			uint32		buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+			buf_state |= BM_VALID;
+			pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+
+			buffer = BufferDescriptorGetBuffer(bufHdr);
+
+		}
+		while (BufferGetBlockNumber(buffer) < blkno);
+		/* Handle the corner case that P_NEW returns non-consecutive pages */
+		if (BufferGetBlockNumber(buffer) != blkno)
+		{
+			printf("[XLogReadBufferForReplay_common] P_NEW returns non-consecutive pages");
+		}
+	}
+
+	if (mode == RBM_NORMAL)
+	{
+		/* check that page has been initialized */
+		Page		page = (Page) BufferGetPage(buffer);
+
+		/*
+		 * We assume that PageIsNew is safe without a lock. During recovery,
+		 * there should be no other backends that could modify the buffer at
+		 * the same time.
+		 */
+		if (PageIsNew(page))
+		{
+			ReleaseBuffer(buffer);
+			printf("[XLogReadBufferForReplay_common] PageIsNew");
+			return InvalidBuffer;
+		}
+	}
+
+	return buffer;
+}
+
+XLogRedoAction
+XLogReadBufferForReplayExtended(XLogReaderState *record,
+							  uint8 block_id,
+							  ReadBufferMode mode, bool get_cleanup_lock,
+							  Buffer *buf)
+{
+	XLogRecPtr	lsn = record->EndRecPtr;
+	RelFileNode rnode;
+	ForkNumber	forknum;
+	BlockNumber blkno;
+	Page		page;
+	bool		zeromode;
+	bool		willinit;
+
+	if (!XLogRecGetBlockTag(record, block_id, &rnode, &forknum, &blkno))
+	{
+		/* Caller specified a bogus block_id */
+		elog(PANIC, "failed to locate backup block with ID %d", block_id);
+	}
+
+	/*
+	 * Make sure that if the block is marked with WILL_INIT, the caller is
+	 * going to initialize it. And vice versa.
+	 */
+	zeromode = (mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK);
+	willinit = (record->blocks[block_id].flags & BKPBLOCK_WILL_INIT) != 0;
+	if (willinit && !zeromode)
+		elog(PANIC, "block with WILL_INIT flag in WAL record must be zeroed by redo routine");
+	if (!willinit && zeromode)
+		elog(PANIC, "block to be initialized in redo routine must be marked with WILL_INIT flag in the WAL record");
+
+	/* If it has a full-page image and it should be restored, do it. */
+	if (XLogRecBlockImageApply(record, block_id))
+	{
+		Assert(XLogRecHasBlockImage(record, block_id));
+		*buf = XLogReadBufferForReplay_common(rnode, forknum, blkno,
+									  get_cleanup_lock ? RBM_ZERO_AND_CLEANUP_LOCK : RBM_ZERO_AND_LOCK);
+		page = BufferGetPage(*buf);
+		if (!RestoreBlockImage(record, block_id, page))
+			elog(ERROR, "failed to restore block image");
+
+		/*
+		 * The page may be uninitialized. If so, we can't set the LSN because
+		 * that would corrupt the page.
+		 */
+		if (!PageIsNew(page))
+		{
+			PageSetLSN(page, lsn);
+		}
+
+		MarkBufferDirty(*buf);
+
+		return BLK_RESTORED;
+	}
+	else
+	{
+		*buf = XLogReadBufferForReplay_common(rnode, forknum, blkno, mode);
+		if (BufferIsValid(*buf))
+		{
+			if (lsn <= PageGetLSN(BufferGetPage(*buf)))
+				return BLK_DONE;
+			else
+				return BLK_NEEDS_REDO;
+		}
+		else
+			return BLK_NOTFOUND;
+	}
+}							  
+
 
 /*
  * XLogReadBufferForRedo
@@ -294,7 +564,7 @@ XLogRedoAction
 XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
 					  Buffer *buf)
 {
-	return XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
+	return XLogReadBufferForReplayExtended(record, block_id, RBM_NORMAL,
 										 false, buf);
 }
 
@@ -307,7 +577,7 @@ XLogInitBufferForRedo(XLogReaderState *record, uint8 block_id)
 {
 	Buffer		buf;
 
-	XLogReadBufferForRedoExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
+	XLogReadBufferForReplayExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
 								  &buf);
 	return buf;
 }
@@ -980,3 +1250,4 @@ WALReadRaiseError(WALReadError *errinfo)
 						(Size) errinfo->wre_req)));
 	}
 }
+

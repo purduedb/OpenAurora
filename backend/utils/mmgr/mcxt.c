@@ -65,9 +65,13 @@ static void MemoryContextStatsPrint(MemoryContext context, void *passthru,
  * an out-of-memory error will be escalated to a PANIC. To enforce that
  * rule, the allocation functions Assert that.
  */
-#define AssertNotInCriticalSection(context) \
-	Assert(CritSectionCount == 0 || (context)->allowInCritSection)
-
+#ifndef STORAGE_NODE
+    #define AssertNotInCriticalSection(context) \
+	    Assert(CritSectionCount == 0 || (context)->allowInCritSection)
+#else
+    #define AssertNotInCriticalSection(context) \
+	    Assert(true || (context)->allowInCritSection)
+#endif
 /*****************************************************************************
  *	  EXPORTED ROUTINES														 *
  *****************************************************************************/
@@ -752,9 +756,11 @@ MemoryContextCreate(MemoryContext node,
 					MemoryContext parent,
 					const char *name)
 {
-	/* Creating new memory contexts is not allowed in a critical section */
-	Assert(CritSectionCount == 0);
+#ifndef STORAGE_NODE
 
+    /* Creating new memory contexts is not allowed in a critical section */
+	Assert(CritSectionCount == 0);
+#endif
 	/* Initialize all standard fields of memory context header */
 	node->type = tag;
 	node->isReset = true;

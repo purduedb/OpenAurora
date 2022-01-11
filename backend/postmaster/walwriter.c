@@ -126,6 +126,9 @@ WalWriterMain(void)
 											  ALLOCSET_DEFAULT_SIZES);
 	MemoryContextSwitchTo(walwriter_context);
 
+	XLogReplayBufferInit();
+    XLogReplayModuleInit();
+	
 	/*
 	 * If an exception is encountered, processing resumes here.
 	 *

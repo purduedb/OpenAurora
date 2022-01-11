@@ -79,6 +79,8 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
+#include "access/heapam_xlog.h"
+
 extern uint32 bootstrap_data_checksum_version;
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
@@ -396,6 +398,16 @@ static bool doRequestWalReceiverReply;
  * because the REDO record can precede the checkpoint record.
  */
 static XLogRecPtr RedoStartLSN = InvalidXLogRecPtr;
+
+/*
+ *  Here use LocalBuffer, since different postgres process will
+ *  content the ReplayBuffer.
+ *
+ *  When we complete the XlogReceiverBuffer, we can reuse the
+ *  a shared buffer with RW lock to reduce the memory usage.
+ */
+char * XLogReplayBuffer;
+
 
 /*----------
  * Shared-memory data structures for XLOG control
@@ -1157,6 +1169,32 @@ XLogInsertRecord(XLogRecData *rdata,
 		 */
 	}
 
+
+	/*!
+	 *  Here to copy this record to a replayBuffer
+	 *  When the WALInsertLock is released, it's unsafe to copy the log
+	 */
+    int startIdx = XLogRecPtrToBufIdx(StartPos);
+    int endIdx = XLogRecPtrToBufIdx(EndPos);
+
+    printf("[XLogInsertRecord] New Record: StartPos = %d, StartIdx = %d, EndPos = %d, EndIdx = %d\n\n", StartPos, startIdx, EndPos, endIdx);
+
+    int bufferLen;
+    int recordLen;
+    if(endIdx>=startIdx) {
+        bufferLen = (endIdx-startIdx+1) * (Size)XLOG_BLCKSZ;
+        memcpy(XLogReplayBuffer, XLogCtl->pages+startIdx*(Size)XLOG_BLCKSZ,
+               bufferLen);
+    } else {
+        bufferLen = ((XLogCtl->XLogCacheBlck-startIdx+1)+(endIdx+1)) * (Size)XLOG_BLCKSZ;
+        memcpy(XLogReplayBuffer, XLogCtl->pages + startIdx*(Size)XLOG_BLCKSZ,
+               (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ);
+        char * cont_buffer = XLogReplayBuffer + (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ;
+        memcpy(cont_buffer, XLogCtl->pages, (endIdx+1)*(Size)XLOG_BLCKSZ);
+    }
+
+    printf("[XLogInsertRecord] bufferLen = %d\n\n", bufferLen);
+
 	/*
 	 * Done! Let others know that we're finished.
 	 */
@@ -1165,6 +1203,11 @@ XLogInsertRecord(XLogRecData *rdata,
 	MarkCurrentTransactionIdLoggedIfAny();
 
 	END_CRIT_SECTION();
+
+	/*!
+	 *  Here to Replay XLog
+	 */
+    XLogReplay(StartPos, EndPos, XLogReplayBuffer, EndPos-StartPos);
 
 	/*
 	 * Update shared LogwrtRqst.Write, if we crossed page boundary.
@@ -1330,10 +1373,12 @@ ReserveXLogInsertLocation(int size, XLogRecPtr *StartPos, XLogRecPtr *EndPos,
 	*EndPos = XLogBytePosToEndRecPtr(endbytepos);
 	*PrevPtr = XLogBytePosToRecPtr(prevbytepos);
 
-	/*
-	 * Check that the conversions between "usable byte positions" and
-	 * XLogRecPtrs work consistently in both directions.
-	 */
+    printf("[ReserveXLogInsertLocation] Xlog_size=%d, startbytepos=%d, endbytepos=%d \n\n", size, startbytepos, endbytepos);
+
+    /*
+     * Check that the conversions between "usable byte positions" and
+     * XLogRecPtrs work consistently in both directions.
+     */
 	Assert(XLogRecPtrToBytePos(*StartPos) == startbytepos);
 	Assert(XLogRecPtrToBytePos(*EndPos) == endbytepos);
 	Assert(XLogRecPtrToBytePos(*PrevPtr) == prevbytepos);
@@ -1548,7 +1593,9 @@ CopyXLogRecordToWAL(int write_len, bool isLogSwitch, XLogRecData *rdata,
 		char	   *rdata_data = rdata->data;
 		int			rdata_len = rdata->len;
 
-		while (rdata_len > freespace)
+        printf("[CopyXLogRecordToWAL] rdata->len = %d, isLogSwitch = %d\n\n", rdata->len, isLogSwitch);
+
+        while (rdata_len > freespace)
 		{
 			/*
 			 * Write what fits on this page, and continue on the next page.
@@ -1650,6 +1697,7 @@ CopyXLogRecordToWAL(int write_len, bool isLogSwitch, XLogRecData *rdata,
 	}
 	else
 	{
+	    printf("[CopyXLogRecordToWAL] CurrPos = %d \n\n",  CurrPos);
 		/* Align the end position, so that the next record starts aligned */
 		CurrPos = MAXALIGN64(CurrPos);
 	}
@@ -2437,8 +2485,11 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	char*       replay_buffer;
 	char*       cont_buffer;
 
-	/* We should always be inside a critical section here */
+#ifndef STORAGE_NODE
+
+    /* We should always be inside a critical section here */
 	Assert(CritSectionCount > 0);
+#endif
 
 	/*
 	 * Update local LogwrtResult (caller probably did this already, but...)
@@ -2467,35 +2518,34 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	//! endidx is the cache block number of end position
 	//! if endidx is smaller than startidx, that means this write reaches the end
 	//! of the cache and then back to start of cache
-    endidx = XLogRecPtrToBufIdx(WriteRqst.Write);
-
-    if(endidx >= startidx) {
-        replay_buffer_len = (endidx-startidx+1) * (Size)XLOG_BLCKSZ;
-//            replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
-        replay_buffer = malloc(replay_buffer_len);
-        memcpy(replay_buffer, XLogCtl->pages + startidx * (Size)XLOG_BLCKSZ, (endidx-startidx+1)*(Size)BLCKSZ);
-    }
-    else {
-        replay_buffer_len = ((XLogCtl->XLogCacheBlck-startidx+1) + (endidx+1)) * XLOG_BLCKSZ;
-        replay_buffer = malloc(replay_buffer_len);
-//        replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
-        memcpy(replay_buffer, XLogCtl->pages + startidx*(Size)XLOG_BLCKSZ,
-               (XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ);
-        cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
-        memcpy(cont_buffer, XLogCtl->pages, (endidx+1)*(Size)XLOG_BLCKSZ);
-    }
-    //memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
-    char msg[100];
-    sprintf(msg, "[XlogWrite] buffer_len=%d\n\n", replay_buffer_len);
-    ereport(LOG, (errmsg(msg)));
-    XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
-
-    free(replay_buffer);
-
-//        if(XLogReplayContext == NULL) {
-//            CreateXlogReplayMemoryContext();
-//            MemoryContextAllowInCriticalSection(XLogReplayContext, true);
-//        }
+//    endidx = XLogRecPtrToBufIdx(WriteRqst.Write);
+//
+//    printf("[XlogWrite] LogwrtResult.Write = %d and WriteRqst.Wrist = %d\n\n", LogwrtResult.Write, WriteRqst.Write);
+//
+//    printf("[XlogWrite] the curridx = %d and endidx = %d\n\n", curridx, endidx);
+//
+//    if(endidx >= startidx) {
+//        replay_buffer_len = (endidx-startidx+1) * (Size)XLOG_BLCKSZ;
+////            replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+//        replay_buffer = malloc(replay_buffer_len);
+//        memcpy(replay_buffer, XLogCtl->pages + startidx * (Size)XLOG_BLCKSZ, (endidx-startidx+1)*(Size)BLCKSZ);
+//    }
+//    else {
+//        replay_buffer_len = ((XLogCtl->XLogCacheBlck-startidx+1) + (endidx+1)) * XLOG_BLCKSZ;
+//        replay_buffer = malloc(replay_buffer_len);
+////        replay_buffer = MemoryContextAlloc(TopMemoryContext, replay_buffer_len);
+//        memcpy(replay_buffer, XLogCtl->pages + startidx*(Size)XLOG_BLCKSZ,
+//               (XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ);
+//        cont_buffer = replay_buffer+(XLogCtl->XLogCacheBlck-startidx+1)*(Size)XLOG_BLCKSZ;
+//        memcpy(cont_buffer, XLogCtl->pages, (endidx+1)*(Size)XLOG_BLCKSZ);
+//    }
+//    //memset(replay_buffer, 0, sizeof(char)*replay_buffer_len);
+//    char msg[100];
+//    sprintf(msg, "[XlogWrite] buffer_len=%d, targe_char1=%d, targe_char2=%d,targe_char3=%d,targe_char4=%d,targe_char5=%d\n\n", replay_buffer_len,replay_buffer[0], replay_buffer[1],replay_buffer[2],replay_buffer[3],replay_buffer[4]);
+//    ereport(LOG, (errmsg(msg)));
+//    XLogReplay(LogwrtResult.Write, WriteRqst.Write, replay_buffer, replay_buffer_len);
+//
+//    free(replay_buffer);
 
 	while (LogwrtResult.Write < WriteRqst.Write)
 	{
@@ -6541,6 +6591,7 @@ StartupXLOG(void)
 				 errdetail("Failed while allocating a WAL reading processor.")));
 	xlogreader->system_identifier = ControlFile->system_identifier;
 
+	XLogReplayBufferInit();
     XLogReplayModuleInit();
 
 	/*
@@ -12755,6 +12806,12 @@ XLogRequestWalReceiverReply(void)
 }
 
 
+
+void XLogReplayBufferInit(void)
+{
+    XLogReplayBuffer = palloc((XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ);
+}
+
 XLogReaderState *replayReader = NULL;
 
 void XLogReplayModuleInit(void)
@@ -12794,25 +12851,27 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
     }
 
     XLogBeginRead(replayReader, reqFrom);
-    char msg[100];
-    sprintf(msg, "[XlogReplay] dataLen = %d, start=%d, data=%d, XlogSize=%d, cacheSize=%d\n\n", dataLen, reqFrom, strlen(data), XLOG_BLCKSZ, XLogCtl->XLogCacheBlck);
-    ereport(LOG, (errmsg(msg)));
+    printf("[XlogReplay] dataLen = %d, start=%d, data=%d, XlogSize=%d, cacheSize=%d\n\n", dataLen, reqFrom, strlen(data), XLOG_BLCKSZ, XLogCtl->XLogCacheBlck);
     int totalLen = 0;
     while (dataLen > totalLen) {
         int readLen = 0;
-        if (readLen = XLogReadSingleRecord(replayReader, &data) && readLen < 0) {
+		XLogRecord *record = NULL;
+		printf("[XLogReplay] ReplayReader: dataAddress = %d, ReadRecPtr=%d, EndRecPtr=%d\n\n", data, replayReader->ReadRecPtr, replayReader->EndRecPtr);
+        readLen = XLogReadSingleRecord(replayReader, &data);
+        printf("[XLogReplay] !!!!!!!ReadLen = %d\n\n", readLen);
+        if (readLen < 0) {
             ereport(ERROR,
                     (errcode(ERRCODE_OUT_OF_MEMORY),
                             errmsg("XLogReadSingleRecord Failed"),
                             errdetail("XLogReadSingleRecord return value is negative")));
         }
-        sprintf(msg, "[XlogReplay] ReadLen = %d\n\n", readLen);
-        ereport(LOG, (errmsg(msg)));
-        return;
-        //printf("[XLogReplay] Read a record, readLen = %d\n", readLen);
-        //LogRecord *record = (XLogRecord*)replayReader->readRecordBuf;
-        //printf("[XLogReplay] Xlog readLen = %d and xlog header's totalLen = %d\n", readLen, record->xl_tot_len);
         //! info&heap_insert   -> redo
+		if (replayReader != NULL && replayReader->decoded_record->xl_rmid == 10)
+		{
+			uint8		info = XLogRecGetInfo(replayReader) & ~XLR_INFO_MASK;
+			if ((info & XLOG_HEAP_OPMASK) == XLOG_HEAP_INSERT || (info & XLOG_HEAP_OPMASK) == XLOG_HEAP_DELETE)
+				heap_redo(replayReader);
+		}
         totalLen += readLen;
     }
     return;
