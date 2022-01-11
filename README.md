@@ -21,10 +21,10 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk)
 * Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk)
 
-### Milestone#2 (Don3: 2021/12/01 - 2022/01/04)
+### Milestone#2 (Done: 2021/12/01 - 2022/01/04)
 **Goal**
 * Decouple "Replication Service" into an individual service
-* Design new page level MVCC
+* Design a new page level MVCC protocol
 * Transform local storage engine interfaces into RPC interfaces
 
 ### Milestone#3 (2022/01/05 - 2022/01/20)
