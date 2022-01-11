@@ -15,13 +15,13 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Incoming Progress
 
-### Milestone#1 (Done: 2021/08/15 - 2021/11/30)
+### Milestone#1 (Done)
 **Goal**
 * Decouple the log-replay functions to a new module, called "Replay Module"
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk)
 * Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk)
 
-### Milestone#2 (Done: 2021/12/01 - 2022/01/04)
+### Milestone#2 (Done)
 **Goal**
 * Decouple "Replication Service" into an individual service
 * Design a new page level MVCC protocol
