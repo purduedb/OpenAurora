@@ -15,7 +15,19 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Incoming Progress
 
-### Milestone#1 (2022/01/05 - 2022/01/20)
+### Milestone#1 (Done: 2021/08/15 - 2021/11/30)
+**Goal**
+* Decouple the log-replay functions to a new module, called "Replay Module"
+* Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk)
+* Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk)
+
+### Milestone#2 (Don3: 2021/12/01 - 2022/01/04)
+**Goal**
+* Decouple "Replication Service" into an individual service
+* Design new page level MVCC
+* Transform local storage engine interfaces into RPC interfaces
+
+### Milestone#3 (2022/01/05 - 2022/01/20)
 **Goal**
 * Disaggregate storage layer and compute layer
 
@@ -30,7 +42,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
   
   
-### Milestone#2 (2022/01/21 - 2022/01/31)
+### Milestone#4 (2022/01/21 - 2022/01/31)
 **Goal**
 * Replace the PostgreSql storage engine with a K/V store
 
@@ -41,7 +53,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Developing RPC interfaces and related strategy functions
   
 
-### Milestone#3 (2022/02/01 - 2022/02/10)
+### Milestone#5 (2022/02/01 - 2022/02/10)
 **Goal**
 * Replace PostgreSql's tuple level MVCC with page level MVCC
 
@@ -50,7 +62,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Develop a page MVCC with the K/V store
 
   
-### Milestone#4 (2022/02/11 - 2022/02/17)
+### Milestone#6 (2022/02/11 - 2022/02/17)
 **Goal**
 * Support multi-client: one-primary-several-replicas
 
@@ -59,7 +71,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Disseminate primary node's write requests to all replicas
 
   
-### Milestone#5 (2022/02/18 - 2022/03/15)
+### Milestone#7 (2022/02/18 - 2022/03/15)
 **Goal**
 * Support distributed storage layer.
 
