@@ -1,0 +1,74 @@
+describe.o: describe.c ../../../src/include/postgres_fe.h \
+  ../../../src/include/c.h ../../../src/include/postgres_ext.h \
+  ../../../src/include/pg_config_ext.h ../../../src/include/pg_config.h \
+  ../../../src/include/pg_config_manual.h \
+  ../../../src/include/pg_config_os.h ../../../src/include/port.h \
+  ../../../src/include/common/fe_memutils.h \
+  ../../../src/include/catalog/pg_am.h \
+  ../../../src/include/catalog/genbki.h \
+  ../../../src/include/catalog/pg_am_d.h \
+  ../../../src/include/catalog/pg_attribute_d.h \
+  ../../../src/include/catalog/pg_cast_d.h \
+  ../../../src/include/catalog/pg_class_d.h \
+  ../../../src/include/catalog/pg_default_acl_d.h common.h \
+  ../../../src/include/fe_utils/print.h \
+  ../../../src/interfaces/libpq/libpq-fe.h \
+  ../../../src/include/fe_utils/psqlscan.h \
+  ../../../src/interfaces/libpq/pqexpbuffer.h \
+  ../../../src/include/common/logging.h describe.h \
+  ../../../src/include/fe_utils/mbprint.h \
+  ../../../src/include/fe_utils/string_utils.h settings.h variables.h
+
+../../../src/include/postgres_fe.h:
+
+../../../src/include/c.h:
+
+../../../src/include/postgres_ext.h:
+
+../../../src/include/pg_config_ext.h:
+
+../../../src/include/pg_config.h:
+
+../../../src/include/pg_config_manual.h:
+
+../../../src/include/pg_config_os.h:
+
+../../../src/include/port.h:
+
+../../../src/include/common/fe_memutils.h:
+
+../../../src/include/catalog/pg_am.h:
+
+../../../src/include/catalog/genbki.h:
+
+../../../src/include/catalog/pg_am_d.h:
+
+../../../src/include/catalog/pg_attribute_d.h:
+
+../../../src/include/catalog/pg_cast_d.h:
+
+../../../src/include/catalog/pg_class_d.h:
+
+../../../src/include/catalog/pg_default_acl_d.h:
+
+common.h:
+
+../../../src/include/fe_utils/print.h:
+
+../../../src/interfaces/libpq/libpq-fe.h:
+
+../../../src/include/fe_utils/psqlscan.h:
+
+../../../src/interfaces/libpq/pqexpbuffer.h:
+
+../../../src/include/common/logging.h:
+
+describe.h:
+
+../../../src/include/fe_utils/mbprint.h:
+
+../../../src/include/fe_utils/string_utils.h:
+
+settings.h:
+
+variables.h:

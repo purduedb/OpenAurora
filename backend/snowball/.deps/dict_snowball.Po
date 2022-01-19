@@ -1,0 +1,303 @@
+dict_snowball.o: dict_snowball.c ../../../src/include/postgres.h \
+  ../../../src/include/c.h ../../../src/include/postgres_ext.h \
+  ../../../src/include/pg_config_ext.h ../../../src/include/pg_config.h \
+  ../../../src/include/pg_config_manual.h \
+  ../../../src/include/pg_config_os.h ../../../src/include/port.h \
+  ../../../src/include/utils/elog.h \
+  ../../../src/include/utils/errcodes.h \
+  ../../../src/include/utils/palloc.h \
+  ../../../src/include/commands/defrem.h \
+  ../../../src/include/catalog/objectaddress.h \
+  ../../../src/include/access/htup.h \
+  ../../../src/include/storage/itemptr.h \
+  ../../../src/include/storage/block.h \
+  ../../../src/include/storage/off.h \
+  ../../../src/include/storage/itemid.h \
+  ../../../src/include/nodes/parsenodes.h \
+  ../../../src/include/nodes/bitmapset.h \
+  ../../../src/include/nodes/lockoptions.h \
+  ../../../src/include/nodes/primnodes.h \
+  ../../../src/include/access/attnum.h \
+  ../../../src/include/nodes/pg_list.h \
+  ../../../src/include/nodes/nodes.h ../../../src/include/nodes/value.h \
+  ../../../src/include/partitioning/partdefs.h \
+  ../../../src/include/storage/lockdefs.h \
+  ../../../src/include/utils/relcache.h \
+  ../../../src/include/access/tupdesc.h \
+  ../../../src/include/catalog/pg_attribute.h \
+  ../../../src/include/catalog/genbki.h \
+  ../../../src/include/catalog/pg_attribute_d.h \
+  ../../../src/include/nodes/params.h \
+  ../../../src/include/parser/parse_node.h \
+  ../../../src/include/utils/queryenvironment.h \
+  ../../../src/include/tcop/dest.h \
+  ../../../src/include/executor/tuptable.h \
+  ../../../src/include/access/htup_details.h \
+  ../../../src/include/access/transam.h \
+  ../../../src/include/access/xlogdefs.h \
+  ../../../src/include/access/tupmacs.h \
+  ../../../src/include/catalog/pg_type_d.h \
+  ../../../src/include/storage/bufpage.h \
+  ../../../src/include/storage/item.h \
+  ../../../src/include/access/sysattr.h \
+  ../../../src/include/storage/buf.h ../../../src/include/tcop/cmdtag.h \
+  ../../../src/include/tcop/cmdtaglist.h \
+  ../../../src/include/utils/array.h ../../../src/include/fmgr.h \
+  ../../../src/include/utils/expandeddatum.h \
+  ../../../src/include/tsearch/ts_locale.h \
+  ../../../src/include/mb/pg_wchar.h \
+  ../../../src/include/utils/pg_locale.h \
+  ../../../src/include/utils/guc.h \
+  ../../../src/include/tsearch/ts_utils.h \
+  ../../../src/include/tsearch/ts_public.h \
+  ../../../src/include/tsearch/ts_type.h \
+  ../../../src/include/utils/memutils.h \
+  ../../../src/include/nodes/memnodes.h \
+  ../../../src/include/snowball/libstemmer/header.h \
+  ../../../src/include/snowball/libstemmer/api.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_danish.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_dutch.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_english.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_finnish.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_french.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_german.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_indonesian.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_irish.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_italian.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_norwegian.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_porter.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_portuguese.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_spanish.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_1_swedish.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_2_hungarian.h \
+  ../../../src/include/snowball/libstemmer/stem_ISO_8859_2_romanian.h \
+  ../../../src/include/snowball/libstemmer/stem_KOI8_R_russian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_arabic.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_danish.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_dutch.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_english.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_finnish.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_french.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_german.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_greek.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_hungarian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_indonesian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_irish.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_italian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_lithuanian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_nepali.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_norwegian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_porter.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_portuguese.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_romanian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_russian.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_spanish.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_swedish.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_tamil.h \
+  ../../../src/include/snowball/libstemmer/stem_UTF_8_turkish.h
+
+../../../src/include/postgres.h:
+
+../../../src/include/c.h:
+
+../../../src/include/postgres_ext.h:
+
+../../../src/include/pg_config_ext.h:
+
+../../../src/include/pg_config.h:
+
+../../../src/include/pg_config_manual.h:
+
+../../../src/include/pg_config_os.h:
+
+../../../src/include/port.h:
+
+../../../src/include/utils/elog.h:
+
+../../../src/include/utils/errcodes.h:
+
+../../../src/include/utils/palloc.h:
+
+../../../src/include/commands/defrem.h:
+
+../../../src/include/catalog/objectaddress.h:
+
+../../../src/include/access/htup.h:
+
+../../../src/include/storage/itemptr.h:
+
+../../../src/include/storage/block.h:
+
+../../../src/include/storage/off.h:
+
+../../../src/include/storage/itemid.h:
+
+../../../src/include/nodes/parsenodes.h:
+
+../../../src/include/nodes/bitmapset.h:
+
+../../../src/include/nodes/lockoptions.h:
+
+../../../src/include/nodes/primnodes.h:
+
+../../../src/include/access/attnum.h:
+
+../../../src/include/nodes/pg_list.h:
+
+../../../src/include/nodes/nodes.h:
+
+../../../src/include/nodes/value.h:
+
+../../../src/include/partitioning/partdefs.h:
+
+../../../src/include/storage/lockdefs.h:
+
+../../../src/include/utils/relcache.h:
+
+../../../src/include/access/tupdesc.h:
+
+../../../src/include/catalog/pg_attribute.h:
+
+../../../src/include/catalog/genbki.h:
+
+../../../src/include/catalog/pg_attribute_d.h:
+
+../../../src/include/nodes/params.h:
+
+../../../src/include/parser/parse_node.h:
+
+../../../src/include/utils/queryenvironment.h:
+
+../../../src/include/tcop/dest.h:
+
+../../../src/include/executor/tuptable.h:
+
+../../../src/include/access/htup_details.h:
+
+../../../src/include/access/transam.h:
+
+../../../src/include/access/xlogdefs.h:
+
+../../../src/include/access/tupmacs.h:
+
+../../../src/include/catalog/pg_type_d.h:
+
+../../../src/include/storage/bufpage.h:
+
+../../../src/include/storage/item.h:
+
+../../../src/include/access/sysattr.h:
+
+../../../src/include/storage/buf.h:
+
+../../../src/include/tcop/cmdtag.h:
+
+../../../src/include/tcop/cmdtaglist.h:
+
+../../../src/include/utils/array.h:
+
+../../../src/include/fmgr.h:
+
+../../../src/include/utils/expandeddatum.h:
+
+../../../src/include/tsearch/ts_locale.h:
+
+../../../src/include/mb/pg_wchar.h:
+
+../../../src/include/utils/pg_locale.h:
+
+../../../src/include/utils/guc.h:
+
+../../../src/include/tsearch/ts_utils.h:
+
+../../../src/include/tsearch/ts_public.h:
+
+../../../src/include/tsearch/ts_type.h:
+
+../../../src/include/utils/memutils.h:
+
+../../../src/include/nodes/memnodes.h:
+
+../../../src/include/snowball/libstemmer/header.h:
+
+../../../src/include/snowball/libstemmer/api.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_danish.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_dutch.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_english.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_finnish.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_french.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_german.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_indonesian.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_irish.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_italian.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_norwegian.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_porter.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_portuguese.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_spanish.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_1_swedish.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_2_hungarian.h:
+
+../../../src/include/snowball/libstemmer/stem_ISO_8859_2_romanian.h:
+
+../../../src/include/snowball/libstemmer/stem_KOI8_R_russian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_arabic.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_danish.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_dutch.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_english.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_finnish.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_french.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_german.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_greek.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_hungarian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_indonesian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_irish.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_italian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_lithuanian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_nepali.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_norwegian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_porter.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_portuguese.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_romanian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_russian.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_spanish.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_swedish.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_tamil.h:
+
+../../../src/include/snowball/libstemmer/stem_UTF_8_turkish.h:

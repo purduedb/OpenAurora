@@ -1,0 +1,94 @@
+utf8_and_win.o: utf8_and_win.c ../../../../../../src/include/postgres.h \
+  ../../../../../../src/include/c.h \
+  ../../../../../../src/include/postgres_ext.h \
+  ../../../../../../src/include/pg_config_ext.h \
+  ../../../../../../src/include/pg_config.h \
+  ../../../../../../src/include/pg_config_manual.h \
+  ../../../../../../src/include/pg_config_os.h \
+  ../../../../../../src/include/port.h \
+  ../../../../../../src/include/utils/elog.h \
+  ../../../../../../src/include/utils/errcodes.h \
+  ../../../../../../src/include/utils/palloc.h \
+  ../../../../../../src/include/fmgr.h \
+  ../../../../../../src/include/mb/pg_wchar.h \
+  ../../Unicode/utf8_to_win1250.map ../../Unicode/utf8_to_win1251.map \
+  ../../Unicode/utf8_to_win1252.map ../../Unicode/utf8_to_win1253.map \
+  ../../Unicode/utf8_to_win1254.map ../../Unicode/utf8_to_win1255.map \
+  ../../Unicode/utf8_to_win1256.map ../../Unicode/utf8_to_win1257.map \
+  ../../Unicode/utf8_to_win1258.map ../../Unicode/utf8_to_win866.map \
+  ../../Unicode/utf8_to_win874.map ../../Unicode/win1250_to_utf8.map \
+  ../../Unicode/win1251_to_utf8.map ../../Unicode/win1252_to_utf8.map \
+  ../../Unicode/win1253_to_utf8.map ../../Unicode/win1254_to_utf8.map \
+  ../../Unicode/win1255_to_utf8.map ../../Unicode/win1256_to_utf8.map \
+  ../../Unicode/win1257_to_utf8.map ../../Unicode/win866_to_utf8.map \
+  ../../Unicode/win874_to_utf8.map ../../Unicode/win1258_to_utf8.map
+
+../../../../../../src/include/postgres.h:
+
+../../../../../../src/include/c.h:
+
+../../../../../../src/include/postgres_ext.h:
+
+../../../../../../src/include/pg_config_ext.h:
+
+../../../../../../src/include/pg_config.h:
+
+../../../../../../src/include/pg_config_manual.h:
+
+../../../../../../src/include/pg_config_os.h:
+
+../../../../../../src/include/port.h:
+
+../../../../../../src/include/utils/elog.h:
+
+../../../../../../src/include/utils/errcodes.h:
+
+../../../../../../src/include/utils/palloc.h:
+
+../../../../../../src/include/fmgr.h:
+
+../../../../../../src/include/mb/pg_wchar.h:
+
+../../Unicode/utf8_to_win1250.map:
+
+../../Unicode/utf8_to_win1251.map:
+
+../../Unicode/utf8_to_win1252.map:
+
+../../Unicode/utf8_to_win1253.map:
+
+../../Unicode/utf8_to_win1254.map:
+
+../../Unicode/utf8_to_win1255.map:
+
+../../Unicode/utf8_to_win1256.map:
+
+../../Unicode/utf8_to_win1257.map:
+
+../../Unicode/utf8_to_win1258.map:
+
+../../Unicode/utf8_to_win866.map:
+
+../../Unicode/utf8_to_win874.map:
+
+../../Unicode/win1250_to_utf8.map:
+
+../../Unicode/win1251_to_utf8.map:
+
+../../Unicode/win1252_to_utf8.map:
+
+../../Unicode/win1253_to_utf8.map:
+
+../../Unicode/win1254_to_utf8.map:
+
+../../Unicode/win1255_to_utf8.map:
+
+../../Unicode/win1256_to_utf8.map:
+
+../../Unicode/win1257_to_utf8.map:
+
+../../Unicode/win866_to_utf8.map:
+
+../../Unicode/win874_to_utf8.map:
+
+../../Unicode/win1258_to_utf8.map:

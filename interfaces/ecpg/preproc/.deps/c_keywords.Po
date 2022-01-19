@@ -1,0 +1,44 @@
+c_keywords.o: c_keywords.c ../../../../src/include/postgres_fe.h \
+  ../../../../src/include/c.h ../../../../src/include/postgres_ext.h \
+  ../../../../src/include/pg_config_ext.h \
+  ../../../../src/include/pg_config.h \
+  ../../../../src/include/pg_config_manual.h \
+  ../../../../src/include/pg_config_os.h ../../../../src/include/port.h \
+  ../../../../src/include/common/fe_memutils.h c_kwlist_d.h \
+  ../../../../src/include/common/kwlookup.h preproc_extern.h \
+  ../../../../src/include/common/keywords.h type.h ../include/ecpgtype.h \
+  preproc.h c_kwlist.h
+
+../../../../src/include/postgres_fe.h:
+
+../../../../src/include/c.h:
+
+../../../../src/include/postgres_ext.h:
+
+../../../../src/include/pg_config_ext.h:
+
+../../../../src/include/pg_config.h:
+
+../../../../src/include/pg_config_manual.h:
+
+../../../../src/include/pg_config_os.h:
+
+../../../../src/include/port.h:
+
+../../../../src/include/common/fe_memutils.h:
+
+c_kwlist_d.h:
+
+../../../../src/include/common/kwlookup.h:
+
+preproc_extern.h:
+
+../../../../src/include/common/keywords.h:
+
+type.h:
+
+../include/ecpgtype.h:
+
+preproc.h:
+
+c_kwlist.h:

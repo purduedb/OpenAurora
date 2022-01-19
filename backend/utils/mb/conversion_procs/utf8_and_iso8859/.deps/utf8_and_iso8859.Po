@@ -1,0 +1,118 @@
+utf8_and_iso8859.o: utf8_and_iso8859.c \
+  ../../../../../../src/include/postgres.h \
+  ../../../../../../src/include/c.h \
+  ../../../../../../src/include/postgres_ext.h \
+  ../../../../../../src/include/pg_config_ext.h \
+  ../../../../../../src/include/pg_config.h \
+  ../../../../../../src/include/pg_config_manual.h \
+  ../../../../../../src/include/pg_config_os.h \
+  ../../../../../../src/include/port.h \
+  ../../../../../../src/include/utils/elog.h \
+  ../../../../../../src/include/utils/errcodes.h \
+  ../../../../../../src/include/utils/palloc.h \
+  ../../../../../../src/include/fmgr.h \
+  ../../../../../../src/include/mb/pg_wchar.h \
+  ../../Unicode/iso8859_10_to_utf8.map \
+  ../../Unicode/iso8859_13_to_utf8.map \
+  ../../Unicode/iso8859_14_to_utf8.map \
+  ../../Unicode/iso8859_15_to_utf8.map \
+  ../../Unicode/iso8859_2_to_utf8.map \
+  ../../Unicode/iso8859_3_to_utf8.map \
+  ../../Unicode/iso8859_4_to_utf8.map \
+  ../../Unicode/iso8859_5_to_utf8.map \
+  ../../Unicode/iso8859_6_to_utf8.map \
+  ../../Unicode/iso8859_7_to_utf8.map \
+  ../../Unicode/iso8859_8_to_utf8.map \
+  ../../Unicode/iso8859_9_to_utf8.map \
+  ../../Unicode/utf8_to_iso8859_10.map \
+  ../../Unicode/utf8_to_iso8859_13.map \
+  ../../Unicode/utf8_to_iso8859_14.map \
+  ../../Unicode/utf8_to_iso8859_15.map \
+  ../../Unicode/utf8_to_iso8859_16.map \
+  ../../Unicode/utf8_to_iso8859_2.map \
+  ../../Unicode/utf8_to_iso8859_3.map \
+  ../../Unicode/utf8_to_iso8859_4.map \
+  ../../Unicode/utf8_to_iso8859_5.map \
+  ../../Unicode/utf8_to_iso8859_6.map \
+  ../../Unicode/utf8_to_iso8859_7.map \
+  ../../Unicode/utf8_to_iso8859_8.map \
+  ../../Unicode/utf8_to_iso8859_9.map \
+  ../../Unicode/iso8859_16_to_utf8.map
+
+../../../../../../src/include/postgres.h:
+
+../../../../../../src/include/c.h:
+
+../../../../../../src/include/postgres_ext.h:
+
+../../../../../../src/include/pg_config_ext.h:
+
+../../../../../../src/include/pg_config.h:
+
+../../../../../../src/include/pg_config_manual.h:
+
+../../../../../../src/include/pg_config_os.h:
+
+../../../../../../src/include/port.h:
+
+../../../../../../src/include/utils/elog.h:
+
+../../../../../../src/include/utils/errcodes.h:
+
+../../../../../../src/include/utils/palloc.h:
+
+../../../../../../src/include/fmgr.h:
+
+../../../../../../src/include/mb/pg_wchar.h:
+
+../../Unicode/iso8859_10_to_utf8.map:
+
+../../Unicode/iso8859_13_to_utf8.map:
+
+../../Unicode/iso8859_14_to_utf8.map:
+
+../../Unicode/iso8859_15_to_utf8.map:
+
+../../Unicode/iso8859_2_to_utf8.map:
+
+../../Unicode/iso8859_3_to_utf8.map:
+
+../../Unicode/iso8859_4_to_utf8.map:
+
+../../Unicode/iso8859_5_to_utf8.map:
+
+../../Unicode/iso8859_6_to_utf8.map:
+
+../../Unicode/iso8859_7_to_utf8.map:
+
+../../Unicode/iso8859_8_to_utf8.map:
+
+../../Unicode/iso8859_9_to_utf8.map:
+
+../../Unicode/utf8_to_iso8859_10.map:
+
+../../Unicode/utf8_to_iso8859_13.map:
+
+../../Unicode/utf8_to_iso8859_14.map:
+
+../../Unicode/utf8_to_iso8859_15.map:
+
+../../Unicode/utf8_to_iso8859_16.map:
+
+../../Unicode/utf8_to_iso8859_2.map:
+
+../../Unicode/utf8_to_iso8859_3.map:
+
+../../Unicode/utf8_to_iso8859_4.map:
+
+../../Unicode/utf8_to_iso8859_5.map:
+
+../../Unicode/utf8_to_iso8859_6.map:
+
+../../Unicode/utf8_to_iso8859_7.map:
+
+../../Unicode/utf8_to_iso8859_8.map:
+
+../../Unicode/utf8_to_iso8859_9.map:
+
+../../Unicode/iso8859_16_to_utf8.map:
