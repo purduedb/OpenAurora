@@ -311,64 +311,6 @@ MarkLocalBufferDirty(Buffer buffer)
 	pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
 }
 
-#ifdef PGAURORA
-/*
- * LocalBufferFlush
- *      flush a dirty buffer to disk and then release it. The buffer 
- * 		should be already pinned.
- */
-void
-LocalBufferFlush(Buffer buffer)
-{
-	int			bufid;
-	BufferDesc *bufHdr;
-	uint32		buf_state;
-
-	Assert(BufferIsLocal(buffer));
-
-	bufid = -(buffer + 1);
-
-	/* The buffer to be flushed should be pinned */
-	Assert(LocalRefCount[bufid] > 0);
-
-	bufHdr = GetLocalBufferDescriptor(bufid);
-
-	buf_state = pg_atomic_read_u32(&bufHdr->state);
-
-	Assert(buf_state & BM_TAG_VALID);
-
-	/* Now flush the buffer */
-	if (buf_state & BM_DIRTY)
-	{
-		SMgrRelation oreln;
-		Page		localpage = (char *) LocalBufHdrGetBlock(bufHdr);
-
-		/* Find smgr relation for buffer */
-		oreln = smgropen(bufHdr->tag.rnode, MyBackendId);
-
-		PageSetChecksumInplace(localpage, bufHdr->tag.blockNum);
-
-		/* And write... */
-		smgrwrite(oreln,
-				  bufHdr->tag.forkNum,
-				  bufHdr->tag.blockNum,
-				  localpage,
-				  false);
-
-		/* Mark not-dirty now in case we error out below */
-		buf_state &= ~BM_DIRTY;
-		pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
-
-		pgBufferUsage.local_blks_written++;
-	}
-
-	ReleaseBuffer(buffer);
-
-	buf_state &= ~(BM_DIRTY | BM_JUST_DIRTIED);
-
-	pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
-}
-#endif
 /*
  * DropRelFileNodeLocalBuffers
  *		This function removes from the buffer pool all the pages of the
