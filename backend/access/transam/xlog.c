@@ -12705,7 +12705,7 @@ XLogRequestWalReceiverReply(void)
 	doRequestWalReceiverReply = true;
 }
 
-#ifdef 0
+#ifdef Replay
 
 XLogReaderState *replayReader = NULL;
 
