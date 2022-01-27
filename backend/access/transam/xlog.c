@@ -12705,6 +12705,8 @@ XLogRequestWalReceiverReply(void)
 	doRequestWalReceiverReply = true;
 }
 
+#ifdef 0
+
 XLogReaderState *replayReader = NULL;
 
 void XLogRelayModuleInit(void)
@@ -13071,3 +13073,5 @@ int ReplayReadPageInternal(char *data, XLogRecPtr targetPagePtr, int minReadLen)
     replayReader->seg.ws_tli = curFileTLI;
     return XLOG_BLCKSZ;
 }
+
+#endif
