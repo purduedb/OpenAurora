@@ -323,6 +323,7 @@ typedef enum BackendType
 	B_ARCHIVER,
 	B_STATS_COLLECTOR,
 	B_LOGGER,
+	B_RPC_SERVER,
 } BackendType;
 
 extern BackendType MyBackendType;
@@ -421,6 +422,7 @@ typedef enum
 	CheckpointerProcess,
 	WalWriterProcess,
 	WalReceiverProcess,
+	RpcServerProcess,
 
 	NUM_AUXPROCTYPES			/* Must be last! */
 } AuxProcType;
@@ -433,6 +435,7 @@ extern AuxProcType MyAuxProcType;
 #define AmCheckpointerProcess()		(MyAuxProcType == CheckpointerProcess)
 #define AmWalWriterProcess()		(MyAuxProcType == WalWriterProcess)
 #define AmWalReceiverProcess()		(MyAuxProcType == WalReceiverProcess)
+#define AmRpcServerProcess()		(MyAuxProcType == RpcServerProcess)
 
 
 /*****************************************************************************
