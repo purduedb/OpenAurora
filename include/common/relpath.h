@@ -64,21 +64,17 @@ extern int	forkname_chars(const char *str, ForkNumber *fork);
 
 #ifdef __cplusplus
 extern "C" {
-#elif
-extern {
 #endif
 
 /*
  * Stuff for computing filesystem pathnames for relations.
  */
-char *GetDatabasePath(Oid dbNode, Oid spcNode);
+extern char *GetDatabasePath(Oid dbNode, Oid spcNode);
 
-char *GetRelationPath(Oid dbNode, Oid spcNode, Oid relNode,
+extern char *GetRelationPath(Oid dbNode, Oid spcNode, Oid relNode,
 							 int backendId, ForkNumber forkNumber);
 
 #ifdef __cplusplus
-}
-#elif
 }
 #endif
 

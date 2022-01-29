@@ -23,44 +23,32 @@
 extern "C" {
 #endif
 
-void
-rpcinit(void);
+extern void rpcinit(void);
 
-void
-rpcshutdown(void);
+extern void rpcshutdown(void);
 
-void
-rpcopen(SMgrRelation reln);
+extern void rpcopen(SMgrRelation reln);
 
-void
-rpcclose(SMgrRelation reln, ForkNumber forknum);
+extern void rpcclose(SMgrRelation reln, ForkNumber forknum);
 
-void
-rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo);
+extern void rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo);
 
-bool
-rpcexists(SMgrRelation reln, ForkNumber forkNum);
+extern bool rpcexists(SMgrRelation reln, ForkNumber forkNum);
 
-void
-rpcunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo);
+extern void rpcunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo);
 
-void
-rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+extern void rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync);
 
-void
-rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+extern void rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	   char *buffer);
 
-void
-rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+extern void rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		char *buffer, bool skipFsync);
 
-BlockNumber
-rpcnblocks(SMgrRelation reln, ForkNumber forknum);
+extern BlockNumber rpcnblocks(SMgrRelation reln, ForkNumber forknum);
 
-void
-rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks);
+extern void rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks);
 
 #ifdef __cplusplus
 }

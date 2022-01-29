@@ -1,14 +1,14 @@
 #-------------------------------------------------------------------------
 #
 # Makefile--
-#    Makefile for storage/smgr
+#    Makefile for storage/rpc
 #
 # IDENTIFICATION
-#    src/backend/storage/smgr/Makefile
+#    src/backend/storage/rpc/Makefile
 #
 #-------------------------------------------------------------------------
 
-subdir = src/backend/storage/smgr
+subdir = src/backend/storage/rpc
 top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 

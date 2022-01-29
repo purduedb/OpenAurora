@@ -30,6 +30,7 @@
 #include "storage/rpcclient.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
+#include "utils/elog.h"
 
 #include <iostream>
 
@@ -39,18 +40,35 @@
 
 #include "DataPageAccess.h"
 
+/*** behavior for mdopen & _mdfd_getseg ***/
+/* ereport if segment not present */
+#define EXTENSION_FAIL				(1 << 0)
+/* return NULL if segment not present */
+#define EXTENSION_RETURN_NULL		(1 << 1)
+/* create new segments as needed */
+#define EXTENSION_CREATE			(1 << 2)
+/* create new segments if needed during recovery */
+#define EXTENSION_CREATE_RECOVERY	(1 << 3)
+/*
+ * Allow opening segments which are preceded by segments smaller than
+ * RELSEG_SIZE, e.g. inactive segments (see above). Note that this breaks
+ * mdnblocks() and related functionality henceforth - which currently is ok,
+ * because this is only required in the checkpointer which never uses
+ * mdnblocks().
+ */
+#define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
+
 using namespace std;
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
 using namespace apache::thrift::transport;
 
 using namespace tutorial;
-using namespace shared;
 
-std::shared_ptr<TTransport> socket(new TSocket("localhost", 9090));
-std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
-std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
-DataPageAccessClient client(protocol);
+std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
+std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
+DataPageAccessClient client(rpcprotocol);
 
 /*
  *	rpcinit() -- Initialize private state for magnetic disk storage manager.
@@ -58,13 +76,13 @@ DataPageAccessClient client(protocol);
 void
 rpcinit(void)
 {
-	transport->open();
+	rpctransport->open();
 }
 
 void
 rpcshutdown(void)
 {
-	transport->close();
+	rpctransport->close();
 }
 
 /*
@@ -112,10 +130,15 @@ void
 rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
     File		fd;
-	_Oid spcnode = rel->smgr_rnode.node.spcNode;
-	_Oid dbnode = rel->smgr_rnode.node.dbNode;
-	_Oid relnode = rel->smgr_rnode.node.relNode;
-	_RelFileNode _node(spcnode, dbnode, relnode);
+	MdfdVec    *mdfd;
+	_Oid spcnode = reln->smgr_rnode.node.spcNode;
+	_Oid dbnode = reln->smgr_rnode.node.dbNode;
+	_Oid relnode = reln->smgr_rnode.node.relNode;
+	_RelFileNode _node;
+
+	_node.spcNode = spcnode;
+	_node.dbNode = dbnode;
+	_node.relNode = relnode;
 
     if (isRedo && reln->md_num_open_segs[forkNum] > 0)
 		return;					/* created and opened already... but in compute node isRedo should be false*/
@@ -124,7 +147,7 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
     /*TODO rpc interface create a file in storage nodes with given RelFileNode and ForkNumber*/
 
-    fd = client.RpcFileCreate(_node, forkNum);
+    fd = client.RpcFileCreate(_node, static_cast<_ForkNumber::type>(forkNum));
 
     _fdvec_resize(reln, forkNum, 1);
 	mdfd = &reln->md_seg_fds[forkNum][0];
@@ -193,10 +216,14 @@ rpcunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 	_Oid spcnode = rnode.node.spcNode;
 	_Oid dbnode = rnode.node.dbNode;
 	_Oid relnode = rnode.node.relNode;
-	_RelFileNode _node(spcnode, dbnode, relnode);
+	_RelFileNode _node;
+
+	_node.spcNode = spcnode;
+	_node.dbNode = dbnode;
+	_node.relNode = relnode;
 
 	/*TODO rpc interface that unlink the file in storage nodes*/
-	client.RpcFileUnlink(_node, forkNum);
+	client.RpcFileUnlink(_node, static_cast<_ForkNumber::type>(forkNum));
 }
 
 /*
@@ -212,9 +239,17 @@ void
 rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
+	_Oid spcnode = reln->smgr_rnode.node.spcNode;
+	_Oid dbnode = reln->smgr_rnode.node.dbNode;
+	_Oid relnode = reln->smgr_rnode.node.relNode;
+	_RelFileNode _node;
+
+	_node.spcNode = spcnode;
+	_node.dbNode = dbnode;
+	_node.relNode = relnode;
 	/*TODO send a block in buffer to storage nodes*/
 
-	client.RpcFileExtend(reln->smgr_rnode.node, forknum, blocknum);
+	client.RpcFileExtend(_node, static_cast<_ForkNumber::type>(forknum), blocknum);
 }
 
 /*
@@ -243,11 +278,11 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	_page = client.RpcFileRead(v->mdfd_vfd, _blocknum);
+	client.RpcFileRead(_page, v->mdfd_vfd, _blocknum);
 
-	nbytes = _page::content.size();
+	nbytes = _page.content.size();
 
-	_page::content.copy(buffer, nbytes);
+	_page.content.copy(buffer, nbytes);
 
 	TRACE_POSTGRESQL_SMGR_MD_READ_DONE(forknum, blocknum,
 									   reln->smgr_rnode.node.spcNode,
@@ -321,7 +356,7 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	_page::content.assign(buffer, BLCKSZ);
+	_page.content.assign(buffer, BLCKSZ);
 
 	client.RpcFileWrite(v->mdfd_vfd, _page, _blocknum);
 
@@ -367,8 +402,16 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 BlockNumber
 rpcnblocks(SMgrRelation reln, ForkNumber forknum)
 {
+	_Oid spcnode = reln->smgr_rnode.node.spcNode;
+	_Oid dbnode = reln->smgr_rnode.node.dbNode;
+	_Oid relnode = reln->smgr_rnode.node.relNode;
+	_RelFileNode _node;
+
+	_node.spcNode = spcnode;
+	_node.dbNode = dbnode;
+	_node.relNode = relnode;
 	/*TODO*/
-	return client.RpcNblocks(reln->smgr_rnode.node, forknum);
+	return (BlockNumber)client.RpcFileNblocks(_node, static_cast<_ForkNumber::type>(forknum));
 }
 
 /*
@@ -377,7 +420,15 @@ rpcnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+	_Oid spcnode = reln->smgr_rnode.node.spcNode;
+	_Oid dbnode = reln->smgr_rnode.node.dbNode;
+	_Oid relnode = reln->smgr_rnode.node.relNode;
+	_RelFileNode _node;
+
+	_node.spcNode = spcnode;
+	_node.dbNode = dbnode;
+	_node.relNode = relnode;
 	/*TODO*/
-	client.RpcTruncate(reln->smgr_rnode.node, forknum, nblocks);
+	client.RpcFileTruncate(_node, static_cast<_ForkNumber::type>(forknum), nblocks);
 }
 

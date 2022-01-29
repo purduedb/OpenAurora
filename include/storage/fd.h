@@ -73,8 +73,6 @@ extern int	max_safe_fds;
 
 #ifdef __cplusplus
 extern "C" {
-#elif
-extern {
 #endif
 
 /*
@@ -82,94 +80,92 @@ extern {
  */
 
 /* Operations on virtual Files --- equivalent to Unix kernel file ops */
-File PathNameOpenFile(const char *fileName, int fileFlags);
-File PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
-File OpenTemporaryFile(bool interXact);
-void FileClose(File file);
-int	FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info);
-int	FileRead(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
-int	FileSync(File file, uint32 wait_event_info);
-int	FileWrite(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
-off_t FileSize(File file);
-int	FileTruncate(File file, off_t offset, uint32 wait_event_info);
-void FileWriteback(File file, off_t offset, off_t nbytes, uint32 wait_event_info);
-char *FilePathName(File file);
-int	FileGetRawDesc(File file);
-int	FileGetRawFlags(File file);
-mode_t FileGetRawMode(File file);
+extern File PathNameOpenFile(const char *fileName, int fileFlags);
+extern File PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
+extern File OpenTemporaryFile(bool interXact);
+extern void FileClose(File file);
+extern int	FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info);
+extern int	FileRead(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
+extern int	FileSync(File file, uint32 wait_event_info);
+extern int	FileWrite(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
+extern off_t FileSize(File file);
+extern int	FileTruncate(File file, off_t offset, uint32 wait_event_info);
+extern void FileWriteback(File file, off_t offset, off_t nbytes, uint32 wait_event_info);
+extern char *FilePathName(File file);
+extern int	FileGetRawDesc(File file);
+extern int	FileGetRawFlags(File file);
+extern mode_t FileGetRawMode(File file);
 
 /* Operations used for sharing named temporary files */
-File PathNameCreateTemporaryFile(const char *name, bool error_on_failure);
-File PathNameOpenTemporaryFile(const char *name);
-bool PathNameDeleteTemporaryFile(const char *name, bool error_on_failure);
-void PathNameCreateTemporaryDir(const char *base, const char *name);
-void PathNameDeleteTemporaryDir(const char *name);
-void TempTablespacePath(char *path, Oid tablespace);
-
+extern File PathNameCreateTemporaryFile(const char *name, bool error_on_failure);
+extern File PathNameOpenTemporaryFile(const char *name);
+extern bool PathNameDeleteTemporaryFile(const char *name, bool error_on_failure);
+extern void PathNameCreateTemporaryDir(const char *base, const char *name);
+extern void PathNameDeleteTemporaryDir(const char *name);
+extern void TempTablespacePath(char *path, Oid tablespace);
+ 
 /* Operations that allow use of regular stdio --- USE WITH CAUTION */
-FILE *AllocateFile(const char *name, const char *mode);
-int	FreeFile(FILE *file);
-
+extern FILE *AllocateFile(const char *name, const char *mode);
+extern int	FreeFile(FILE *file);
+ 
 /* Operations that allow use of pipe streams (popen/pclose) */
-FILE *OpenPipeStream(const char *command, const char *mode);
-int	ClosePipeStream(FILE *file);
-
+extern FILE *OpenPipeStream(const char *command, const char *mode);
+extern int	ClosePipeStream(FILE *file);
+ 
 /* Operations to allow use of the <dirent.h> library routines */
-DIR *AllocateDir(const char *dirname);
-struct dirent *ReadDir(DIR *dir, const char *dirname);
-struct dirent *ReadDirExtended(DIR *dir, const char *dirname,
-									  int elevel);
-int	FreeDir(DIR *dir);
-
+extern DIR *AllocateDir(const char *dirname);
+extern struct dirent *ReadDir(DIR *dir, const char *dirname);
+extern struct dirent *ReadDirExtended(DIR *dir, const char *dirname,
+ 									  int elevel);
+extern int	FreeDir(DIR *dir);
+ 
 /* Operations to allow use of a plain kernel FD, with automatic cleanup */
-int	OpenTransientFile(const char *fileName, int fileFlags);
-int	OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
-int	CloseTransientFile(int fd);
+extern int	OpenTransientFile(const char *fileName, int fileFlags);
+extern int	OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
+extern int	CloseTransientFile(int fd);
 
 /* If you've really really gotta have a plain kernel FD, use this */
-int	BasicOpenFile(const char *fileName, int fileFlags);
-int	BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
+extern int	BasicOpenFile(const char *fileName, int fileFlags);
+extern int	BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
 
 /* Use these for other cases, and also for long-lived BasicOpenFile FDs */
-bool AcquireExternalFD(void);
-void ReserveExternalFD(void);
-void ReleaseExternalFD(void);
+extern bool AcquireExternalFD(void);
+extern void ReserveExternalFD(void);
+extern void ReleaseExternalFD(void);
 
 /* Make a directory with default permissions */
-int	MakePGDirectory(const char *directoryName);
+extern int	MakePGDirectory(const char *directoryName);
 
 /* Miscellaneous support routines */
-void InitFileAccess(void);
-void set_max_safe_fds(void);
-void closeAllVfds(void);
-void SetTempTablespaces(Oid *tableSpaces, int numSpaces);
-bool TempTablespacesAreSet(void);
-int	GetTempTablespaces(Oid *tableSpaces, int numSpaces);
-Oid	GetNextTempTableSpace(void);
-void AtEOXact_Files(bool isCommit);
-void AtEOSubXact_Files(bool isCommit, SubTransactionId mySubid,
+extern void InitFileAccess(void);
+extern void set_max_safe_fds(void);
+extern void closeAllVfds(void);
+extern void SetTempTablespaces(Oid *tableSpaces, int numSpaces);
+extern bool TempTablespacesAreSet(void);
+extern int	GetTempTablespaces(Oid *tableSpaces, int numSpaces);
+extern Oid	GetNextTempTableSpace(void);
+extern void AtEOXact_Files(bool isCommit);
+extern void AtEOSubXact_Files(bool isCommit, SubTransactionId mySubid,
 							  SubTransactionId parentSubid);
-void RemovePgTempFiles(void);
-void RemovePgTempFilesInDir(const char *tmpdirname, bool missing_ok,
+extern void RemovePgTempFiles(void);
+extern void RemovePgTempFilesInDir(const char *tmpdirname, bool missing_ok,
 								   bool unlink_all);
-bool looks_like_temp_rel_name(const char *name);
+extern bool looks_like_temp_rel_name(const char *name);
 
-int	pg_fsync(int fd);
-int	pg_fsync_no_writethrough(int fd);
-int	pg_fsync_writethrough(int fd);
-int	pg_fdatasync(int fd);
-void pg_flush_data(int fd, off_t offset, off_t amount);
-void fsync_fname(const char *fname, bool isdir);
-int	fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel);
-int	durable_rename(const char *oldfile, const char *newfile, int loglevel);
-int	durable_unlink(const char *fname, int loglevel);
-int	durable_rename_excl(const char *oldfile, const char *newfile, int loglevel);
-void SyncDataDirectory(void);
-int	data_sync_elevel(int elevel);
+extern int	pg_fsync(int fd);
+extern int	pg_fsync_no_writethrough(int fd);
+extern int	pg_fsync_writethrough(int fd);
+extern int	pg_fdatasync(int fd);
+extern void pg_flush_data(int fd, off_t offset, off_t amount);
+extern void fsync_fname(const char *fname, bool isdir);
+extern int	fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel);
+extern int	durable_rename(const char *oldfile, const char *newfile, int loglevel);
+extern int	durable_unlink(const char *fname, int loglevel);
+extern int	durable_rename_excl(const char *oldfile, const char *newfile, int loglevel);
+extern void SyncDataDirectory(void);
+extern int	data_sync_elevel(int elevel);
 
 #ifdef __cplusplus
-}
-#elif
 }
 #endif
 

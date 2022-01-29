@@ -18,47 +18,50 @@
 #include "storage/relfilenode.h"
 #include "storage/smgr.h"
 #include "storage/sync.h"
+#include "storage/fd.h"
+
+typedef struct _MdfdVec
+{
+	File		mdfd_vfd;		/* fd number in fd.c's pool */
+	BlockNumber mdfd_segno;		/* segment number, from 0 */
+} MdfdVec;
 
 #ifdef __cplusplus
 extern "C" {
-#elif
-extern {
 #endif
 
 /* md storage manager functionality */
-void mdinit(void);
-void mdopen(SMgrRelation reln);
-void mdclose(SMgrRelation reln, ForkNumber forknum);
-void mdcreate(SMgrRelation reln, ForkNumber forknum, bool isRedo);
-bool mdexists(SMgrRelation reln, ForkNumber forknum);
-void mdunlink(RelFileNodeBackend rnode, ForkNumber forknum, bool isRedo);
-void mdextend(SMgrRelation reln, ForkNumber forknum,
+extern void mdinit(void);
+extern void mdopen(SMgrRelation reln);
+extern void mdclose(SMgrRelation reln, ForkNumber forknum);
+extern void mdcreate(SMgrRelation reln, ForkNumber forknum, bool isRedo);
+extern bool mdexists(SMgrRelation reln, ForkNumber forknum);
+extern void mdunlink(RelFileNodeBackend rnode, ForkNumber forknum, bool isRedo);
+extern void mdextend(SMgrRelation reln, ForkNumber forknum,
 					 BlockNumber blocknum, char *buffer, bool skipFsync);
-bool mdprefetch(SMgrRelation reln, ForkNumber forknum,
+extern bool mdprefetch(SMgrRelation reln, ForkNumber forknum,
 					   BlockNumber blocknum);
-void mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+extern void mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 				   char *buffer);
-void mdwrite(SMgrRelation reln, ForkNumber forknum,
+extern void mdwrite(SMgrRelation reln, ForkNumber forknum,
 					BlockNumber blocknum, char *buffer, bool skipFsync);
-void mdwriteback(SMgrRelation reln, ForkNumber forknum,
+extern void mdwriteback(SMgrRelation reln, ForkNumber forknum,
 						BlockNumber blocknum, BlockNumber nblocks);
-BlockNumber mdnblocks(SMgrRelation reln, ForkNumber forknum);
-void mdtruncate(SMgrRelation reln, ForkNumber forknum,
+extern BlockNumber mdnblocks(SMgrRelation reln, ForkNumber forknum);
+extern void mdtruncate(SMgrRelation reln, ForkNumber forknum,
 					   BlockNumber nblocks);
-void mdimmedsync(SMgrRelation reln, ForkNumber forknum);
+extern void mdimmedsync(SMgrRelation reln, ForkNumber forknum);
 
-void ForgetDatabaseSyncRequests(Oid dbid);
-void DropRelationFiles(RelFileNode *delrels, int ndelrels, bool isRedo);
+extern void ForgetDatabaseSyncRequests(Oid dbid);
+extern void DropRelationFiles(RelFileNode *delrels, int ndelrels, bool isRedo);
 
 /* md sync callbacks */
-int	mdsyncfiletag(const FileTag *ftag, char *path);
-int	mdunlinkfiletag(const FileTag *ftag, char *path);
-bool mdfiletagmatches(const FileTag *ftag, const FileTag *candidate);
+extern int	mdsyncfiletag(const FileTag *ftag, char *path);
+extern int	mdunlinkfiletag(const FileTag *ftag, char *path);
+extern bool mdfiletagmatches(const FileTag *ftag, const FileTag *candidate);
 
 
 #ifdef __cplusplus
-}
-#elif
 }
 #endif
 

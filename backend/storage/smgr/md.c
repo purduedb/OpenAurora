@@ -79,12 +79,6 @@
  *	The entire MdfdVec array is palloc'd in the MdCxt memory context.
  */
 
-typedef struct _MdfdVec
-{
-	File		mdfd_vfd;		/* fd number in fd.c's pool */
-	BlockNumber mdfd_segno;		/* segment number, from 0 */
-} MdfdVec;
-
 static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 
 

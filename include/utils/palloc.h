@@ -81,15 +81,11 @@ extern void *repalloc(void *pointer, Size size);
 
 #ifdef __cplusplus
 extern "C" {
-#elif
-extern {
 #endif
 
-void pfree(void *pointer);
+extern void pfree(void *pointer);
 
 #ifdef __cplusplus
-}
-#elif
 }
 #endif
 
