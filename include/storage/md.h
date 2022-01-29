@@ -19,34 +19,77 @@
 #include "storage/smgr.h"
 #include "storage/sync.h"
 
-/* md storage manager functionality */
-extern void mdinit(void);
-extern void mdopen(SMgrRelation reln);
-extern void mdclose(SMgrRelation reln, ForkNumber forknum);
-extern void mdcreate(SMgrRelation reln, ForkNumber forknum, bool isRedo);
-extern bool mdexists(SMgrRelation reln, ForkNumber forknum);
-extern void mdunlink(RelFileNodeBackend rnode, ForkNumber forknum, bool isRedo);
-extern void mdextend(SMgrRelation reln, ForkNumber forknum,
-					 BlockNumber blocknum, char *buffer, bool skipFsync);
-extern bool mdprefetch(SMgrRelation reln, ForkNumber forknum,
-					   BlockNumber blocknum);
-extern void mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
-				   char *buffer);
-extern void mdwrite(SMgrRelation reln, ForkNumber forknum,
-					BlockNumber blocknum, char *buffer, bool skipFsync);
-extern void mdwriteback(SMgrRelation reln, ForkNumber forknum,
-						BlockNumber blocknum, BlockNumber nblocks);
-extern BlockNumber mdnblocks(SMgrRelation reln, ForkNumber forknum);
-extern void mdtruncate(SMgrRelation reln, ForkNumber forknum,
-					   BlockNumber nblocks);
-extern void mdimmedsync(SMgrRelation reln, ForkNumber forknum);
+#ifdef __cplusplus
+extern "C" {
+#elif
+extern {
+#endif
 
-extern void ForgetDatabaseSyncRequests(Oid dbid);
-extern void DropRelationFiles(RelFileNode *delrels, int ndelrels, bool isRedo);
+/* md storage manager functionality */
+void mdinit(void);
+void mdopen(SMgrRelation reln);
+void mdclose(SMgrRelation reln, ForkNumber forknum);
+void mdcreate(SMgrRelation reln, ForkNumber forknum, bool isRedo);
+bool mdexists(SMgrRelation reln, ForkNumber forknum);
+void mdunlink(RelFileNodeBackend rnode, ForkNumber forknum, bool isRedo);
+void mdextend(SMgrRelation reln, ForkNumber forknum,
+					 BlockNumber blocknum, char *buffer, bool skipFsync);
+bool mdprefetch(SMgrRelation reln, ForkNumber forknum,
+					   BlockNumber blocknum);
+void mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+				   char *buffer);
+void mdwrite(SMgrRelation reln, ForkNumber forknum,
+					BlockNumber blocknum, char *buffer, bool skipFsync);
+void mdwriteback(SMgrRelation reln, ForkNumber forknum,
+						BlockNumber blocknum, BlockNumber nblocks);
+BlockNumber mdnblocks(SMgrRelation reln, ForkNumber forknum);
+void mdtruncate(SMgrRelation reln, ForkNumber forknum,
+					   BlockNumber nblocks);
+void mdimmedsync(SMgrRelation reln, ForkNumber forknum);
+
+void ForgetDatabaseSyncRequests(Oid dbid);
+void DropRelationFiles(RelFileNode *delrels, int ndelrels, bool isRedo);
 
 /* md sync callbacks */
-extern int	mdsyncfiletag(const FileTag *ftag, char *path);
-extern int	mdunlinkfiletag(const FileTag *ftag, char *path);
-extern bool mdfiletagmatches(const FileTag *ftag, const FileTag *candidate);
+int	mdsyncfiletag(const FileTag *ftag, char *path);
+int	mdunlinkfiletag(const FileTag *ftag, char *path);
+bool mdfiletagmatches(const FileTag *ftag, const FileTag *candidate);
+
+
+#ifdef __cplusplus
+}
+#elif
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* local routines */
+void mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum,
+						 bool isRedo);
+MdfdVec *mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior);
+void register_dirty_segment(SMgrRelation reln, ForkNumber forknum,
+								   MdfdVec *seg);
+void register_unlink_segment(RelFileNodeBackend rnode, ForkNumber forknum,
+									BlockNumber segno);
+void register_forget_request(RelFileNodeBackend rnode, ForkNumber forknum,
+									BlockNumber segno);
+void _fdvec_resize(SMgrRelation reln,
+						  ForkNumber forknum,
+						  int nseg);
+char *_mdfd_segpath(SMgrRelation reln, ForkNumber forknum,
+						   BlockNumber segno);
+MdfdVec *_mdfd_openseg(SMgrRelation reln, ForkNumber forkno,
+							  BlockNumber segno, int oflags);
+MdfdVec *_mdfd_getseg(SMgrRelation reln, ForkNumber forkno,
+							 BlockNumber blkno, bool skipFsync, int behavior);
+BlockNumber _mdnblocks(SMgrRelation reln, ForkNumber forknum,
+							  MdfdVec *seg);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif							/* MD_H */

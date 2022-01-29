@@ -1,4 +1,4 @@
-/*-------------------------------------------------------------------------
+*-------------------------------------------------------------------------
  *
  * tablespace.h
  *		Tablespace management commands (create/drop tablespace).
@@ -43,25 +43,37 @@ typedef struct TableSpaceOpts
 	int			maintenance_io_concurrency;
 } TableSpaceOpts;
 
-extern Oid	CreateTableSpace(CreateTableSpaceStmt *stmt);
-extern void DropTableSpace(DropTableSpaceStmt *stmt);
-extern ObjectAddress RenameTableSpace(const char *oldname, const char *newname);
-extern Oid	AlterTableSpaceOptions(AlterTableSpaceOptionsStmt *stmt);
+#ifdef __cplusplus
+extern "C" {
+#elif
+extern {
+#endif
 
-extern void TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo);
+Oid	CreateTableSpace(CreateTableSpaceStmt *stmt);
+void DropTableSpace(DropTableSpaceStmt *stmt);
+ObjectAddress RenameTableSpace(const char *oldname, const char *newname);
+Oid	AlterTableSpaceOptions(AlterTableSpaceOptionsStmt *stmt);
 
-extern Oid	GetDefaultTablespace(char relpersistence, bool partitioned);
+void TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo);
 
-extern void PrepareTempTablespaces(void);
+Oid	GetDefaultTablespace(char relpersistence, bool partitioned);
 
-extern Oid	get_tablespace_oid(const char *tablespacename, bool missing_ok);
-extern char *get_tablespace_name(Oid spc_oid);
+void PrepareTempTablespaces(void);
 
-extern bool directory_is_empty(const char *path);
-extern void remove_tablespace_symlink(const char *linkloc);
+Oid	get_tablespace_oid(const char *tablespacename, bool missing_ok);
+char *get_tablespace_name(Oid spc_oid);
 
-extern void tblspc_redo(XLogReaderState *rptr);
-extern void tblspc_desc(StringInfo buf, XLogReaderState *rptr);
-extern const char *tblspc_identify(uint8 info);
+bool directory_is_empty(const char *path);
+void remove_tablespace_symlink(const char *linkloc);
+
+void tblspc_redo(XLogReaderState *rptr);
+void tblspc_desc(StringInfo buf, XLogReaderState *rptr);
+const char *tblspc_identify(uint8 info);
+
+#ifdef __cplusplus
+}
+#elif
+}
+#endif
 
 #endif							/* TABLESPACE_H */

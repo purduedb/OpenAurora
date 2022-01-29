@@ -42,6 +42,7 @@
 #include "storage/condition_variable.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
+#include "storage/rpcserver.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
@@ -1146,9 +1147,5 @@ build_indices(void)
 static void 
 RpcServerMain(void)
 {
-	for(; ;)
-	{
-		sleep(2);
-		printf("Rpc Server Ready!\n");
-	}
+	RpcServerLoop();
 }

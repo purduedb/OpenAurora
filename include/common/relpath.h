@@ -61,13 +61,26 @@ extern const char *const forkNames[];
 extern ForkNumber forkname_to_number(const char *forkName);
 extern int	forkname_chars(const char *str, ForkNumber *fork);
 
+
+#ifdef __cplusplus
+extern "C" {
+#elif
+extern {
+#endif
+
 /*
  * Stuff for computing filesystem pathnames for relations.
  */
-extern char *GetDatabasePath(Oid dbNode, Oid spcNode);
+char *GetDatabasePath(Oid dbNode, Oid spcNode);
 
-extern char *GetRelationPath(Oid dbNode, Oid spcNode, Oid relNode,
+char *GetRelationPath(Oid dbNode, Oid spcNode, Oid relNode,
 							 int backendId, ForkNumber forkNumber);
+
+#ifdef __cplusplus
+}
+#elif
+}
+#endif
 
 /*
  * Wrapper macros for GetRelationPath.  Beware of multiple
