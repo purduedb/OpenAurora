@@ -13,7 +13,6 @@ top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = \
-	tutorial_types.o \
 	DataPageAccess.o \
 	rpcserver.o \
 	rpcclient.o \

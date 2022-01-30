@@ -64,7 +64,9 @@ namespace haxe tutorial
 namespace netstd tutorial
 
 
-typedef i32 File
+typedef i32 _File
+
+typedef i32 _Flag;
 
 /**
  * Data structures in thrift do not support unsigned int32, so we use i64 instead.
@@ -72,38 +74,11 @@ typedef i32 File
  */
 typedef i64 _Oid
 
-struct _RelFileNode
-{
-  1: _Oid    spcNode,    /* tablespace */
-  2: _Oid    dbNode,     /* database */
-  3: _Oid    relNode,    /* relation */
-}
+typedef i64 _Off_t
 
-enum _ForkNumber
-{
-	InvalidForkNumber = -1,
-	MAIN_FORKNUM = 0,
-	FSM_FORKNUM,
-	VISIBILITYMAP_FORKNUM,
-	INIT_FORKNUM
+typedef binary _Path
 
-	/*
-	 * NOTE: if you add a new fork, change MAX_FORKNUM and possibly
-	 * FORKNAMECHARS below, and update the forkNames array in
-	 * src/common/relpath.c
-	 */
-}
-
-typedef i64 _BlockNumber
-
-struct _Page
-{
-  1: _RelFileNode   node,
-  2: _ForkNumber     forknumber,
-  3: _BlockNumber   blocknum,
-  4: binary         content,
-}
-
+typedef binary _Page
 
 /**
  * Ahh, now onto the cool part, defining a service. Services just need a name
@@ -118,21 +93,21 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
-   void RpcFileClose(1:File fd),
+   void RpcFileClose(1:_File _fd),
 
-   File RpcFileCreate(1:_RelFileNode node, 2:_ForkNumber forkNum),
+   void RpcTablespaceCreateDbspace(1:_Oid _spcnode, 2:_Oid _dbnode 3:bool isRedo),
 
-   void RpcFileUnlink(1:_RelFileNode node, 2:_ForkNumber forkNum),
+   _File RpcPathNameOpenFile(1:_Path _path, 2:_Flag _flag),
 
-   void RpcFileExtend(1:_RelFileNode node, 2:_ForkNumber forkNum, 3:_BlockNumber blocknum),
+   i32 RpcFileWrite(1:_File _fd, 2:_Page _page, 3:_Off_t _seekpos),
 
-   _Page RpcFileRead(1:File fd, 2:_BlockNumber blocknum),
+   _Path RpcFilePathName(1:_File _fd),
 
-   void RpcFileWrite(1:File fd, 2:_Page page, 3:_BlockNumber blocknum),
+   _Page RpcFileRead(1:_File _fd, 2:_Off_t _seekpos),
 
-   _BlockNumber RpcFileNblocks(1:_RelFileNode node, 2:_ForkNumber forkNum),
+   void RpcFileTruncate(1:_File _fd, 2:_Off_t _offset),
 
-   void RpcFileTruncate(1:_RelFileNode node, 2:_ForkNumber forkNum, 3:_BlockNumber blocknum),
+   _Off_t RpcFileSize(1:_File _fd),
 
 
 

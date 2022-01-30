@@ -25,6 +25,7 @@
 #include "storage/smgr.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
+#include "miscadmin.h"
 
 
 /*
@@ -191,13 +192,19 @@ smgropen(RelFileNode rnode, BackendId backend)
 	/* Initialize it if not present before */
 	if (!found)
 	{
+		char		path[MAXPGPATH];
+
+		snprintf(path, sizeof(path), "%s/rpcclient.signal", DataDir);
 		/* hash_search already filled in the lookup key */
 		reln->smgr_owner = NULL;
 		reln->smgr_targblock = InvalidBlockNumber;
 		reln->smgr_fsm_nblocks = InvalidBlockNumber;
 		reln->smgr_vm_nblocks = InvalidBlockNumber;
 		/*use rpc at present */
-		reln->smgr_which = 1;
+		reln->smgr_which = 0;
+		/*TODO*/
+		if (access(path, F_OK) == 0)
+			reln->smgr_which = 1;
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);

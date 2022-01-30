@@ -8,8 +8,6 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
 
-#include "storage/rpcserver.h"
-
 #include "postgres.h"
 
 #include <unistd.h>
@@ -26,6 +24,7 @@
 #include "storage/bufmgr.h"
 #include "storage/fd.h"
 #include "storage/md.h"
+#include "storage/rpcserver.h"
 #include "storage/relfilenode.h"
 #include "storage/smgr.h"
 #include "storage/sync.h"
@@ -49,111 +48,64 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param fd
+   * @param _fd
    */
-  void RpcFileClose(const File fd) {
+  void RpcFileClose(const _File _fd) {
     FileClose(fd);
     std::cout << "RpcFileClose" << std::endl;
   }
 
-  File RpcFileCreate(const _RelFileNode& node, const _ForkNumber::type forkNum) {
-    char	   *path;
-    File fd;
-    RelFileNode filenode;
-
-    filenode.spcNode = node.spcNode;
-    filenode.dbNode = node.dbNode;
-    filenode.relNode = node.relNode;
-    
-    /*
-	 * We may be using the target table space for the first time in this
-	 * database, so create a per-database subdirectory if needed.
-	 *
-	 * XXX this is a fairly ugly violation of module layering, but this seems
-	 * to be the best place to put the check.  Maybe TablespaceCreateDbspace
-	 * should be here and not in commands/tablespace.c?  But that would imply
-	 * importing a lot of stuff that smgr.c oughtn't know, either.
-	 */
-	  TablespaceCreateDbspace(filenode.spcNode,
-							filenode.dbNode,
-							false);
-
-	  path = relpathbackend(filenode, InvalidBackendId, static_cast<ForkNumber>(forkNum));
-
-	  fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
-
-	  if (fd < 0)
-	  {
-		  int			save_errno = errno;
-
-		  if (false)
-		  	fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
-		  if (fd < 0)
-		  {
-		  	std::cout << "Create Error" << std::endl;
-		  }
-	  }
-
-	  pfree(path);
-    std::cout << "RpcFileCreate" << std::endl;
-    return fd;
+  void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
+    Oid spcnode = _spcnode;
+    Oid _dbnode = _dbnode;
+    TablespaceCreateDbspace(spcnode, dbnode, isRedo);
+    std::cout << "RpcTablespaceCreateDbspace" << std::endl;
   }
 
-  void RpcFileUnlink(const _RelFileNode& node, const _ForkNumber::type forkNum) {
-    RelFileNodeBackend nodebackend;
+  _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
+    char		path[MAXPGPATH];
+		std::size_t length = _path.copy(path, _path.size());
+		path[length] = '\0';
 
-    nodebackend.node.spcNode = node.spcNode;
-    nodebackend.node.dbNode = node.dbNode;
-    nodebackend.node.relNode = node.relNode;
-    nodebackend.backend = InvalidBackendId;
+    std::cout << "RpcPathNameOpenFile" << std::endl;
 
-    mdunlink(nodebackend, static_cast<ForkNumber>(forkNum), false);
-    std::cout << "RpcFileUnlink" << std::endl;
+    return PathNameOpenFile(path, _flag);
   }
 
-  void RpcFileExtend(const _RelFileNode& node, const _ForkNumber::type forkNum, const _BlockNumber blocknum) {
-    // Your implementation goes here
-    std::cout << "RpcFileExtend" << std::endl;
-  }
-
-  void RpcFileRead(_Page& _return, const File fd, const _BlockNumber blocknum) {
-    off_t		seekpos;
-    BlockNumber _blocknum = blocknum;
-    int nbytes;
-    char buffer[BLCKSZ];
-
-    seekpos = (off_t) BLCKSZ * (_blocknum % ((BlockNumber) RELSEG_SIZE));
-
-    nbytes = FileRead(fd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
-
-    _return.content.assign(buffer, nbytes);
-
-    std::cout << "RpcFileRead" << std::endl;
-  }
-
-  void RpcFileWrite(const File fd, const _Page& page, const _BlockNumber blocknum) {
-    off_t		seekpos;
-    BlockNumber _blocknum = blocknum;
-    int nbytes;
-    char buffer[BLCKSZ];
-
-    page.content.copy(buffer, BLCKSZ);
-
-    seekpos = (off_t) BLCKSZ * (_blocknum % ((BlockNumber) RELSEG_SIZE));
-
-    nbytes = FileWrite(fd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_WRITE);
+  int32_t RpcFileWrite(const _File _fd, const _Page& _page, const _Off_t _seekpos) {
+    char  buf[BLCKSZ];
+    _page.copy(buf, BLCKSZ);
 
     std::cout << "RpcFileWrite" << std::endl;
+
+    return FileWrite(_fd, buf, BLCKSZ, _seekpos, WAIT_EVENT_DATA_FILE_EXTEND);
   }
 
-  _BlockNumber RpcFileNblocks(const _RelFileNode& node, const _ForkNumber::type forkNum) {
-    // Your implementation goes here
-    std::cout << "RpcFileNblocks"<< std::endl;
+  void RpcFilePathName(_Path& _return, const _File _fd) {
+    char	*path = FilePathName(_fd);
+    _return.assign(path);
+
+    std::cout << "RpcFilePathName" << std::endl;
   }
 
-  void RpcFileTruncate(const _RelFileNode& node, const _ForkNumber::type forkNum, const _BlockNumber blocknum) {
-    // Your implementation goes here
-    std::cout << "RpcFileTruncate" << std::endl;
+  void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos) {
+    char buf[BLCKSZ];
+    FileRead(_fd, buf, BLCKSZ, _seekpos, WAIT_EVENT_DATA_FILE_READ);
+    _return.assign(buf, BLCKSZ);
+
+    std::cout << "RpcFileRead\n" << std::endl;
+  }
+
+  void RpcFileTruncate(const _File _fd, const _Off_t _offset) {
+    FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
+
+    std::cout << "RpcFileTruncate\n" << std::endl;
+  }
+
+  _Off_t RpcFileSize(const _File _fd) {
+    std::cout << "RpcFileSize\n" << std::endl;
+
+    return FileSize(_fd);
   }
 
   /**
@@ -163,14 +115,13 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    */
   void zip() {
     // Your implementation goes here
-    std::cout << "zip" << std::endl;
+    printf("zip\n");
   }
 
 };
 
 void
-RpcServerLoop(void)
-{
+RpcServerLoop{
   int port = 9090;
   ::std::shared_ptr<DataPageAccessHandler> handler(new DataPageAccessHandler());
   ::std::shared_ptr<TProcessor> processor(new DataPageAccessProcessor(handler));
