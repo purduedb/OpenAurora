@@ -31,6 +31,7 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/elog.h"
+#include "utils/palloc.h"
 
 #include <iostream>
 
@@ -306,13 +307,13 @@ rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	_page.assign(buffer, BLCKSZ)
+	_page.assign(buffer, BLCKSZ);
 
 	if ((nbytes = client.RpcFileWrite(v->mdfd_vfd, _page, seekpos)) != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, seg->mdfd_vfd);
+		client.RpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -375,7 +376,7 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, seg->mdfd_vfd);
+		client.RpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -452,7 +453,7 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, seg->mdfd_vfd);
+		client.RpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -584,7 +585,7 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			 * This segment is no longer active. We truncate the file, but do
 			 * not delete it, for reasons explained in the header comments.
 			 */
-			if (client.RpcFileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+			if (client.RpcFileTruncate(v->mdfd_vfd, 0) < 0)
 				ereport(ERROR,
 						(errcode_for_file_access(),
 						 errmsg("could not truncate file \"%s\": %m",

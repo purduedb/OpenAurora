@@ -93,17 +93,17 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     FileRead(_fd, buf, BLCKSZ, _seekpos, WAIT_EVENT_DATA_FILE_READ);
     _return.assign(buf, BLCKSZ);
 
-    std::cout << "RpcFileRead\n" << std::endl;
+    std::cout << "RpcFileRead" << std::endl;
   }
 
   int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
-    std::cout << "RpcFileTruncate\n" << std::endl;
+    std::cout << "RpcFileTruncate" << std::endl;
 
     return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
   }
 
   _Off_t RpcFileSize(const _File _fd) {
-    std::cout << "RpcFileSize\n" << std::endl;
+    std::cout << "RpcFileSize" << std::endl;
 
     return FileSize(_fd);
   }
@@ -115,7 +115,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    */
   void zip() {
     // Your implementation goes here
-    printf("zip\n");
+    std::cout << "zip" << std::endl;
   }
 
 };
