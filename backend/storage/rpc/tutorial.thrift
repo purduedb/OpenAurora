@@ -105,7 +105,7 @@ service DataPageAccess {
 
    _Page RpcFileRead(1:_File _fd, 2:_Off_t _seekpos),
 
-   void RpcFileTruncate(1:_File _fd, 2:_Off_t _offset),
+   i32 RpcFileTruncate(1:_File _fd, 2:_Off_t _offset),
 
    _Off_t RpcFileSize(1:_File _fd),
 

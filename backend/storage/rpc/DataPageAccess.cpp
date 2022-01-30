@@ -1283,7 +1283,20 @@ uint32_t DataPageAccess_RpcFileTruncate_result::read(::apache::thrift::protocol:
     if (ftype == ::apache::thrift::protocol::T_STOP) {
       break;
     }
-    xfer += iprot->skip(ftype);
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->success);
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
     xfer += iprot->readFieldEnd();
   }
 
@@ -1298,6 +1311,11 @@ uint32_t DataPageAccess_RpcFileTruncate_result::write(::apache::thrift::protocol
 
   xfer += oprot->writeStructBegin("DataPageAccess_RpcFileTruncate_result");
 
+  if (this->__isset.success) {
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_I32, 0);
+    xfer += oprot->writeI32(this->success);
+    xfer += oprot->writeFieldEnd();
+  }
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -1327,7 +1345,20 @@ uint32_t DataPageAccess_RpcFileTruncate_presult::read(::apache::thrift::protocol
     if (ftype == ::apache::thrift::protocol::T_STOP) {
       break;
     }
-    xfer += iprot->skip(ftype);
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32((*(this->success)));
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
     xfer += iprot->readFieldEnd();
   }
 
@@ -1925,10 +1956,10 @@ void DataPageAccessClient::recv_RpcFileRead(_Page& _return)
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcFileRead failed: unknown result");
 }
 
-void DataPageAccessClient::RpcFileTruncate(const _File _fd, const _Off_t _offset)
+int32_t DataPageAccessClient::RpcFileTruncate(const _File _fd, const _Off_t _offset)
 {
   send_RpcFileTruncate(_fd, _offset);
-  recv_RpcFileTruncate();
+  return recv_RpcFileTruncate();
 }
 
 void DataPageAccessClient::send_RpcFileTruncate(const _File _fd, const _Off_t _offset)
@@ -1946,7 +1977,7 @@ void DataPageAccessClient::send_RpcFileTruncate(const _File _fd, const _Off_t _o
   oprot_->getTransport()->flush();
 }
 
-void DataPageAccessClient::recv_RpcFileTruncate()
+int32_t DataPageAccessClient::recv_RpcFileTruncate()
 {
 
   int32_t rseqid = 0;
@@ -1971,12 +2002,17 @@ void DataPageAccessClient::recv_RpcFileTruncate()
     iprot_->readMessageEnd();
     iprot_->getTransport()->readEnd();
   }
+  int32_t _return;
   DataPageAccess_RpcFileTruncate_presult result;
+  result.success = &_return;
   result.read(iprot_);
   iprot_->readMessageEnd();
   iprot_->getTransport()->readEnd();
 
-  return;
+  if (result.__isset.success) {
+    return _return;
+  }
+  throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcFileTruncate failed: unknown result");
 }
 
 _Off_t DataPageAccessClient::RpcFileSize(const _File _fd)
@@ -2419,7 +2455,8 @@ void DataPageAccessProcessor::process_RpcFileTruncate(int32_t seqid, ::apache::t
 
   DataPageAccess_RpcFileTruncate_result result;
   try {
-    iface_->RpcFileTruncate(args._fd, args._offset);
+    result.success = iface_->RpcFileTruncate(args._fd, args._offset);
+    result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
       this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcFileTruncate");
@@ -3045,10 +3082,10 @@ void DataPageAccessConcurrentClient::recv_RpcFileRead(_Page& _return, const int3
   } // end while(true)
 }
 
-void DataPageAccessConcurrentClient::RpcFileTruncate(const _File _fd, const _Off_t _offset)
+int32_t DataPageAccessConcurrentClient::RpcFileTruncate(const _File _fd, const _Off_t _offset)
 {
   int32_t seqid = send_RpcFileTruncate(_fd, _offset);
-  recv_RpcFileTruncate(seqid);
+  return recv_RpcFileTruncate(seqid);
 }
 
 int32_t DataPageAccessConcurrentClient::send_RpcFileTruncate(const _File _fd, const _Off_t _offset)
@@ -3070,7 +3107,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcFileTruncate(const _File _fd, co
   return cseqid;
 }
 
-void DataPageAccessConcurrentClient::recv_RpcFileTruncate(const int32_t seqid)
+int32_t DataPageAccessConcurrentClient::recv_RpcFileTruncate(const int32_t seqid)
 {
 
   int32_t rseqid = 0;
@@ -3108,13 +3145,19 @@ void DataPageAccessConcurrentClient::recv_RpcFileTruncate(const int32_t seqid)
         using ::apache::thrift::protocol::TProtocolException;
         throw TProtocolException(TProtocolException::INVALID_DATA);
       }
+      int32_t _return;
       DataPageAccess_RpcFileTruncate_presult result;
+      result.success = &_return;
       result.read(iprot_);
       iprot_->readMessageEnd();
       iprot_->getTransport()->readEnd();
 
-      sentry.commit();
-      return;
+      if (result.__isset.success) {
+        sentry.commit();
+        return _return;
+      }
+      // in a bad state, don't commit
+      throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcFileTruncate failed: unknown result");
     }
     // seqid != rseqid
     this->sync_->updatePending(fname, mtype, rseqid);

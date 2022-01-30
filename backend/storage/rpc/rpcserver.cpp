@@ -51,13 +51,13 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * @param _fd
    */
   void RpcFileClose(const _File _fd) {
-    FileClose(fd);
+    FileClose(_fd);
     std::cout << "RpcFileClose" << std::endl;
   }
 
   void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
     Oid spcnode = _spcnode;
-    Oid _dbnode = _dbnode;
+    Oid dbnode = _dbnode;
     TablespaceCreateDbspace(spcnode, dbnode, isRedo);
     std::cout << "RpcTablespaceCreateDbspace" << std::endl;
   }
@@ -96,10 +96,10 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     std::cout << "RpcFileRead\n" << std::endl;
   }
 
-  void RpcFileTruncate(const _File _fd, const _Off_t _offset) {
-    FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
-
+  int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
     std::cout << "RpcFileTruncate\n" << std::endl;
+
+    return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
   }
 
   _Off_t RpcFileSize(const _File _fd) {
@@ -121,7 +121,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
 };
 
 void
-RpcServerLoop{
+RpcServerLoop(void){
   int port = 9090;
   ::std::shared_ptr<DataPageAccessHandler> handler(new DataPageAccessHandler());
   ::std::shared_ptr<TProcessor> processor(new DataPageAccessProcessor(handler));

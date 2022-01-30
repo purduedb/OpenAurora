@@ -41,7 +41,7 @@ class DataPageAccessIf {
   virtual int32_t RpcFileWrite(const _File _fd, const _Page& _page, const _Off_t _seekpos) = 0;
   virtual void RpcFilePathName(_Path& _return, const _File _fd) = 0;
   virtual void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos) = 0;
-  virtual void RpcFileTruncate(const _File _fd, const _Off_t _offset) = 0;
+  virtual int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) = 0;
   virtual _Off_t RpcFileSize(const _File _fd) = 0;
 
   /**
@@ -99,8 +99,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
   void RpcFileRead(_Page& /* _return */, const _File /* _fd */, const _Off_t /* _seekpos */) {
     return;
   }
-  void RpcFileTruncate(const _File /* _fd */, const _Off_t /* _offset */) {
-    return;
+  int32_t RpcFileTruncate(const _File /* _fd */, const _Off_t /* _offset */) {
+    int32_t _return = 0;
+    return _return;
   }
   _Off_t RpcFileSize(const _File /* _fd */) {
     _Off_t _return = 0;
@@ -797,19 +798,30 @@ class DataPageAccess_RpcFileTruncate_pargs {
 
 };
 
+typedef struct _DataPageAccess_RpcFileTruncate_result__isset {
+  _DataPageAccess_RpcFileTruncate_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcFileTruncate_result__isset;
 
 class DataPageAccess_RpcFileTruncate_result {
  public:
 
   DataPageAccess_RpcFileTruncate_result(const DataPageAccess_RpcFileTruncate_result&);
   DataPageAccess_RpcFileTruncate_result& operator=(const DataPageAccess_RpcFileTruncate_result&);
-  DataPageAccess_RpcFileTruncate_result() {
+  DataPageAccess_RpcFileTruncate_result() : success(0) {
   }
 
   virtual ~DataPageAccess_RpcFileTruncate_result() noexcept;
+  int32_t success;
 
-  bool operator == (const DataPageAccess_RpcFileTruncate_result & /* rhs */) const
+  _DataPageAccess_RpcFileTruncate_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcFileTruncate_result & rhs) const
   {
+    if (!(success == rhs.success))
+      return false;
     return true;
   }
   bool operator != (const DataPageAccess_RpcFileTruncate_result &rhs) const {
@@ -823,12 +835,19 @@ class DataPageAccess_RpcFileTruncate_result {
 
 };
 
+typedef struct _DataPageAccess_RpcFileTruncate_presult__isset {
+  _DataPageAccess_RpcFileTruncate_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcFileTruncate_presult__isset;
 
 class DataPageAccess_RpcFileTruncate_presult {
  public:
 
 
   virtual ~DataPageAccess_RpcFileTruncate_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcFileTruncate_presult__isset __isset;
 
   uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
 
@@ -1026,9 +1045,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos);
   void send_RpcFileRead(const _File _fd, const _Off_t _seekpos);
   void recv_RpcFileRead(_Page& _return);
-  void RpcFileTruncate(const _File _fd, const _Off_t _offset);
+  int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset);
   void send_RpcFileTruncate(const _File _fd, const _Off_t _offset);
-  void recv_RpcFileTruncate();
+  int32_t recv_RpcFileTruncate();
   _Off_t RpcFileSize(const _File _fd);
   void send_RpcFileSize(const _File _fd);
   _Off_t recv_RpcFileSize();
@@ -1167,13 +1186,13 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return;
   }
 
-  void RpcFileTruncate(const _File _fd, const _Off_t _offset) {
+  int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
       ifaces_[i]->RpcFileTruncate(_fd, _offset);
     }
-    ifaces_[i]->RpcFileTruncate(_fd, _offset);
+    return ifaces_[i]->RpcFileTruncate(_fd, _offset);
   }
 
   _Off_t RpcFileSize(const _File _fd) {
@@ -1257,9 +1276,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos);
   int32_t send_RpcFileRead(const _File _fd, const _Off_t _seekpos);
   void recv_RpcFileRead(_Page& _return, const int32_t seqid);
-  void RpcFileTruncate(const _File _fd, const _Off_t _offset);
+  int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset);
   int32_t send_RpcFileTruncate(const _File _fd, const _Off_t _offset);
-  void recv_RpcFileTruncate(const int32_t seqid);
+  int32_t recv_RpcFileTruncate(const int32_t seqid);
   _Off_t RpcFileSize(const _File _fd);
   int32_t send_RpcFileSize(const _File _fd);
   _Off_t recv_RpcFileSize(const int32_t seqid);

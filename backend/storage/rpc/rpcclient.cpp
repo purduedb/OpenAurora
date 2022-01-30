@@ -74,7 +74,7 @@ _rpcfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 BlockNumber
 _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg);
 MdfdVec *
-rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
+rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior);
 
 
 
@@ -164,7 +164,7 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	 * should be here and not in commands/tablespace.c?  But that would imply
 	 * importing a lot of stuff that smgr.c oughtn't know, either.
 	 */
-	RpcTablespaceCreateDbspace(spcnode,
+	client.RpcTablespaceCreateDbspace(spcnode,
 							dbnode,
 							isRedo);
 
@@ -172,14 +172,14 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
 	_path.assign(path);
 
-	fd = RpcPathNameOpenFile(_path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
+	fd = client.RpcPathNameOpenFile(_path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
 
 	if (fd < 0)
 	{
 		int			save_errno = errno;
 
 		if (isRedo)
-			fd = RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
+			fd = client.RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
 		if (fd < 0)
 		{
 			/* be sure to report the error reported by create, not open */
@@ -308,10 +308,11 @@ rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	_page.assign(buffer, BLCKSZ)
 
-	if ((nbytes = RpcFileWrite(v->mdfd_vfd, _page, seekpos)) != BLCKSZ)
+	if ((nbytes = client.RpcFileWrite(v->mdfd_vfd, _page, seekpos)) != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
-		_Path 		_path = RpcFilePathName(v->mdfd_vfd);
+		_Path 		_path;
+		client.RpcFilePathName(_path, seg->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -358,7 +359,7 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	RpcFileRead(_page, v->mdfd_vfd, seekpos);
+	client.RpcFileRead(_page, v->mdfd_vfd, seekpos);
 
 	nbytes = _page.copy(buffer, BLCKSZ);
 
@@ -373,7 +374,8 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	if (nbytes != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
-		_Path 		_path = RpcFilePathName(v->mdfd_vfd);
+		_Path 		_path;
+		client.RpcFilePathName(_path, seg->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -436,7 +438,7 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	nbytes = RpcFileWrite(v->mdfd_vfd, _page, seekpos);
+	nbytes = client.RpcFileWrite(v->mdfd_vfd, _page, seekpos);
 
 	TRACE_POSTGRESQL_SMGR_MD_WRITE_DONE(forknum, blocknum,
 										reln->smgr_rnode.node.spcNode,
@@ -449,7 +451,8 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	if (nbytes != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
-		_Path 		_path = RpcFilePathName(v->mdfd_vfd);
+		_Path 		_path;
+		client.RpcFilePathName(_path, seg->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -573,14 +576,15 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 		if (priorblocks > nblocks)
 		{
 			char		path[MAXPGPATH];
-			_Path 		_path = RpcFilePathName(v->mdfd_vfd);
+			_Path 		_path;
+			client.RpcFilePathName(_path, v->mdfd_vfd);
 			std::size_t length = _path.copy(path, _path.size());
 			path[length] = '\0';
 			/*
 			 * This segment is no longer active. We truncate the file, but do
 			 * not delete it, for reasons explained in the header comments.
 			 */
-			if (RpcFileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+			if (client.RpcFileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
 				ereport(ERROR,
 						(errcode_for_file_access(),
 						 errmsg("could not truncate file \"%s\": %m",
@@ -590,13 +594,14 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			/* we never drop the 1st segment */
 			Assert(v != &reln->md_seg_fds[forknum][0]);
 
-			RpcFileClose(v->mdfd_vfd);
+			client.RpcFileClose(v->mdfd_vfd);
 			_fdvec_resize(reln, forknum, curopensegs - 1);
 		}
 		else if (priorblocks + ((BlockNumber) RELSEG_SIZE) > nblocks)
 		{
 			char		path[MAXPGPATH];
-			_Path 		_path = RpcFilePathName(v->mdfd_vfd);
+			_Path 		_path;
+			client.RpcFilePathName(_path, v->mdfd_vfd);
 			std::size_t length = _path.copy(path, _path.size());
 			path[length] = '\0';
 			/*
@@ -608,7 +613,7 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			 */
 			BlockNumber lastsegblocks = nblocks - priorblocks;
 
-			if (RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+			if (client.RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
 				ereport(ERROR,
 						(errcode_for_file_access(),
 						 errmsg("could not truncate file \"%s\" to %u blocks: %m",
@@ -645,7 +650,7 @@ _rpcfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 	_fullpath.assign(fullpath);
 
 	/* open the file */
-	fd = RpcPathNameOpenFile(_fullpath, O_RDWR | PG_BINARY | oflags);
+	fd = client.RpcPathNameOpenFile(_fullpath, O_RDWR | PG_BINARY | oflags);
 
 	pfree(fullpath);
 
@@ -746,7 +751,7 @@ _rpcfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 			 */
 			if (nblocks < ((BlockNumber) RELSEG_SIZE))
 			{
-				char	   *zerobuf = palloc0(BLCKSZ);
+				char	   *zerobuf = static_cast<char *>(palloc0(BLCKSZ));
 
 				rpcextend(reln, forknum,
 						 nextsegno * ((BlockNumber) RELSEG_SIZE) - 1,
@@ -809,11 +814,12 @@ _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
 	off_t		len;
 
-	len = RpcFileSize(seg->mdfd_vfd);
+	len = client.RpcFileSize(seg->mdfd_vfd);
 	if (len < 0)
 	{
 		char		path[MAXPGPATH];
-		_Path 		_path = RpcFilePathName(seg->mdfd_vfd);
+		_Path 		_path;
+		client.RpcFilePathName(_path, seg->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -852,7 +858,7 @@ rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
 	_path.assign(path);
 
-	fd = RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
+	fd = client.RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
 
 	if (fd < 0)
 	{
