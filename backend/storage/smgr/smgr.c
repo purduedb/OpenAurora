@@ -194,7 +194,7 @@ smgropen(RelFileNode rnode, BackendId backend)
 	{
 		char		path[MAXPGPATH];
 
-		snprintf(path, sizeof(path), "%s/rpcclient.signal", DataDir);
+		snprintf(path, sizeof(path), "%s/client.signal", DataDir);
 		/* hash_search already filled in the lookup key */
 		reln->smgr_owner = NULL;
 		reln->smgr_targblock = InvalidBlockNumber;

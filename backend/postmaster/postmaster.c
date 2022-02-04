@@ -6689,7 +6689,7 @@ maybe_storage_node(void)
 {
 	char		path[MAXPGPATH];
 
-	snprintf(path, sizeof(path), "%s/rpc.signal", DataDir);
+	snprintf(path, sizeof(path), "%s/server.signal", DataDir);
 
 	if(access(path, F_OK) == 0)
 		enable_rpc_server = true;
