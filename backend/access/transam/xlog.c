@@ -1174,26 +1174,26 @@ XLogInsertRecord(XLogRecData *rdata,
 	 *  Here to copy this record to a replayBuffer
 	 *  When the WALInsertLock is released, it's unsafe to copy the log
 	 */
-    int startIdx = XLogRecPtrToBufIdx(StartPos);
-    int endIdx = XLogRecPtrToBufIdx(EndPos);
-
-    printf("[XLogInsertRecord] New Record: StartPos = %d, StartIdx = %d, EndPos = %d, EndIdx = %d\n\n", StartPos, startIdx, EndPos, endIdx);
-
-    int bufferLen;
-    int recordLen;
-    if(endIdx>=startIdx) {
-        bufferLen = (endIdx-startIdx+1) * (Size)XLOG_BLCKSZ;
-        memcpy(XLogReplayBuffer, XLogCtl->pages+startIdx*(Size)XLOG_BLCKSZ,
-               bufferLen);
-    } else {
-        bufferLen = ((XLogCtl->XLogCacheBlck-startIdx+1)+(endIdx+1)) * (Size)XLOG_BLCKSZ;
-        memcpy(XLogReplayBuffer, XLogCtl->pages + startIdx*(Size)XLOG_BLCKSZ,
-               (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ);
-        char * cont_buffer = XLogReplayBuffer + (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ;
-        memcpy(cont_buffer, XLogCtl->pages, (endIdx+1)*(Size)XLOG_BLCKSZ);
-    }
-
-    printf("[XLogInsertRecord] bufferLen = %d\n\n", bufferLen);
+//    int startIdx = XLogRecPtrToBufIdx(StartPos);
+//    int endIdx = XLogRecPtrToBufIdx(EndPos);
+//
+//    printf("[XLogInsertRecord] New Record: StartPos = %d, StartIdx = %d, EndPos = %d, EndIdx = %d\n\n", StartPos, startIdx, EndPos, endIdx);
+//
+//    int bufferLen;
+//    int recordLen;
+//    if(endIdx>=startIdx) {
+//        bufferLen = (endIdx-startIdx+1) * (Size)XLOG_BLCKSZ;
+//        memcpy(XLogReplayBuffer, XLogCtl->pages+startIdx*(Size)XLOG_BLCKSZ,
+//               bufferLen);
+//    } else {
+//        bufferLen = ((XLogCtl->XLogCacheBlck-startIdx+1)+(endIdx+1)) * (Size)XLOG_BLCKSZ;
+//        memcpy(XLogReplayBuffer, XLogCtl->pages + startIdx*(Size)XLOG_BLCKSZ,
+//               (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ);
+//        char * cont_buffer = XLogReplayBuffer + (XLogCtl->XLogCacheBlck-startIdx+1)*(Size)XLOG_BLCKSZ;
+//        memcpy(cont_buffer, XLogCtl->pages, (endIdx+1)*(Size)XLOG_BLCKSZ);
+//    }
+//
+//    printf("[XLogInsertRecord] bufferLen = %d\n\n", bufferLen);
 
 	/*
 	 * Done! Let others know that we're finished.
@@ -1372,8 +1372,6 @@ ReserveXLogInsertLocation(int size, XLogRecPtr *StartPos, XLogRecPtr *EndPos,
 	*StartPos = XLogBytePosToRecPtr(startbytepos);
 	*EndPos = XLogBytePosToEndRecPtr(endbytepos);
 	*PrevPtr = XLogBytePosToRecPtr(prevbytepos);
-
-    printf("[ReserveXLogInsertLocation] Xlog_size=%d, startbytepos=%d, endbytepos=%d \n\n", size, startbytepos, endbytepos);
 
     /*
      * Check that the conversions between "usable byte positions" and
@@ -1593,7 +1591,6 @@ CopyXLogRecordToWAL(int write_len, bool isLogSwitch, XLogRecData *rdata,
 		char	   *rdata_data = rdata->data;
 		int			rdata_len = rdata->len;
 
-        printf("[CopyXLogRecordToWAL] rdata->len = %d, isLogSwitch = %d\n\n", rdata->len, isLogSwitch);
 
         while (rdata_len > freespace)
 		{
@@ -1697,7 +1694,6 @@ CopyXLogRecordToWAL(int write_len, bool isLogSwitch, XLogRecData *rdata,
 	}
 	else
 	{
-	    printf("[CopyXLogRecordToWAL] CurrPos = %d \n\n",  CurrPos);
 		/* Align the end position, so that the next record starts aligned */
 		CurrPos = MAXALIGN64(CurrPos);
 	}
@@ -6539,7 +6535,7 @@ StartupXLOG_Comp(void)
 	master_image_masked = (char *) palloc(BLCKSZ);
 
 
-	//! Not Sure
+	//! Not Sure...
 	if (StandbyModeRequested)
 	    StandbyMode = true;
 
@@ -6548,69 +6544,70 @@ StartupXLOG_Comp(void)
 	 * timeline in the history of the requested timeline, we cannot proceed:
 	 * the backup is not part of the history of the requested timeline.
 	 */
-	Assert(expectedTLEs);		/* was initialized by reading checkpoint
-								 * record */
-	if (tliOfPointInHistory(checkPointLoc, expectedTLEs) !=
-		checkPoint.ThisTimeLineID)
-	{
-		XLogRecPtr	switchpoint;
-
-		/*
-		 * tliSwitchPoint will throw an error if the checkpoint's timeline is
-		 * not in expectedTLEs at all.
-		 */
-		switchpoint = tliSwitchPoint(ControlFile->checkPointCopy.ThisTimeLineID, expectedTLEs, NULL);
-		ereport(FATAL,
-				(errmsg("requested timeline %u is not a child of this server's history",
-						recoveryTargetTLI),
-				 errdetail("Latest checkpoint is at %X/%X on timeline %u, but in the history of the requested timeline, the server forked off from that timeline at %X/%X.",
-						   (uint32) (ControlFile->checkPoint >> 32),
-						   (uint32) ControlFile->checkPoint,
-						   ControlFile->checkPointCopy.ThisTimeLineID,
-						   (uint32) (switchpoint >> 32),
-						   (uint32) switchpoint)));
-	}
+    //todo
+	//Assert(expectedTLEs);		/* was initialized by reading checkpoint
+	//							 * record */
+//	if (tliOfPointInHistory(checkPointLoc, expectedTLEs) !=
+//		checkPoint.ThisTimeLineID)
+//	{
+//		XLogRecPtr	switchpoint;
+//
+//		/*
+//		 * tliSwitchPoint will throw an error if the checkpoint's timeline is
+//		 * not in expectedTLEs at all.
+//		 */
+//		switchpoint = tliSwitchPoint(ControlFile->checkPointCopy.ThisTimeLineID, expectedTLEs, NULL);
+//		ereport(FATAL,
+//				(errmsg("requested timeline %u is not a child of this server's history",
+//						recoveryTargetTLI),
+//				 errdetail("Latest checkpoint is at %X/%X on timeline %u, but in the history of the requested timeline, the server forked off from that timeline at %X/%X.",
+//						   (uint32) (ControlFile->checkPoint >> 32),
+//						   (uint32) ControlFile->checkPoint,
+//						   ControlFile->checkPointCopy.ThisTimeLineID,
+//						   (uint32) (switchpoint >> 32),
+//						   (uint32) switchpoint)));
+//	}
 
 
 
 	LastRec = RecPtr = checkPointLoc;
 
-	ereport(DEBUG1,
-			(errmsg_internal("redo record is at %X/%X; shutdown %s",
-							 (uint32) (checkPoint.redo >> 32), (uint32) checkPoint.redo,
-							 wasShutdown ? "true" : "false")));
-	ereport(DEBUG1,
-			(errmsg_internal("next transaction ID: " UINT64_FORMAT "; next OID: %u",
-							 U64FromFullTransactionId(checkPoint.nextFullXid),
-							 checkPoint.nextOid)));
-	ereport(DEBUG1,
-			(errmsg_internal("next MultiXactId: %u; next MultiXactOffset: %u",
-							 checkPoint.nextMulti, checkPoint.nextMultiOffset)));
-	ereport(DEBUG1,
-			(errmsg_internal("oldest unfrozen transaction ID: %u, in database %u",
-							 checkPoint.oldestXid, checkPoint.oldestXidDB)));
-	ereport(DEBUG1,
-			(errmsg_internal("oldest MultiXactId: %u, in database %u",
-							 checkPoint.oldestMulti, checkPoint.oldestMultiDB)));
-	ereport(DEBUG1,
-			(errmsg_internal("commit timestamp Xid oldest/newest: %u/%u",
-							 checkPoint.oldestCommitTsXid,
-							 checkPoint.newestCommitTsXid)));
-	if (!TransactionIdIsNormal(XidFromFullTransactionId(checkPoint.nextFullXid)))
+//	ereport(DEBUG1,
+//			(errmsg_internal("redo record is at %X/%X; shutdown %s",
+//							 (uint32) (checkPoint.redo >> 32), (uint32) checkPoint.redo,
+//							 wasShutdown ? "true" : "false")));
+//	ereport(DEBUG1,
+//			(errmsg_internal("next transaction ID: " UINT64_FORMAT "; next OID: %u",
+//							 U64FromFullTransactionId(checkPoint.nextFullXid),
+//							 checkPoint.nextOid)));
+//	ereport(DEBUG1,
+//			(errmsg_internal("next MultiXactId: %u; next MultiXactOffset: %u",
+//							 checkPoint.nextMulti, checkPoint.nextMultiOffset)));
+//	ereport(DEBUG1,
+//			(errmsg_internal("oldest unfrozen transaction ID: %u, in database %u",
+//							 checkPoint.oldestXid, checkPoint.oldestXidDB)));
+//	ereport(DEBUG1,
+//			(errmsg_internal("oldest MultiXactId: %u, in database %u",
+//							 checkPoint.oldestMulti, checkPoint.oldestMultiDB)));
+//	ereport(DEBUG1,
+//			(errmsg_internal("commit timestamp Xid oldest/newest: %u/%u",
+//							 checkPoint.oldestCommitTsXid,
+//							 checkPoint.newestCommitTsXid)));
+	if (!TransactionIdIsNormal(XidFromFullTransactionId(ControlFile->checkPointCopy.nextFullXid)))
 		ereport(PANIC,
 				(errmsg("invalid next transaction ID")));
 
 	/* initialize shared memory variables from the checkpoint record */
-	ShmemVariableCache->nextFullXid = checkPoint.nextFullXid;
-	ShmemVariableCache->nextOid = checkPoint.nextOid;
+	ShmemVariableCache->nextFullXid = ControlFile->checkPointCopy.nextFullXid;
+	ShmemVariableCache->nextOid = ControlFile->checkPointCopy.nextOid;
 	ShmemVariableCache->oidCount = 0;
-	MultiXactSetNextMXact(checkPoint.nextMulti, checkPoint.nextMultiOffset);
-	AdvanceOldestClogXid(checkPoint.oldestXid);
-	SetTransactionIdLimit(checkPoint.oldestXid, checkPoint.oldestXidDB);
-	SetMultiXactIdLimit(checkPoint.oldestMulti, checkPoint.oldestMultiDB, true);
-	SetCommitTsLimit(checkPoint.oldestCommitTsXid,
-					 checkPoint.newestCommitTsXid);
-	XLogCtl->ckptFullXid = checkPoint.nextFullXid;
+	MultiXactSetNextMXact(ControlFile->checkPointCopy.nextMulti, ControlFile->checkPointCopy.nextMultiOffset);
+	AdvanceOldestClogXid(ControlFile->checkPointCopy.oldestXid);
+	SetTransactionIdLimit(ControlFile->checkPointCopy.oldestXid, ControlFile->checkPointCopy.oldestXidDB);
+	SetMultiXactIdLimit(ControlFile->checkPointCopy.oldestMulti, ControlFile->checkPointCopy.oldestMultiDB, true);
+	SetCommitTsLimit(ControlFile->checkPointCopy.oldestCommitTsXid,
+                     ControlFile->checkPointCopy.newestCommitTsXid);
+	XLogCtl->ckptFullXid = ControlFile->checkPointCopy.nextFullXid;
 
 	/*
 	 * Initialize replication slots, before there's a chance to remove
@@ -6654,7 +6651,7 @@ StartupXLOG_Comp(void)
 	 * under, so temporarily adopt the TLI indicated by the checkpoint (see
 	 * also xlog_redo()).
 	 */
-	ThisTimeLineID = checkPoint.ThisTimeLineID;
+	ThisTimeLineID = ControlFile->checkPointCopy.ThisTimeLineID;
 
 
 
@@ -6826,8 +6823,9 @@ StartupXLOG_Comp(void)
 	/*
 	 * Perform end of recovery actions for any SLRUs that need it.
 	 */
-	TrimCLOG();
-	TrimMultiXact();
+    //! todo
+	// TrimCLOG();
+	// TrimMultiXact();
 
 	/* Reload shared-memory state for prepared transactions */
 //	RecoverPreparedTransactions();

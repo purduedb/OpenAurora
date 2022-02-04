@@ -33,7 +33,10 @@ endif
 
 OBJS = \
 	$(WIN32RES) \
-	initcomp.o
+	findtimezone.o \
+    	initcomp.o \
+    	localtime.o
+
 
 all: initcomp
 
