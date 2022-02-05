@@ -1762,13 +1762,15 @@ ServerLoop(void)
 		if (SysLoggerPID == 0 && Logging_collector)
 			SysLoggerPID = SysLogger_Start();
 
+
+
 		/*
 		 * If no background writer process is running, and we are not in a
 		 * state that prevents it, start one.  It doesn't matter if this
 		 * fails, we'll just try again later.  Likewise for the checkpointer.
 		 */
-		if (pmState == PM_RUN || pmState == PM_RECOVERY ||
-			pmState == PM_HOT_STANDBY)
+		if (enable_rpc_server &&
+                (pmState == PM_RUN || pmState == PM_RECOVERY || pmState == PM_HOT_STANDBY))
 		{
 			if (CheckpointerPID == 0)
 				CheckpointerPID = StartCheckpointer();
@@ -1781,7 +1783,7 @@ ServerLoop(void)
 		 * one.  But this is needed only in normal operation (else we cannot
 		 * be writing any new WAL).
 		 */
-		if (WalWriterPID == 0 && pmState == PM_RUN)
+		if (enable_rpc_server && WalWriterPID == 0 && pmState == PM_RUN)
 			WalWriterPID = StartWalWriter();
 
 		if (RpcServerPID == 0 && enable_rpc_server == true)
@@ -1793,7 +1795,8 @@ ServerLoop(void)
 		 * autovacuum might update relfrozenxid for empty tables before the
 		 * physical files are put in place.
 		 */
-		if (!IsBinaryUpgrade && AutoVacPID == 0 &&
+		if (enable_rpc_server &&
+            !IsBinaryUpgrade && AutoVacPID == 0 &&
 			(AutoVacuumingActive() || start_autovac_launcher) &&
 			pmState == PM_RUN)
 		{
@@ -1819,6 +1822,7 @@ ServerLoop(void)
 				kill(AutoVacPID, SIGUSR2);
 		}
 
+        //! Todo
 		/* If we need to start a WAL receiver, try to do that now */
 		if (WalReceiverRequested)
 			MaybeStartWalReceiver();
@@ -3047,11 +3051,11 @@ reaper(SIGNAL_ARGS)
 			 * when we entered consistent recovery state.  It doesn't matter
 			 * if this fails, we'll just try again later.
 			 */
-			if (CheckpointerPID == 0)
+			if (enable_rpc_server && CheckpointerPID == 0)
 				CheckpointerPID = StartCheckpointer();
-			if (BgWriterPID == 0)
+			if (enable_rpc_server && BgWriterPID == 0)
 				BgWriterPID = StartBackgroundWriter();
-			if (WalWriterPID == 0)
+			if (enable_rpc_server && WalWriterPID == 0)
 				WalWriterPID = StartWalWriter();
 
 			/*
@@ -5231,9 +5235,11 @@ sigusr1_handler(SIGNAL_ARGS)
 		 * we'll just try again later.
 		 */
 		Assert(CheckpointerPID == 0);
-		CheckpointerPID = StartCheckpointer();
+        if (enable_rpc_server)
+		    CheckpointerPID = StartCheckpointer();
 		Assert(BgWriterPID == 0);
-		BgWriterPID = StartBackgroundWriter();
+        if (enable_rpc_server)
+		    BgWriterPID = StartBackgroundWriter();
 
 		/*
 		 * Start the archiver if we're responsible for (re-)archiving received
