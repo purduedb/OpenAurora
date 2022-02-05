@@ -243,6 +243,7 @@ static int	get_encoding_id(const char *encoding_name);
 static void set_input(char **dest, const char *filename);
 static void check_input(char *path);
 static void write_version_file(const char *extrapath);
+static void write_rpcserver_file(void);
 static void set_null_conf(void);
 static void test_config_settings(void);
 static void setup_config(void);
@@ -856,6 +857,29 @@ write_version_file(const char *extrapath)
 	free(path);
 
 }
+
+
+static void
+write_rpcserver_file() {
+    FILE *rpc_server_file;
+    char *path;
+
+    path = psprintf("%s/server.signal", pg_data);
+
+    if ((rpc_server_file = fopen(path, PG_BINARY_W)) == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path);
+        exit(1);
+    }
+    if (fprintf(rpc_server_file, "%s\n", PG_MAJORVERSION) < 0 ||
+        fclose(rpc_server_file))
+    {
+        pg_log_error("could not write file \"%s\": %m", path);
+        exit(1);
+    }
+    free(path);
+}
+
 
 /*
  * set up an empty config file so we can check config settings by launching
@@ -2862,7 +2886,9 @@ initialize_data_directory(void)
 
 	create_xlog_or_symlink();
 
-	/* Create required subdirectories (other than pg_wal) */
+    write_rpcserver_file();
+
+    /* Create required subdirectories (other than pg_wal) */
 	printf(_("creating subdirectories ... "));
 	fflush(stdout);
 

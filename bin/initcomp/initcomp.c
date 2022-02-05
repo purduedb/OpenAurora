@@ -242,6 +242,8 @@ static int	get_encoding_id(const char *encoding_name);
 static void set_input(char **dest, const char *filename);
 static void check_input(char *path);
 static void write_version_file(const char *extrapath);
+static void write_rpcclient_file(void);
+static void write_rpcserver_file(void);
 static void set_null_conf(void);
 static void test_config_settings(void);
 static void setup_config(void);
@@ -857,6 +859,49 @@ write_version_file(const char *extrapath)
 
 
 }
+
+static void
+write_rpcclient_file() {
+    FILE *rpc_client_file;
+    char *path;
+
+    path = psprintf("%s/client.signal", pg_data);
+
+    if ((rpc_client_file = fopen(path, PG_BINARY_W)) == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path);
+        exit(1);
+    }
+    if (fprintf(rpc_client_file, "%s\n", PG_MAJORVERSION) < 0 ||
+        fclose(rpc_client_file))
+    {
+        pg_log_error("could not write file \"%s\": %m", path);
+        exit(1);
+    }
+    free(path);
+}
+
+static void
+write_rpcserver_file() {
+    FILE *rpc_server_file;
+    char *path;
+
+    path = psprintf("%s/server.signal", pg_data);
+
+    if ((rpc_server_file = fopen(path, PG_BINARY_W)) == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path);
+        exit(1);
+    }
+    if (fprintf(rpc_server_file, "%s\n", PG_MAJORVERSION) < 0 ||
+        fclose(rpc_server_file))
+    {
+        pg_log_error("could not write file \"%s\": %m", path);
+        exit(1);
+    }
+    free(path);
+}
+
 
 /*
  * set up an empty config file so we can check config settings by launching
@@ -3260,7 +3305,7 @@ main(int argc, char *argv[])
 
 	setup_bin_paths(argv[0]);
 
-	// effective_user = rainman
+    // effective_user = rainman
 	effective_user = get_id();
 	if (!username)
 		username = effective_user;
@@ -3285,7 +3330,6 @@ main(int argc, char *argv[])
 
 	setup_text_search();
 
-	printf("\n");
 
 	if (data_checksums)
 		printf(_("Data page checksums are enabled.\n"));
@@ -3295,15 +3339,15 @@ main(int argc, char *argv[])
 	if (pwprompt || pwfilename)
 		get_su_pwd();
 
-	printf("\n");
 
 	//! The Place that create file
 	initialize_comp_directory();
 
+    write_rpcclient_file();
 
-	/*
-	 * Build up a shell command to tell the user how to start the server
-	 */
+    /*
+     * Build up a shell command to tell the user how to start the server
+     */
 	start_db_cmd = createPQExpBuffer();
 
 	/* Get directory specification used to start initdb ... */
