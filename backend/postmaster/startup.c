@@ -34,7 +34,6 @@
 #include "utils/timeout.h"
 
 
-#define _Comp_
 /*
  * Flags set by interrupt handlers for later service in the redo loop.
  */
@@ -202,12 +201,13 @@ StartupProcessMain(void)
 	/*
 	 * Do what we came for.
 	 */
+    char path[MAXPGPATH];
+    snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+    if (access(path, F_OK) == 0)
+	    StartupXLOG_Comp();
+    else
+	    StartupXLOG();
 
-#ifdef _Comp_
-	StartupXLOG_Comp();
-#else
-	StartupXLOG();
-#endif
 	/*
 	 * Exit normally. Exit code 0 tells postmaster that we completed recovery
 	 * successfully.
