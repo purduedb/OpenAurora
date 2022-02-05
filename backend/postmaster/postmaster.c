@@ -245,12 +245,16 @@ bool		enable_bonjour = false;
 char	   *bonjour_name;
 bool		restart_after_crash = true;
 
+/* start rpc server if true */
+static bool	enable_rpc_server = false;
+
 /* PIDs of special child processes; 0 when not running */
 static pid_t StartupPID = 0,
 			BgWriterPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
 			WalReceiverPID = 0,
+			RpcServerPID = 0,
 			AutoVacPID = 0,
 			PgArchPID = 0,
 			PgStatPID = 0,
@@ -437,6 +441,7 @@ static pid_t StartChildProcess(AuxProcType type);
 static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
 static void InitPostmasterDeathWatchHandle(void);
+static void maybe_storage_node(void);
 
 /*
  * Archiver is allowed to start up at the current postmaster state?
@@ -555,6 +560,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
 #define StartCheckpointer()		StartChildProcess(CheckpointerProcess)
 #define StartWalWriter()		StartChildProcess(WalWriterProcess)
 #define StartWalReceiver()		StartChildProcess(WalReceiverProcess)
+#define StartRpcServer()		StartChildProcess(RpcServerProcess)
 
 /* Macros to check exit status of a child process */
 #define EXIT_STATUS_0(st)  ((st) == 0)
@@ -1409,6 +1415,9 @@ PostmasterMain(int argc, char *argv[])
 	/* Some workers may be scheduled to start now */
 	maybe_start_bgworkers();
 
+	/* a storage node ? */
+	maybe_storage_node();
+
 	status = ServerLoop();
 
 	/*
@@ -1774,6 +1783,9 @@ ServerLoop(void)
 		 */
 		if (WalWriterPID == 0 && pmState == PM_RUN)
 			WalWriterPID = StartWalWriter();
+
+		if (RpcServerPID == 0 && enable_rpc_server == true)
+			RpcServerPID = StartRpcServer();
 
 		/*
 		 * If we have lost the autovacuum launcher, try to start a new one. We
@@ -6670,4 +6682,16 @@ InitPostmasterDeathWatchHandle(void)
 				(errmsg_internal("could not duplicate postmaster handle: error code %lu",
 								 GetLastError())));
 #endif							/* WIN32 */
+}
+
+static void 
+maybe_storage_node(void)
+{
+	char		path[MAXPGPATH];
+
+	snprintf(path, sizeof(path), "%s/server.signal", DataDir);
+
+	if(access(path, F_OK) == 0)
+		enable_rpc_server = true;
+	
 }

@@ -79,12 +79,6 @@
  *	The entire MdfdVec array is palloc'd in the MdCxt memory context.
  */
 
-typedef struct _MdfdVec
-{
-	File		mdfd_vfd;		/* fd number in fd.c's pool */
-	BlockNumber mdfd_segno;		/* segment number, from 0 */
-} MdfdVec;
-
 static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 
 
@@ -116,29 +110,6 @@ static MemoryContext MdCxt;		/* context for all MdfdVec objects */
  * mdnblocks().
  */
 #define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
-
-
-/* local routines */
-static void mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum,
-						 bool isRedo);
-static MdfdVec *mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior);
-static void register_dirty_segment(SMgrRelation reln, ForkNumber forknum,
-								   MdfdVec *seg);
-static void register_unlink_segment(RelFileNodeBackend rnode, ForkNumber forknum,
-									BlockNumber segno);
-static void register_forget_request(RelFileNodeBackend rnode, ForkNumber forknum,
-									BlockNumber segno);
-static void _fdvec_resize(SMgrRelation reln,
-						  ForkNumber forknum,
-						  int nseg);
-static char *_mdfd_segpath(SMgrRelation reln, ForkNumber forknum,
-						   BlockNumber segno);
-static MdfdVec *_mdfd_openseg(SMgrRelation reln, ForkNumber forkno,
-							  BlockNumber segno, int oflags);
-static MdfdVec *_mdfd_getseg(SMgrRelation reln, ForkNumber forkno,
-							 BlockNumber blkno, bool skipFsync, int behavior);
-static BlockNumber _mdnblocks(SMgrRelation reln, ForkNumber forknum,
-							  MdfdVec *seg);
 
 
 /*
@@ -286,7 +257,7 @@ mdunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 		mdunlinkfork(rnode, forkNum, isRedo);
 }
 
-static void
+void
 mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 {
 	char	   *path;
@@ -447,7 +418,7 @@ mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
  * EXTENSION_CREATE means it's OK to extend an existing relation, not to
  * invent one out of whole cloth.
  */
-static MdfdVec *
+MdfdVec *
 mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 {
 	MdfdVec    *mdfd;
@@ -941,7 +912,7 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
  * fsync locally before returning (we hope this will not happen often
  * enough to be a performance problem).
  */
-static void
+void
 register_dirty_segment(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
 	FileTag		tag;
@@ -967,7 +938,7 @@ register_dirty_segment(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 /*
  * register_unlink_segment() -- Schedule a file to be deleted after next checkpoint
  */
-static void
+void
 register_unlink_segment(RelFileNodeBackend rnode, ForkNumber forknum,
 						BlockNumber segno)
 {
@@ -984,7 +955,7 @@ register_unlink_segment(RelFileNodeBackend rnode, ForkNumber forknum,
 /*
  * register_forget_request() -- forget any fsyncs for a relation fork's segment
  */
-static void
+void
 register_forget_request(RelFileNodeBackend rnode, ForkNumber forknum,
 						BlockNumber segno)
 {
@@ -1048,7 +1019,7 @@ DropRelationFiles(RelFileNode *delrels, int ndelrels, bool isRedo)
 /*
  *	_fdvec_resize() -- Resize the fork's open segments array
  */
-static void
+void
 _fdvec_resize(SMgrRelation reln,
 			  ForkNumber forknum,
 			  int nseg)
@@ -1086,7 +1057,7 @@ _fdvec_resize(SMgrRelation reln,
  * Return the filename for the specified segment of the relation. The
  * returned string is palloc'd.
  */
-static char *
+char *
 _mdfd_segpath(SMgrRelation reln, ForkNumber forknum, BlockNumber segno)
 {
 	char	   *path,
@@ -1109,7 +1080,7 @@ _mdfd_segpath(SMgrRelation reln, ForkNumber forknum, BlockNumber segno)
  * Open the specified segment of the relation,
  * and make a MdfdVec object for it.  Returns NULL on failure.
  */
-static MdfdVec *
+MdfdVec *
 _mdfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 			  int oflags)
 {
@@ -1154,7 +1125,7 @@ _mdfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
  * segment, according to "behavior".  Note: skipFsync is only used in the
  * EXTENSION_CREATE case.
  */
-static MdfdVec *
+MdfdVec *
 _mdfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 			 bool skipFsync, int behavior)
 {
@@ -1279,7 +1250,7 @@ _mdfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 /*
  * Get number of blocks present in a single disk file
  */
-static BlockNumber
+BlockNumber
 _mdnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
 	off_t		len;

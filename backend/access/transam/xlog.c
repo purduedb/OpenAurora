@@ -13326,6 +13326,8 @@ void XLogReplayBufferInit(void)
     XLogReplayBuffer = palloc((XLogCtl->XLogCacheBlck+1)*XLOG_BLCKSZ);
 }
 
+
+
 XLogReaderState *replayReader = NULL;
 
 void XLogReplayModuleInit(void)
@@ -13390,4 +13392,5 @@ void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
     }
     return;
 }
+
 

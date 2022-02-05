@@ -21,9 +21,11 @@
 #include "storage/bufmgr.h"
 #include "storage/ipc.h"
 #include "storage/md.h"
+#include "storage/rpcclient.h"
 #include "storage/smgr.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
+#include "miscadmin.h"
 
 
 /*
@@ -81,6 +83,25 @@ static const f_smgr smgrsw[] = {
 		.smgr_nblocks = mdnblocks,
 		.smgr_truncate = mdtruncate,
 		.smgr_immedsync = mdimmedsync,
+	},
+
+	/* rpc client */
+	{
+		.smgr_init = rpcinit,
+		.smgr_shutdown = rpcshutdown,
+		.smgr_open = rpcopen,
+		.smgr_close = rpcclose,
+		.smgr_create = rpccreate,
+		.smgr_exists = rpcexists,
+		.smgr_unlink = rpcunlink,
+		.smgr_extend = rpcextend,
+		.smgr_prefetch = NULL,
+		.smgr_read = rpcread,
+		.smgr_write = rpcwrite,
+		.smgr_writeback = NULL,
+		.smgr_nblocks = rpcnblocks,
+		.smgr_truncate = rpctruncate,
+		.smgr_immedsync = NULL,
 	}
 };
 
@@ -171,12 +192,19 @@ smgropen(RelFileNode rnode, BackendId backend)
 	/* Initialize it if not present before */
 	if (!found)
 	{
+		char		path[MAXPGPATH];
+
+		snprintf(path, sizeof(path), "%s/client.signal", DataDir);
 		/* hash_search already filled in the lookup key */
 		reln->smgr_owner = NULL;
 		reln->smgr_targblock = InvalidBlockNumber;
 		reln->smgr_fsm_nblocks = InvalidBlockNumber;
 		reln->smgr_vm_nblocks = InvalidBlockNumber;
-		reln->smgr_which = 0;	/* we only have md.c at present */
+		/*use rpc at present */
+		reln->smgr_which = 0;
+		/*TODO*/
+		if (access(path, F_OK) == 0)
+			reln->smgr_which = 1;
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);

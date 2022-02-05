@@ -42,6 +42,7 @@
 #include "storage/condition_variable.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
+#include "storage/rpcserver.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
@@ -63,6 +64,8 @@ static void ShutdownAuxiliaryProcess(int code, Datum arg);
 static Form_pg_attribute AllocateAttribute(void);
 static Oid	gettype(char *type);
 static void cleanup(void);
+/*currently no source file for RpcServer*/
+static void RpcServerMain(void);
 
 /* ----------------
  *		global variables
@@ -331,6 +334,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case WalReceiverProcess:
 			MyBackendType = B_WAL_RECEIVER;
 			break;
+		case RpcServerProcess:
+			MyBackendType = B_RPC_SERVER;
+			break;
 		default:
 			MyBackendType = B_INVALID;
 	}
@@ -462,6 +468,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case WalReceiverProcess:
 			/* don't set signals, walreceiver has its own agenda */
 			WalReceiverMain();
+			proc_exit(1);		/* should never return */
+
+		case RpcServerProcess:
+			RpcServerMain();
 			proc_exit(1);		/* should never return */
 
 		default:
@@ -1132,4 +1142,10 @@ build_indices(void)
 		index_close(ind, NoLock);
 		table_close(heap, NoLock);
 	}
+}
+
+static void 
+RpcServerMain(void)
+{
+	RpcServerLoop();
 }
