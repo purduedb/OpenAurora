@@ -2739,8 +2739,9 @@ SIGHUP_handler(SIGNAL_ARGS)
 		if (SysLoggerPID != 0)
 			signal_child(SysLoggerPID, SIGHUP);
 		if (PgStatPID != 0)
-			signal_child(PgStatPID, SIGHUP);
-
+            signal_child(PgStatPID, SIGHUP);
+        if (RpcServerPID != 0)
+            signal_child(RpcServerPID, SIGHUP);
 		/* Reload authentication config files too */
 		if (!load_hba())
 			ereport(LOG,
@@ -3837,6 +3838,10 @@ PostmasterStateMachine(void)
 			signal_child(StartupPID, SIGTERM);
 		if (WalReceiverPID != 0)
 			signal_child(WalReceiverPID, SIGTERM);
+        ereport(LOG,
+                (errmsg("Trying to stop RpcServer %d", RpcServerPID)));
+        if (RpcServerPID != 0)
+            signal_child(RpcServerPID, SIGKILL);
 		/* checkpointer, archiver, stats, and syslogger may continue for now */
 
 		/* Now transition to PM_WAIT_BACKENDS state to wait for them to die */
@@ -4155,6 +4160,8 @@ TerminateChildren(int signal)
 		signal_child(PgArchPID, signal);
 	if (PgStatPID != 0)
 		signal_child(PgStatPID, signal);
+    if (RpcServerPID != 0)
+        signal_child(RpcServerPID, signal);
 }
 
 /*

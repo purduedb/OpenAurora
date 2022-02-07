@@ -247,6 +247,8 @@ GetBackendTypeDesc(BackendType backendType)
 		case B_LOGGER:
 			backendDesc = "logger";
 			break;
+        case B_RPC_SERVER:
+            backendDesc = "rpc server";
 	}
 
 	return backendDesc;
