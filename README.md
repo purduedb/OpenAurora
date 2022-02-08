@@ -27,7 +27,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Design a new page level MVCC protocol
 * Transform local storage engine interfaces into RPC interfaces
 
-### Milestone#3 (2022/01/05 - 2022/01/20)
+### Milestone#3 (2022/01/05 - 2022/02/07)
 **Goal**
 * Disaggregate storage layer and compute layer
 
@@ -42,7 +42,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
   
   
-### Milestone#4 (2022/01/21 - 2022/01/31)
+### Milestone#4 (2022/02/08 - 2022/02/18)
 **Goal**
 * Replace the PostgreSql storage engine with a K/V store
 
@@ -53,7 +53,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Developing RPC interfaces and related strategy functions
   
 
-### Milestone#5 (2022/02/01 - 2022/02/10)
+### Milestone#5 (2022/02/19 - 2022/03/10)
 **Goal**
 * Replace PostgreSql's tuple level MVCC with page level MVCC
 
@@ -62,7 +62,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Develop a page MVCC with the K/V store
 
   
-### Milestone#6 (2022/02/11 - 2022/02/17)
+### Milestone#6 (2022/03/11 - 2022/03/17)
 **Goal**
 * Support multi-client: one-primary-several-replicas
 
@@ -71,7 +71,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Disseminate primary node's write requests to all replicas
 
   
-### Milestone#7 (2022/02/18 - 2022/03/15)
+### Milestone#7 (2022/03/18 - 2022/04/08)
 **Goal**
 * Support distributed storage layer.
 
