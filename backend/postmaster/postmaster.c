@@ -442,7 +442,7 @@ static pid_t StartChildProcess(AuxProcType type);
 static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
 static void InitPostmasterDeathWatchHandle(void);
-static void maybe_storage_node(void);
+static void maybe_storage_node(char *);
 static void rpc_init_file(void);
 
 /*
@@ -883,7 +883,11 @@ PostmasterMain(int argc, char *argv[])
 	}
 
 	/* a storage node ? */
-	maybe_storage_node();
+    if(userDoption != NULL)
+	    maybe_storage_node(userDoption);
+    else
+        maybe_storage_node(NULL);
+
 	if(!enable_rpc_server)
 		rpc_init_file();
 
@@ -6703,11 +6707,19 @@ InitPostmasterDeathWatchHandle(void)
 
 
 static void 
-maybe_storage_node(void)
+maybe_storage_node(char * db_dir_raw)
 {
+
+    char * configdir;
+    if (db_dir_raw != NULL)
+        configdir = make_absolute_path(db_dir_raw);
+    else
+        configdir = make_absolute_path(getenv("PGDATA"));
+
+
 	char		path[MAXPGPATH];
 
-	snprintf(path, sizeof(path), "%s/server.signal", DataDir);
+	snprintf(path, sizeof(path), "%s/server.signal", configdir);
 
 	if(access(path, F_OK) == 0)
 		enable_rpc_server = true;
