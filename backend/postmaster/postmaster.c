@@ -593,8 +593,6 @@ PostmasterMain(int argc, char *argv[])
 	int			i;
 	char	   *output_config_variable = NULL;
 
-	rpc_init_file();
-
 	InitProcessGlobals();
 
 	PostmasterPid = MyProcPid;
@@ -883,6 +881,11 @@ PostmasterMain(int argc, char *argv[])
 					 progname);
 		ExitPostmaster(1);
 	}
+
+	/* a storage node ? */
+	maybe_storage_node();
+	if(!enable_rpc_server)
+		rpc_init_file();
 
 	/*
 	 * Locate the proper configuration files and data directory, and read
@@ -1418,9 +1421,6 @@ PostmasterMain(int argc, char *argv[])
 
 	/* Some workers may be scheduled to start now */
 	maybe_start_bgworkers();
-
-	/* a storage node ? */
-	maybe_storage_node();
 
 	status = ServerLoop();
 
@@ -6701,6 +6701,7 @@ InitPostmasterDeathWatchHandle(void)
 #endif							/* WIN32 */
 }
 
+
 static void 
 maybe_storage_node(void)
 {
@@ -6719,8 +6720,8 @@ rpc_init_file(void)
 	rpcinitfile("PG_VERSION");
 	rpcinitfile("postgresql.conf");
 	rpcinitfile("postgresql.auto.conf");
-	rpcinitfile("pg_hba.conf ");
+	rpcinitfile("pg_hba.conf");
 	rpcinitfile("pg_ident.conf");
 	rpcinitfile("global/pg_control");
-	rpcinitfile("global/pg_filenode.map");
+	rpcinitfile("global/pg_control/pg_filenode.map");
 }
