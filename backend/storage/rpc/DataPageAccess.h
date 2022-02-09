@@ -19,6 +19,8 @@ namespace tutorial {
   #pragma warning (disable : 4250 ) //inheriting methods via dominance 
 #endif
 
+#define RPCPORT 9092
+
 /**
  * Ahh, now onto the cool part, defining a service. Services just need a name
  * and can optionally inherit from another service using the extends keyword.
@@ -43,6 +45,7 @@ class DataPageAccessIf {
   virtual void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos) = 0;
   virtual int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) = 0;
   virtual _Off_t RpcFileSize(const _File _fd) = 0;
+  virtual void RpcInitFile(_Page& _return, const _Path& _path) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -106,6 +109,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
   _Off_t RpcFileSize(const _File /* _fd */) {
     _Off_t _return = 0;
     return _return;
+  }
+  void RpcInitFile(_Page& /* _return */, const _Path& /* _path */) {
+    return;
   }
   void zip() {
     return;
@@ -957,6 +963,110 @@ class DataPageAccess_RpcFileSize_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcInitFile_args__isset {
+  _DataPageAccess_RpcInitFile_args__isset() : _path(false) {}
+  bool _path :1;
+} _DataPageAccess_RpcInitFile_args__isset;
+
+class DataPageAccess_RpcInitFile_args {
+ public:
+
+  DataPageAccess_RpcInitFile_args(const DataPageAccess_RpcInitFile_args&);
+  DataPageAccess_RpcInitFile_args& operator=(const DataPageAccess_RpcInitFile_args&);
+  DataPageAccess_RpcInitFile_args() : _path() {
+  }
+
+  virtual ~DataPageAccess_RpcInitFile_args() noexcept;
+  _Path _path;
+
+  _DataPageAccess_RpcInitFile_args__isset __isset;
+
+  void __set__path(const _Path& val);
+
+  bool operator == (const DataPageAccess_RpcInitFile_args & rhs) const
+  {
+    if (!(_path == rhs._path))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcInitFile_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcInitFile_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcInitFile_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcInitFile_pargs() noexcept;
+  const _Path* _path;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcInitFile_result__isset {
+  _DataPageAccess_RpcInitFile_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcInitFile_result__isset;
+
+class DataPageAccess_RpcInitFile_result {
+ public:
+
+  DataPageAccess_RpcInitFile_result(const DataPageAccess_RpcInitFile_result&);
+  DataPageAccess_RpcInitFile_result& operator=(const DataPageAccess_RpcInitFile_result&);
+  DataPageAccess_RpcInitFile_result() : success() {
+  }
+
+  virtual ~DataPageAccess_RpcInitFile_result() noexcept;
+  _Page success;
+
+  _DataPageAccess_RpcInitFile_result__isset __isset;
+
+  void __set_success(const _Page& val);
+
+  bool operator == (const DataPageAccess_RpcInitFile_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcInitFile_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcInitFile_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcInitFile_presult__isset {
+  _DataPageAccess_RpcInitFile_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcInitFile_presult__isset;
+
+class DataPageAccess_RpcInitFile_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcInitFile_presult() noexcept;
+  _Page* success;
+
+  _DataPageAccess_RpcInitFile_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 
 class DataPageAccess_zip_args {
  public:
@@ -1051,6 +1161,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   _Off_t RpcFileSize(const _File _fd);
   void send_RpcFileSize(const _File _fd);
   _Off_t recv_RpcFileSize();
+  void RpcInitFile(_Page& _return, const _Path& _path);
+  void send_RpcInitFile(const _Path& _path);
+  void recv_RpcInitFile(_Page& _return);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -1081,6 +1194,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcFileRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcFileTruncate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcFileSize(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcInitFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_zip(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
@@ -1093,6 +1207,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcFileRead"] = &DataPageAccessProcessor::process_RpcFileRead;
     processMap_["RpcFileTruncate"] = &DataPageAccessProcessor::process_RpcFileTruncate;
     processMap_["RpcFileSize"] = &DataPageAccessProcessor::process_RpcFileSize;
+    processMap_["RpcInitFile"] = &DataPageAccessProcessor::process_RpcInitFile;
     processMap_["zip"] = &DataPageAccessProcessor::process_zip;
   }
 
@@ -1204,6 +1319,16 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return ifaces_[i]->RpcFileSize(_fd);
   }
 
+  void RpcInitFile(_Page& _return, const _Path& _path) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcInitFile(_return, _path);
+    }
+    ifaces_[i]->RpcInitFile(_return, _path);
+    return;
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -1282,6 +1407,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   _Off_t RpcFileSize(const _File _fd);
   int32_t send_RpcFileSize(const _File _fd);
   _Off_t recv_RpcFileSize(const int32_t seqid);
+  void RpcInitFile(_Page& _return, const _Path& _path);
+  int32_t send_RpcInitFile(const _Path& _path);
+  void recv_RpcInitFile(_Page& _return, const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

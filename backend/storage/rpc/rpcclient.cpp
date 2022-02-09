@@ -32,8 +32,10 @@
 #include "utils/memutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
+#include "port.h"
 
 #include <iostream>
+#include <fstream>
 
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TSocket.h>
@@ -105,7 +107,7 @@ rpcopen(SMgrRelation reln)
 void
 rpcclose(SMgrRelation reln, ForkNumber forknum)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -138,7 +140,7 @@ rpcclose(SMgrRelation reln, ForkNumber forknum)
 void
 rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -281,7 +283,7 @@ void
 rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -352,7 +354,7 @@ void
 rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	   char *buffer)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -434,7 +436,7 @@ void
 rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		char *buffer, bool skipFsync)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -565,7 +567,7 @@ rpcnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -667,6 +669,35 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 	rpctransport->close();
 }
 
+void
+rpcinitfile(char * fp)
+{
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
+	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
+	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
+	DataPageAccessClient client(rpcprotocol);
+
+	_Page _page;
+	_Path _path;
+	_path.assign(fp);
+
+	rpctransport->open();
+
+	client.RpcInitFile(_page, _path);
+
+	rpctransport->close();
+
+	char		mpath[MAXPGPATH];
+
+	snprintf(mpath, sizeof(mpath), "%s/%s", DataDir, fp);	
+
+	std::ofstream ofile(mpath);
+
+	ofile.write(&_page[0], _page.size());
+
+	ofile.close();
+}
+
 /*
  * Open the specified segment of the relation,
  * and make a MdfdVec object for it.  Returns NULL on failure.
@@ -675,7 +706,7 @@ MdfdVec *
 _rpcfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 			  int oflags)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -856,7 +887,7 @@ _rpcfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 BlockNumber
 _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);
@@ -897,7 +928,7 @@ _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 MdfdVec *
 rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", 9090));
+	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
 	DataPageAccessClient client(rpcprotocol);

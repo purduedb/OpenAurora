@@ -14,6 +14,9 @@
 #include <fcntl.h>
 #include <sys/file.h>
 
+#include <fstream>
+#include <sstream>
+
 #include "access/xlog.h"
 #include "access/xlogutils.h"
 #include "commands/tablespace.h"
@@ -37,6 +40,8 @@ using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
 
 using namespace  ::tutorial;
+
+_Page readFileIntoString(char * filename);
 
 class DataPageAccessHandler : virtual public DataPageAccessIf {
  public:
@@ -108,6 +113,19 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     return FileSize(_fd);
   }
 
+  void RpcInitFile(_Page& _return, const _Path& _path) {
+    _Path datadir(DataDir);
+    _Path mpath = datadir + "/" + _path;
+
+    char		path[MAXPGPATH];
+		std::size_t length = mpath.copy(path, mpath.size());
+		path[length] = '\0';
+
+    _return = readFileIntoString(path);
+    
+    std::cout << "RpcInitFile" << std::endl;
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -120,9 +138,22 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
 
 };
 
+_Page readFileIntoString(char * filename)
+{
+  std::ifstream ifile(filename);
+
+  std::ostringstream buf;
+  char ch;
+  while(buf&&ifile.get(ch))
+    buf.put(ch);
+  ifile.close();
+
+  return buf.str();
+}
+
 void
 RpcServerLoop(void){
-  int port = 9090;
+  int port = RPCPORT;
   ::std::shared_ptr<DataPageAccessHandler> handler(new DataPageAccessHandler());
   ::std::shared_ptr<TProcessor> processor(new DataPageAccessProcessor(handler));
   ::std::shared_ptr<TServerTransport> serverTransport(new TServerSocket(port));
@@ -132,4 +163,3 @@ RpcServerLoop(void){
   TSimpleServer server(processor, serverTransport, transportFactory, protocolFactory);
   server.serve();
 }
-

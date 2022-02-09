@@ -123,6 +123,7 @@
 #include "storage/pg_shmem.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
+#include "storage/rpcclient.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/datetime.h"
@@ -442,6 +443,7 @@ static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
 static void InitPostmasterDeathWatchHandle(void);
 static void maybe_storage_node(void);
+static void rpc_init_file(void);
 
 /*
  * Archiver is allowed to start up at the current postmaster state?
@@ -590,6 +592,8 @@ PostmasterMain(int argc, char *argv[])
 	bool		listen_addr_saved = false;
 	int			i;
 	char	   *output_config_variable = NULL;
+
+	rpc_init_file();
 
 	InitProcessGlobals();
 
@@ -6707,4 +6711,16 @@ maybe_storage_node(void)
 	if(access(path, F_OK) == 0)
 		enable_rpc_server = true;
 	
+}
+
+static void
+rpc_init_file(void)
+{
+	rpcinitfile("PG_VERSION");
+	rpcinitfile("postgresql.conf");
+	rpcinitfile("postgresql.auto.conf");
+	rpcinitfile("pg_hba.conf ");
+	rpcinitfile("pg_ident.conf");
+	rpcinitfile("global/pg_control");
+	rpcinitfile("global/pg_filenode.map");
 }

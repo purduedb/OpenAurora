@@ -50,6 +50,8 @@ extern BlockNumber rpcnblocks(SMgrRelation reln, ForkNumber forknum);
 
 extern void rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks);
 
+extern void rpcinitfile(char * fp);
+
 #ifdef __cplusplus
 }
 #endif

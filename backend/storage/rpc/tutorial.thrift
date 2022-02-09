@@ -109,6 +109,8 @@ service DataPageAccess {
 
    _Off_t RpcFileSize(1:_File _fd),
 
+   _Page RpcInitFile(1:_Path _path),
+
 
 
    /**
