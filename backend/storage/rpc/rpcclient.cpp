@@ -32,7 +32,6 @@
 #include "utils/memutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
-#include "port.h"
 
 #include <iostream>
 #include <fstream>
@@ -670,8 +669,10 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 }
 
 void
-rpcinitfile(char * fp)
+rpcinitfile(char * db_dir_raw, char * fp)
 {
+	char		mpath[MAXPGPATH];
+
 	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
 	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
 	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
@@ -685,17 +686,15 @@ rpcinitfile(char * fp)
 
 	client.RpcInitFile(_page, _path);
 
-	rpctransport->close();
-
-	char		mpath[MAXPGPATH];
-
-	snprintf(mpath, sizeof(mpath), "%s/%s", DataDir, fp);	
+	snprintf(mpath, sizeof(mpath), "%s/%s", db_dir_raw, fp);	
 
 	std::ofstream ofile(mpath);
 
 	ofile.write(&_page[0], _page.size());
 
 	ofile.close();
+
+	rpctransport->close();
 }
 
 /*

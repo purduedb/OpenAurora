@@ -443,7 +443,7 @@ static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
 static void InitPostmasterDeathWatchHandle(void);
 static void maybe_storage_node(char *);
-static void rpc_init_file(void);
+static void rpc_init_file(char *);
 
 /*
  * Archiver is allowed to start up at the current postmaster state?
@@ -889,7 +889,13 @@ PostmasterMain(int argc, char *argv[])
         maybe_storage_node(NULL);
 
 	if(!enable_rpc_server)
-		rpc_init_file();
+	{
+		if(userDoption != NULL)
+			rpc_init_file(userDoption);
+		else
+			rpc_init_file(NULL);
+	}
+		
 
 	/*
 	 * Locate the proper configuration files and data directory, and read
@@ -6727,13 +6733,19 @@ maybe_storage_node(char * db_dir_raw)
 }
 
 static void
-rpc_init_file(void)
+rpc_init_file(char * db_dir_raw)
 {
-	rpcinitfile("PG_VERSION");
-	rpcinitfile("postgresql.conf");
-	rpcinitfile("postgresql.auto.conf");
-	rpcinitfile("pg_hba.conf");
-	rpcinitfile("pg_ident.conf");
-	rpcinitfile("global/pg_control");
-	rpcinitfile("global/pg_control/pg_filenode.map");
+	char * configdir;
+    if (db_dir_raw != NULL)
+        configdir = make_absolute_path(db_dir_raw);
+    else
+        configdir = make_absolute_path(getenv("PGDATA"));
+
+	rpcinitfile(configdir, "PG_VERSION");
+	rpcinitfile(configdir, "postgresql.conf");
+	rpcinitfile(configdir, "postgresql.auto.conf");
+	rpcinitfile(configdir, "pg_hba.conf");
+	rpcinitfile(configdir, "pg_ident.conf");
+	rpcinitfile(configdir, "global/pg_control");
+	rpcinitfile(configdir, "global/pg_control/pg_filenode.map");
 }
