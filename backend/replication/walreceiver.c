@@ -898,6 +898,45 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 	int			startoff;
 	int			byteswritten;
 
+	int startPos = getRcvBufIndex(recptr);
+
+	if(nbytes > RCV_SHMEM_BUF_SIZE)
+	{
+		elog(ERROR, "Reciever buffer has no enough space.");
+	}
+	else
+	{
+		SpinLockAcquire(&WalRcvBuf->mutex);
+		if(startPos + nbytes > RCV_SHMEM_BUF_SIZE)
+		{
+			/* Put the data at the start of the buffer when the length exceeds the size of the buffer */
+			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
+			memcpy(WalRcvBuf->buf + startPos, buf, firstWrite);
+			memcpy(WalRcvBuf->buf, buf + firstWrite, nbytes - firstWrite);
+		}
+		else
+			memcpy(WalRcvBuf->buf + startPos, buf, nbytes);
+		SpinLockRelease(&WalRcvBuf->mutex);
+	}
+
+	/*
+	if(WalRcvBuf->rcvBufEndPos < WalRcvBuf->rcvBufStartPos && WalRcvBuf->rcvBufEndPos + nbytes > WalRcvBuf->rcvBufStartPos)
+	{
+		elog(ERROR, "Reciever buffer has no enough space.");
+	}
+	else if(WalRcvBuf->rcvBufEndPos + nbytes >= RCV_SHMEM_BUF_SIZE)
+	{
+		int firstWrite = WalRcvBuf->rcvBufEndPos + nbytes - RCV_SHMEM_BUF_SIZE + 1;
+		memcpy(WalRcvBuf->buf + WalRcvBuf->rcvBufEndPos, buf, firstWrite);
+		memcpy(WalRcvBuf->buf, buf, nbytes - firstWrite);
+	}
+	else
+		memcpy(WalRcvBuf->buf + WalRcvBuf -> rcvBufEndPos, buf, nbytes);
+
+	WalRcvBuf->rcvBufEndPos = (WalRcvBuf->rcvBufEndPos + nbytes) % RCV_SHMEM_BUF_SIZE;
+	SpinLockRelease(&WalRcvBuf->mutex);
+	*/
+
 	while (nbytes > 0)
 	{
 		int			segbytes;

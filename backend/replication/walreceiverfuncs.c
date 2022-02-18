@@ -30,6 +30,7 @@
 #include "utils/timestamp.h"
 
 WalRcvData *WalRcv = NULL;
+WalRcvBufData *WalRcvBuf = NULL;
 
 /*
  * How long to wait for walreceiver to start up after requesting
@@ -64,6 +65,20 @@ WalRcvShmemInit(void)
 		WalRcv->walRcvState = WALRCV_STOPPED;
 		SpinLockInit(&WalRcv->mutex);
 		WalRcv->latch = NULL;
+	}
+
+	/*
+	 * Initialize a 16KB shared memory buffer for reciever and related variable
+	 */
+
+	WalRcvBuf = (WalRcvBufData *) ShmemInitStruct("WalRcvBufData", sizeof(WalRcvBufData), &found);
+
+	if(!found)
+	{
+		MemSet(WalRcvBuf, 0, sizeof(WalRcvBufData));
+		WalRcvBuf -> rcvBufStartPos = 0;
+		WalRcvBuf -> rcvBufEndPos = 0;
+		SpinLockInit(&WalRcvBuf->mutex);
 	}
 }
 

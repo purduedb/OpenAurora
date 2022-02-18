@@ -160,6 +160,23 @@ typedef struct
 
 extern WalRcvData *WalRcv;
 
+/* For reciever buffer */
+#define RCV_SHMEM_BUF_SIZE 16384
+
+/* Get the store index in buffer */
+#define getRcvBufIndex(recPtr) (recPtr & 0xFFFFFFFF) % (RCV_SHMEM_BUF_SIZE - 1) 
+
+/* Shared memory buffer for managing recived xlog */
+typedef struct
+{
+	int			rcvBufStartPos;
+	int			rcvBufEndPos;
+	char		buf[RCV_SHMEM_BUF_SIZE];
+	slock_t		mutex;
+} WalRcvBufData;
+
+extern WalRcvBufData *WalRcvBuf;
+
 typedef struct
 {
 	bool		logical;		/* True if this is logical replication stream,
