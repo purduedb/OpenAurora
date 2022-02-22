@@ -161,7 +161,7 @@ typedef struct
 extern WalRcvData *WalRcv;
 
 /* For reciever buffer */
-#define RCV_SHMEM_BUF_SIZE 16384
+#define RCV_SHMEM_BUF_SIZE 1048576
 
 /* Get the store index in buffer */
 #define getRcvBufIndex(recPtr) (recPtr & 0xFFFFFFFF) % (RCV_SHMEM_BUF_SIZE - 1) 

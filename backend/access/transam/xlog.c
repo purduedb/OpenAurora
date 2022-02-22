@@ -12016,7 +12016,10 @@ retry:
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
 	if (readSource == XLOG_FROM_STREAM)
-		r = readRcvBuf(targetPagePtr, XLOG_BLCKSZ, readbuf);
+	{
+		readRcvBuf(targetPagePtr, XLOG_BLCKSZ, readBuf);
+		r = XLOG_BLCKSZ;
+	}
 	else
 		r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
 	if (r != XLOG_BLCKSZ)
