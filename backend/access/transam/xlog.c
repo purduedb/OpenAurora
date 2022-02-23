@@ -2676,39 +2676,6 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 	}
 }
 
-/*
- * Read count bytes from WALReciever buffer to buf.
- *
- * return false if error happen, otherwise return true.
- */
-static bool 
-readRcvBuf(XLogRecPtr startPtr, Size count, char *buf)
-{
-	int startPos = getRcvBufIndex(startPtr);
-
-	if(count > RCV_SHMEM_BUF_SIZE)
-	{
-		elog(ERROR, "Require size exceed maximum");
-		return false;
-	}
-	else
-	{
-		SpinLockAcquire(&WalRcvBuf->mutex);
-
-		if(startPos + count > RCV_SHMEM_BUF_SIZE)
-		{
-			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
-			memcpy(buf, WalRcvBuf->buf + startPos, firstWrite);
-			memcpy(buf + firstWrite, WalRcvBuf->buf, count - firstWrite);
-		}
-		else
-			memcpy(WalRcvBuf->buf + startPos, buf, count);
-
-		SpinLockRelease(&WalRcvBuf->mutex);
-	}
-	return true;
-}
-
 
 /*
  * Record the LSN for an asynchronous transaction commit/abort
@@ -5143,14 +5110,16 @@ XLOGShmemInit(void)
 	/*
 	 * Initialize a 16KB shared memory buffer for reciever and related variable
 	 */
-
+	
 	bool foundWalRcvBuf;
 	WalRcvBuf = (WalRcvBufData *) ShmemInitStruct("WalRcvBufData", sizeof(WalRcvBufData), &foundWalRcvBuf);
+
 	if(!foundWalRcvBuf)
 	{
 		MemSet(WalRcvBuf, 0, sizeof(WalRcvBufData));
 		WalRcvBuf -> rcvBufStartPos = 0;
 		WalRcvBuf -> rcvBufEndPos = 0;
+		WalRcvBuf->buf = (char *)ShmemInitStruct("WalRcvBufDataBuffer", RCV_SHMEM_BUF_SIZE, &foundWalRcvBuf);
 		SpinLockInit(&WalRcvBuf->mutex);
 	}
 
@@ -12757,4 +12726,39 @@ void
 XLogRequestWalReceiverReply(void)
 {
 	doRequestWalReceiverReply = true;
+}
+
+/*
+ * Read count bytes from WALReciever buffer to buf.
+ *
+ * return false if error happen, otherwise return true.
+ */
+static bool 
+readRcvBuf(XLogRecPtr startPtr, Size count, char *buf)
+{
+	int startPos = getRcvBufIndex(startPtr);
+
+	if(count >= RCV_SHMEM_BUF_SIZE)
+	{
+		elog(ERROR, "Require size exceed maximum");
+		return false;
+	}
+	else
+	{
+		SpinLockAcquire(&WalRcvBuf->mutex);
+
+		if(startPos + count >= RCV_SHMEM_BUF_SIZE)
+		{
+			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos - 1;
+			memcpy(buf, WalRcvBuf->buf + startPos, firstWrite);
+			memcpy(buf + firstWrite, WalRcvBuf->buf, count - firstWrite);
+		}
+		else
+		{
+			memcpy(buf, WalRcvBuf->buf + startPos, count);
+		}
+
+		SpinLockRelease(&WalRcvBuf->mutex);
+	}
+	return true;
 }

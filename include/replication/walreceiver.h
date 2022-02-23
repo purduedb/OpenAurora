@@ -164,14 +164,14 @@ extern WalRcvData *WalRcv;
 #define RCV_SHMEM_BUF_SIZE 1048576
 
 /* Get the store index in buffer */
-#define getRcvBufIndex(recPtr) (recPtr & 0xFFFFFFFF) % (RCV_SHMEM_BUF_SIZE - 1) 
+#define getRcvBufIndex(recPtr) (recPtr & 0xFFFFFFFF) % (RCV_SHMEM_BUF_SIZE) 
 
 /* Shared memory buffer for managing recived xlog */
 typedef struct
 {
 	int			rcvBufStartPos;
 	int			rcvBufEndPos;
-	char		buf[RCV_SHMEM_BUF_SIZE];
+	char		*buf;
 	slock_t		mutex;
 } WalRcvBufData;
 
