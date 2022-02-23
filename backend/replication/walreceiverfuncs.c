@@ -54,6 +54,7 @@ void
 WalRcvShmemInit(void)
 {
 	bool		found;
+	bool		foundWalRcvBuf;
 
 	WalRcv = (WalRcvData *)
 		ShmemInitStruct("Wal Receiver Ctl", WalRcvShmemSize(), &found);
