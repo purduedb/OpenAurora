@@ -6712,7 +6712,7 @@ StartupXLOG_Comp(void)
 	Assert(!WalRcvStreaming());
 	StandbyMode = false;
 
-
+	//problem here
 
 	/*
 	 * EndOfLogTLI is the TLI in the filename of the XLOG segment containing

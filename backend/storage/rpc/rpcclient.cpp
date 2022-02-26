@@ -952,8 +952,8 @@ rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
 	if (fd < 0)
 	{
-		if ((behavior & EXTENSION_RETURN_NULL) &&
-			FILE_POSSIBLY_DELETED(errno))
+		//We delete FILE_POSSIBLY_DELETED here. Error msg from OS is in the storage node
+		if ((behavior & EXTENSION_RETURN_NULL))
 		{
 			pfree(path);
 			return NULL;
