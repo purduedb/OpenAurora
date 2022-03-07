@@ -67,6 +67,11 @@ using namespace apache::thrift::transport;
 
 using namespace tutorial;
 
+std::shared_ptr<TTransport> rpcsocket;
+std::shared_ptr<TTransport> rpctransport;
+std::shared_ptr<TProtocol> rpcprotocol;
+DataPageAccessClient *client;
+
 MdfdVec *
 _rpcfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 			  int oflags);
@@ -78,16 +83,55 @@ _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg);
 MdfdVec *
 rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior);
 
+void TryRpcFileClose(_File _fd);
+
+void TryRpcTablespaceCreateDbspace(_Oid _spcnode, _Oid _dbnode, bool isRedo);
+
+_File TryRpcPathNameOpenFile(_Path& _path, _Flag _flag);
+
+int32_t TryRpcFileWrite(_File _fd, _Page& _page, _Off_t _seekpos);
+
+void TryRpcFilePathName(_Path& _return, _File _fd);
+
+void TryRpcFileRead(_Page& _return, _File _fd, _Off_t _seekpos);
+
+int32_t TryRpcFileTruncate(_File _fd, _Off_t _offset);
+
+_Off_t TryRpcFileSize(_File _fd);
+
+void TryRpcInitFile(_Page& _return, _Path& _path);
+
 /*
  *	rpcinit() -- Initialize private state for magnetic disk storage manager.
  */
 void
 rpcinit(void)
-{}
+{
+	char		path[MAXPGPATH];
+
+	snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+
+	if (access(path, F_OK) == 0);
+	{
+		rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+		rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+		rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+		client = new DataPageAccessClient(rpcprotocol);
+	}
+}
 
 void
 rpcshutdown(void)
-{}
+{
+	char		path[MAXPGPATH];
+
+	snprintf(path, sizeof(path), "%s/client->signal", DataDir);
+
+	if (access(path, F_OK) == 0)
+	{
+		delete client;
+	}
+}
 
 /*
  *  rpcopen() -- Initialize newly-opened relation.
@@ -106,17 +150,13 @@ rpcopen(SMgrRelation reln)
 void
 rpcclose(SMgrRelation reln, ForkNumber forknum)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
 
     int			nopensegs = reln->md_num_open_segs[forknum];
 
 	/* No work if already closed */
 	if (nopensegs == 0)
 		return;
-	rpctransport->open();
+	
 	/* close segments starting from the end */
 	while (nopensegs > 0)
 	{
@@ -124,11 +164,12 @@ rpcclose(SMgrRelation reln, ForkNumber forknum)
 
         /*TODO 
         rpc interface that close the file with a virtual file despcriptor that allocated from storage node*/
-		client.RpcFileClose(v->mdfd_vfd);
+		TryRpcFileClose(v->mdfd_vfd);
 		_fdvec_resize(reln, forknum, nopensegs - 1);
 		nopensegs--;
 	}
-	rpctransport->close();
+	
+	
 }
 
 /*
@@ -139,10 +180,6 @@ rpcclose(SMgrRelation reln, ForkNumber forknum)
 void
 rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
 	
     MdfdVec    *mdfd;
 	char	   *path;
@@ -156,7 +193,7 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
 	Assert(reln->md_num_open_segs[forkNum] == 0);
 
-	rpctransport->open();
+	
 
 	/*
 	 * We may be using the target table space for the first time in this
@@ -167,7 +204,7 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	 * should be here and not in commands/tablespace.c?  But that would imply
 	 * importing a lot of stuff that smgr.c oughtn't know, either.
 	 */
-	client.RpcTablespaceCreateDbspace(spcnode,
+	TryRpcTablespaceCreateDbspace(spcnode,
 							dbnode,
 							isRedo);
 
@@ -175,14 +212,14 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
 	_path.assign(path);
 
-	fd = client.RpcPathNameOpenFile(_path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
+	fd = TryRpcPathNameOpenFile(_path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
 
 	if (fd < 0)
 	{
 		int			save_errno = errno;
 
 		if (isRedo)
-			fd = client.RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
+			fd = TryRpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
 		if (fd < 0)
 		{
 			/* be sure to report the error reported by create, not open */
@@ -199,7 +236,8 @@ rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	mdfd = &reln->md_seg_fds[forkNum][0];
 	mdfd->mdfd_vfd = fd;
 	mdfd->mdfd_segno = 0;
-	rpctransport->close();
+	
+	
 }
 
 /*
@@ -282,12 +320,6 @@ void
 rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
-	rpctransport->open();
 
 	off_t		seekpos;
 	int			nbytes;
@@ -319,11 +351,11 @@ rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	_page.assign(buffer, BLCKSZ);
 
-	if ((nbytes = client.RpcFileWrite(v->mdfd_vfd, _page, seekpos)) != BLCKSZ)
+	if ((nbytes = TryRpcFileWrite(v->mdfd_vfd, _page, seekpos)) != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, v->mdfd_vfd);
+		TryRpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -343,7 +375,8 @@ rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	}
 
 	Assert(_rpcnblocks(reln, forknum, v) <= ((BlockNumber) RELSEG_SIZE));
-	rpctransport->close();
+	
+	
 }
 
 /*
@@ -353,13 +386,6 @@ void
 rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	   char *buffer)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
-	rpctransport->open();
-
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -377,9 +403,9 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
-
-	client.RpcFileRead(_page, v->mdfd_vfd, seekpos);
-
+	
+	TryRpcFileRead(_page, v->mdfd_vfd, seekpos);
+	
 	nbytes = _page.copy(buffer, BLCKSZ);
 
 	TRACE_POSTGRESQL_SMGR_MD_READ_DONE(forknum, blocknum,
@@ -389,12 +415,12 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 									   reln->smgr_rnode.backend,
 									   nbytes,
 									   BLCKSZ);
-
+	printf("%ld %ld rpc read finish make sure?\n", (long)getpid(), (long)getppid());
 	if (nbytes != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, v->mdfd_vfd);
+		TryRpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -421,7 +447,8 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 							blocknum, path,
 							nbytes, BLCKSZ)));
 	}
-	rpctransport->close();
+	
+	
 }
 
 /*
@@ -435,13 +462,6 @@ void
 rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		char *buffer, bool skipFsync)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
-	rpctransport->open();
-	
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -465,7 +485,7 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	nbytes = client.RpcFileWrite(v->mdfd_vfd, _page, seekpos);
+	nbytes = TryRpcFileWrite(v->mdfd_vfd, _page, seekpos);
 
 	TRACE_POSTGRESQL_SMGR_MD_WRITE_DONE(forknum, blocknum,
 										reln->smgr_rnode.node.spcNode,
@@ -479,7 +499,7 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, v->mdfd_vfd);
+		TryRpcFilePathName(_path, v->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -497,7 +517,8 @@ rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 						nbytes, BLCKSZ),
 				 errhint("Check free disk space.")));
 	}
-	rpctransport->close();
+	
+	
 }
 
 /*
@@ -566,10 +587,6 @@ rpcnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
 
 	BlockNumber curnblk;
 	BlockNumber priorblocks;
@@ -593,7 +610,7 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 	if (nblocks == curnblk)
 		return;					/* no work */
 
-	rpctransport->open();
+	
 
 	/*
 	 * Truncate segments, starting at the last one. Starting at the end makes
@@ -612,14 +629,14 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 		{
 			char		path[MAXPGPATH];
 			_Path 		_path;
-			client.RpcFilePathName(_path, v->mdfd_vfd);
+			TryRpcFilePathName(_path, v->mdfd_vfd);
 			std::size_t length = _path.copy(path, _path.size());
 			path[length] = '\0';
 			/*
 			 * This segment is no longer active. We truncate the file, but do
 			 * not delete it, for reasons explained in the header comments.
 			 */
-			if (client.RpcFileTruncate(v->mdfd_vfd, 0) < 0)
+			if (TryRpcFileTruncate(v->mdfd_vfd, 0) < 0)
 				ereport(ERROR,
 						(errcode_for_file_access(),
 						 errmsg("could not truncate file \"%s\": %m",
@@ -629,14 +646,14 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			/* we never drop the 1st segment */
 			Assert(v != &reln->md_seg_fds[forknum][0]);
 
-			client.RpcFileClose(v->mdfd_vfd);
+			TryRpcFileClose(v->mdfd_vfd);
 			_fdvec_resize(reln, forknum, curopensegs - 1);
 		}
 		else if (priorblocks + ((BlockNumber) RELSEG_SIZE) > nblocks)
 		{
 			char		path[MAXPGPATH];
 			_Path 		_path;
-			client.RpcFilePathName(_path, v->mdfd_vfd);
+			TryRpcFilePathName(_path, v->mdfd_vfd);
 			std::size_t length = _path.copy(path, _path.size());
 			path[length] = '\0';
 			/*
@@ -648,7 +665,7 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			 */
 			BlockNumber lastsegblocks = nblocks - priorblocks;
 
-			if (client.RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
+			if (TryRpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
 				ereport(ERROR,
 						(errcode_for_file_access(),
 						 errmsg("could not truncate file \"%s\" to %u blocks: %m",
@@ -665,7 +682,8 @@ rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 		}
 		curopensegs--;
 	}
-	rpctransport->close();
+	
+	
 }
 
 void
@@ -673,19 +691,17 @@ rpcinitfile(char * db_dir_raw, char * fp)
 {
 	char		mpath[MAXPGPATH];
 
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
+	rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+	rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+	rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+	client = new DataPageAccessClient(rpcprotocol);
+	
 	_Page _page;
 	_Path _path;
 	_path.assign(fp);
 
-	rpctransport->open();
-
-	client.RpcInitFile(_page, _path);
-
+	TryRpcInitFile(_page, _path);
+	
 	snprintf(mpath, sizeof(mpath), "%s/%s", db_dir_raw, fp);	
 
 	std::ofstream ofile(mpath);
@@ -694,7 +710,8 @@ rpcinitfile(char * db_dir_raw, char * fp)
 
 	ofile.close();
 
-	rpctransport->close();
+	
+	delete client;
 }
 
 /*
@@ -705,13 +722,6 @@ MdfdVec *
 _rpcfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 			  int oflags)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
-	rpctransport->open();
-
 	MdfdVec    *v;
 	File		fd;
 	char	   *fullpath;
@@ -722,9 +732,7 @@ _rpcfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 	_fullpath.assign(fullpath);
 
 	/* open the file */
-	fd = client.RpcPathNameOpenFile(_fullpath, O_RDWR | PG_BINARY | oflags);
-
-	rpctransport->close();
+	fd = TryRpcPathNameOpenFile(_fullpath, O_RDWR | PG_BINARY | oflags);	
 
 	pfree(fullpath);
 
@@ -886,21 +894,14 @@ _rpcfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 BlockNumber
 _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
-
-	rpctransport->open();
-
 	off_t		len;
 
-	len = client.RpcFileSize(seg->mdfd_vfd);
+	len = TryRpcFileSize(seg->mdfd_vfd);
 	if (len < 0)
 	{
 		char		path[MAXPGPATH];
 		_Path 		_path;
-		client.RpcFilePathName(_path, seg->mdfd_vfd);
+		TryRpcFilePathName(_path, seg->mdfd_vfd);
 		std::size_t length = _path.copy(path, _path.size());
 		path[length] = '\0';
 
@@ -909,7 +910,8 @@ _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 				 errmsg("could not seek to end of file \"%s\": %m",
 						path)));
 	}
-	rpctransport->close();
+	
+	
 	/* note that this calculation will ignore any partial block at EOF */
 	return (BlockNumber) (len / BLCKSZ);
 }
@@ -927,10 +929,6 @@ _rpcnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 MdfdVec *
 rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 {
-	std::shared_ptr<TTransport> rpcsocket(new TSocket("localhost", RPCPORT));
-	std::shared_ptr<TTransport> rpctransport(new TBufferedTransport(rpcsocket));
-	std::shared_ptr<TProtocol> rpcprotocol(new TBinaryProtocol(rpctransport));
-	DataPageAccessClient client(rpcprotocol);
 	
 	MdfdVec    *mdfd;
 	char	   *path;
@@ -940,19 +938,15 @@ rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 	/* No work if already open */
 	if (reln->md_num_open_segs[forknum] > 0)
 		return &reln->md_seg_fds[forknum][0];
-
-	rpctransport->open();
 	
 	path = relpath(reln->smgr_rnode, forknum);
 
 	_path.assign(path);
 
-	fd = client.RpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
-	rpctransport->close();
-
+	fd = TryRpcPathNameOpenFile(_path, O_RDWR | PG_BINARY);
+	
 	if (fd < 0)
 	{
-		//We delete FILE_POSSIBLY_DELETED here. Error msg from OS is in the storage node
 		if ((behavior & EXTENSION_RETURN_NULL))
 		{
 			pfree(path);
@@ -974,3 +968,227 @@ rpcopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
 	return mdfd;
 }
+
+void TryRpcFileClose(_File _fd)
+{
+	int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcFileClose(_fd);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+};
+
+void TryRpcTablespaceCreateDbspace(_Oid _spcnode, _Oid _dbnode, bool isRedo)
+{
+	int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcTablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+};
+
+_File TryRpcPathNameOpenFile(_Path& _path, _Flag _flag)
+{
+	int trycount=0;
+	int maxcount=3;
+	_File result;
+	do{
+		try{
+			rpctransport->open();
+			result = client->RpcPathNameOpenFile(_path, _flag);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return result;
+};
+
+int32_t TryRpcFileWrite(_File _fd, _Page& _page, _Off_t _seekpos)
+{
+	int trycount=0;
+	int maxcount=3;
+	int32_t result;
+	do{
+		try{
+			rpctransport->open();
+			result = client->RpcFileWrite(_fd, _page, _seekpos);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return result;
+};
+
+void TryRpcFilePathName(_Path& _return, _File _fd)
+{
+	int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcFilePathName(_return, _fd);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+};
+
+void TryRpcFileRead(_Page& _return, _File _fd, _Off_t _seekpos)
+{
+	int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcFileRead(_return, _fd, _seekpos);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+			
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+};
+
+int32_t TryRpcFileTruncate(_File _fd, _Off_t _offset)
+{
+	int trycount=0;
+	int maxcount=3;
+	int32_t result;
+	do{
+		try{
+			rpctransport->open();
+			result = client->RpcFileTruncate(_fd, _offset);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return result;
+};
+
+_Off_t TryRpcFileSize(_File _fd)
+{
+	int trycount=0;
+	int maxcount=3;
+	_Off_t result;
+	do{
+		try{
+			rpctransport->open();
+			result = client->RpcFileSize(_fd);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return result;
+};
+
+void TryRpcInitFile(_Page& _return, _Path& _path)
+{
+	int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcInitFile(_return, _path);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+			
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+};

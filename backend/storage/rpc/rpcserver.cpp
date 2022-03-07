@@ -3,10 +3,16 @@
 
 #include <iostream>
 #include "DataPageAccess.h"
+#include <thrift/concurrency/ThreadManager.h>
+#include <thrift/concurrency/ThreadFactory.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
+#include <thrift/server/TThreadPoolServer.h>
+#include <thrift/server/TThreadedServer.h>
 #include <thrift/transport/TServerSocket.h>
-#include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TSocket.h>
+#include <thrift/transport/TTransportUtils.h>
+#include <thrift/TToString.h>
 
 #include "postgres.h"
 
@@ -38,6 +44,7 @@ using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
 using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
+using namespace ::apache::thrift::concurrency;
 
 using namespace  ::tutorial;
 
@@ -133,7 +140,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    */
   void zip() {
     // Your implementation goes here
-    std::cout << "zip" << std::endl;
+    std::cout << "zip do something?\n" << std::endl;
   }
 
 };
@@ -154,12 +161,13 @@ _Page readFileIntoString(char * filename)
 void
 RpcServerLoop(void){
   int port = RPCPORT;
-  ::std::shared_ptr<DataPageAccessHandler> handler(new DataPageAccessHandler());
-  ::std::shared_ptr<TProcessor> processor(new DataPageAccessProcessor(handler));
-  ::std::shared_ptr<TServerTransport> serverTransport(new TServerSocket(port));
-  ::std::shared_ptr<TTransportFactory> transportFactory(new TBufferedTransportFactory());
-  ::std::shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
 
-  TSimpleServer server(processor, serverTransport, transportFactory, protocolFactory);
+  TThreadedServer server(
+    std::make_shared<DataPageAccessProcessor>(std::make_shared<DataPageAccessHandler>()),
+    std::make_shared<TServerSocket>(port), //port
+    std::make_shared<TBufferedTransportFactory>(),
+    std::make_shared<TBinaryProtocolFactory>());
+
   server.serve();
+}ve();
 }
