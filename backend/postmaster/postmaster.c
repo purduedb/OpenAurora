@@ -6742,8 +6742,8 @@ rpc_init_file(char * db_dir_raw)
         configdir = make_absolute_path(getenv("PGDATA"));
 
 	rpcinitfile(configdir, "PG_VERSION");
-	rpcinitfile(configdir, "postgresql.conf");
-	rpcinitfile(configdir, "postgresql.auto.conf");
+	//rpcinitfile(configdir, "postgresql.conf");
+	//rpcinitfile(configdir, "postgresql.auto.conf");
 	rpcinitfile(configdir, "pg_hba.conf");
 	rpcinitfile(configdir, "pg_ident.conf");
 	rpcinitfile(configdir, "global/pg_control");

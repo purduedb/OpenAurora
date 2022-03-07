@@ -169,5 +169,4 @@ RpcServerLoop(void){
     std::make_shared<TBinaryProtocolFactory>());
 
   server.serve();
-}ve();
 }

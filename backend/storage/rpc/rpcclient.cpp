@@ -415,7 +415,7 @@ rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 									   reln->smgr_rnode.backend,
 									   nbytes,
 									   BLCKSZ);
-	printf("%ld %ld rpc read finish make sure?\n", (long)getpid(), (long)getppid());
+	
 	if (nbytes != BLCKSZ)
 	{
 		char		path[MAXPGPATH];
