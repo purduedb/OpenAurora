@@ -12729,6 +12729,54 @@ XLogRequestWalReceiverReply(void)
 }
 
 /*
+ * This function read from walctl.page buffer directly
+ */
+bool
+WALRead2(char *buf, XLogRecPtr startptr, Size count,
+		WALReadError *errinfo)
+{
+	int pageCacheStart;
+	uint64 recPtrOffset;
+	char *from;
+
+	/* If this function is in other place we need to initialize it manuly 
+	bool found;
+	XLogCtl = (XLogCtlData *)
+		ShmemInitStruct("XLOG Ctl", XLOGShmemSize(), &found);
+	if(!found)
+		;
+	*/
+
+	/* Get the page index in cache buffer */
+	pageCacheStart = XLogRecPtrToBufIdx(startptr); // LogwrtResult.Write should be sendRecPtr
+
+	/* Here we should get the position of startptr in page; The last 3 bytes of lsn is the offset of in segmentation file */
+	recPtrOffset = (startptr & 0xFFFFFF) % XLOG_BLCKSZ; 
+	from = XLogCtl->pages + pageCacheStart * (Size) XLOG_BLCKSZ + recPtrOffset;
+
+	while(1)
+	{
+		int pageLeft = XLOG_BLCKSZ - recPtrOffset;
+		if(count < pageLeft)
+		{
+			/* The last page to read */
+			memcpy(buf, from, count);
+			break;
+		}
+		else 
+		{
+			/* Read the next page after finish this one*/
+			memcpy(buf, from, pageLeft);
+			pageCacheStart += 1;
+			from = XLogCtl->pages + pageCacheStart * (Size) XLOG_BLCKSZ;
+			count -= pageLeft;
+		}
+	}
+
+	return true;
+}
+
+/*
  * Read count bytes from WALReciever buffer to buf.
  *
  * return false if error happen, otherwise return true.

@@ -2761,6 +2761,12 @@ retry:
 											 * whether new TLI is needed. */
 				 &errinfo))
 		WALReadRaiseError(&errinfo);
+		
+	WALRead2(&output_message.data[output_message.len],
+				 startptr,
+				 nbytes,
+				 &errinfo);
+	
 
 	/* See logical_read_xlog_page(). */
 	XLByteToSeg(startptr, segno, xlogreader->segcxt.ws_segsize);

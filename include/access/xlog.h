@@ -21,6 +21,7 @@
 #include "storage/fd.h"
 
 
+bool WALRead2(char *buf, XLogRecPtr startptr, Size count, WALReadError *errinfo);
 /* Sync methods */
 #define SYNC_METHOD_FSYNC		0
 #define SYNC_METHOD_FDATASYNC	1
