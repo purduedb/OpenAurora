@@ -52,6 +52,12 @@ extern void rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nbloc
 
 extern void rpcinitfile(char * db_dir_raw, char * fp);
 
+extern File TryRpcOpenTransientFile(const char * filename, int fileflags);
+
+extern int TryRpcCloseTransientFile(const File fd);
+
+extern int TryRpcread(File fd,void * buf,  int size);
+
 #ifdef __cplusplus
 }
 #endif

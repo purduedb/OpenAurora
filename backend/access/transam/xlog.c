@@ -895,6 +895,119 @@ static bool holdingAllLocks = false;
 static MemoryContext walDebugCxt = NULL;
 #endif
 
+#define PG_SYNCCONF_FILE_SIZE 8192
+
+typedef struct SyncConfFileData
+{
+	
+	/* Protected by info_lck: */
+	XLogwrtRqst LogwrtRqst;
+	XLogRecPtr	RedoRecPtr;		/* a recent copy of Insert->RedoRecPtr */
+	FullTransactionId ckptFullXid;	/* nextFullXid of latest checkpoint */
+	XLogRecPtr	asyncXactLSN;	/* LSN of newest async commit/abort */
+	XLogRecPtr	replicationSlotMinLSN;	/* oldest LSN needed by any slot */
+
+	XLogSegNo	lastRemovedSegNo;	/* latest removed/recycled XLOG segment */
+
+	/* Fake LSN counter, for unlogged relations. Protected by ulsn_lck. */
+	XLogRecPtr	unloggedLSN;
+
+	/* Time and LSN of last xlog segment switch. Protected by WALWriteLock. */
+	pg_time_t	lastSegSwitchTime;
+	XLogRecPtr	lastSegSwitchLSN;
+
+	/*
+	 * Protected by info_lck and WALWriteLock (you must hold either lock to
+	 * read it, but both to update)
+	 */
+	XLogwrtResult LogwrtResult;
+
+	/*
+	 * Latest initialized page in the cache (last byte position + 1).
+	 *
+	 * To change the identity of a buffer (and InitializedUpTo), you need to
+	 * hold WALBufMappingLock.  To change the identity of a buffer that's
+	 * still dirty, the old page needs to be written out first, and for that
+	 * you need WALWriteLock, and you need to ensure that there are no
+	 * in-progress insertions to the page by calling
+	 * WaitXLogInsertionsToFinish().
+	 */
+	XLogRecPtr	InitializedUpTo;
+
+	/*
+	 * Shared copy of ThisTimeLineID. Does not change after end-of-recovery.
+	 * If we created a new timeline when the system was started up,
+	 * PrevTimeLineID is the old timeline's ID that we forked off from.
+	 * Otherwise it's equal to ThisTimeLineID.
+	 */
+	TimeLineID	ThisTimeLineID;
+	TimeLineID	PrevTimeLineID;
+
+	/*
+	 * SharedRecoveryState indicates if we're still in crash or archive
+	 * recovery.  Protected by info_lck.
+	 */
+	RecoveryState SharedRecoveryState;
+
+	/*
+	 * SharedHotStandbyActive indicates if we allow hot standby queries to be
+	 * run.  Protected by info_lck.
+	 */
+	bool		SharedHotStandbyActive;
+
+	/*
+	 * SharedPromoteIsTriggered indicates if a standby promotion has been
+	 * triggered.  Protected by info_lck.
+	 */
+	bool		SharedPromoteIsTriggered;
+
+	/*
+	 * WalWriterSleeping indicates whether the WAL writer is currently in
+	 * low-power mode (and hence should be nudged if an async commit occurs).
+	 * Protected by info_lck.
+	 */
+	bool		WalWriterSleeping;
+
+	/*
+	 * During recovery, we keep a copy of the latest checkpoint record here.
+	 * lastCheckPointRecPtr points to start of checkpoint record and
+	 * lastCheckPointEndPtr points to end+1 of checkpoint record.  Used by the
+	 * checkpointer when it wants to create a restartpoint.
+	 *
+	 * Protected by info_lck.
+	 */
+	XLogRecPtr	lastCheckPointRecPtr;
+	XLogRecPtr	lastCheckPointEndPtr;
+	CheckPoint	lastCheckPoint;
+
+	/*
+	 * lastReplayedEndRecPtr points to end+1 of the last record successfully
+	 * replayed. When we're currently replaying a record, ie. in a redo
+	 * function, replayEndRecPtr points to the end+1 of the record being
+	 * replayed, otherwise it's equal to lastReplayedEndRecPtr.
+	 */
+	XLogRecPtr	lastReplayedEndRecPtr;
+	TimeLineID	lastReplayedTLI;
+	XLogRecPtr	replayEndRecPtr;
+	TimeLineID	replayEndTLI;
+	/* timestamp of last COMMIT/ABORT record replayed (or being replayed) */
+	TimestampTz recoveryLastXTime;
+
+	/*
+	 * timestamp of when we started replaying the current chunk of WAL data,
+	 * only relevant for replication or archive recovery
+	 */
+	TimestampTz currentChunkStartTime;
+	/* Are we requested to pause recovery? */
+	bool		recoveryPause;
+
+	/*
+	 * lastFpwDisableRecPtr points to the start of the last replayed
+	 * XLOG_FPW_CHANGE record that instructs full_page_writes is disabled.
+	 */
+	XLogRecPtr	lastFpwDisableRecPtr;
+} SyncConfFileData;
+
 static bool readRcvBuf(XLogRecPtr startPtr, Size count, char *buf);
 static void readRecoverySignalFile(void);
 static void validateRecoveryParameters(void);
@@ -982,6 +1095,9 @@ static void WALInsertLockAcquire(void);
 static void WALInsertLockAcquireExclusive(void);
 static void WALInsertLockRelease(void);
 static void WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt);
+
+void get_syncconffile(const char *DataDir);
+void write_syncconffile(const char *DataDir, bool do_sync);
 
 
 void CreateXlogReplayMemoryContext(void)
@@ -6525,7 +6641,7 @@ StartupXLOG_Comp(void)
 
 
 
-	/* Set up XLOG reader facility */
+	/* Set up XLOG reader facility 
 	MemSet(&private, 0, sizeof(XLogPageReadPrivate));
 	xlogreader =
 		XLogReaderAllocate(wal_segment_size, NULL,
@@ -6538,7 +6654,7 @@ StartupXLOG_Comp(void)
 				(errcode(ERRCODE_OUT_OF_MEMORY),
 				 errmsg("out of memory"),
 				 errdetail("Failed while allocating a WAL reading processor.")));
-	xlogreader->system_identifier = ControlFile->system_identifier;
+	xlogreader->system_identifier = ControlFile->system_identifier;*/
 
 
 	/*
@@ -6585,7 +6701,8 @@ StartupXLOG_Comp(void)
 //						   (uint32) switchpoint)));
 //	}
 
-
+	checkPointLoc = ControlFile->checkPoint;
+	checkPoint = ControlFile->checkPointCopy;
 
 	LastRec = RecPtr = checkPointLoc;
 
@@ -6610,6 +6727,8 @@ StartupXLOG_Comp(void)
 //			(errmsg_internal("commit timestamp Xid oldest/newest: %u/%u",
 //							 checkPoint.oldestCommitTsXid,
 //							 checkPoint.newestCommitTsXid)));
+	get_syncconffile(DataDir);
+
 	if (!TransactionIdIsNormal(XidFromFullTransactionId(ControlFile->checkPointCopy.nextFullXid)))
 		ereport(PANIC,
 				(errmsg("invalid next transaction ID")));
@@ -6662,7 +6781,7 @@ StartupXLOG_Comp(void)
 	//! Temporary disabled in compute node
 //	StartupReplicationOrigin();
 
-
+	XLogCtl->unloggedLSN = ControlFile->unloggedLSN;
 	/*
 	 * We must replay WAL entries using the same TimeLineID they were created
 	 * under, so temporarily adopt the TLI indicated by the checkpoint (see
@@ -6713,6 +6832,7 @@ StartupXLOG_Comp(void)
 	StandbyMode = false;
 
 	//problem here
+	EndOfLog = XLogCtl->lastReplayedEndRecPtr;
 
 	/*
 	 * EndOfLogTLI is the TLI in the filename of the XLOG segment containing
@@ -6772,8 +6892,8 @@ StartupXLOG_Comp(void)
 		/* Copy the valid part of the last block, and zero the rest */
 		page = &XLogCtl->pages[firstIdx * XLOG_BLCKSZ];
 		len = EndOfLog % XLOG_BLCKSZ;
-		memcpy(page, xlogreader->readBuf, len);
-		memset(page + len, 0, XLOG_BLCKSZ - len);
+		//memcpy(page, xlogreader->readBuf, len);
+		//memset(page + len, 0, XLOG_BLCKSZ - len);
 
 		XLogCtl->xlblocks[firstIdx] = pageBeginPtr + XLOG_BLCKSZ;
 		XLogCtl->InitializedUpTo = pageBeginPtr + XLOG_BLCKSZ;
@@ -6836,7 +6956,7 @@ StartupXLOG_Comp(void)
 		StartupCLOG();
 		StartupSUBTRANS(oldestActiveXID);
 	}
-
+	printf("FlushRec is %ld\n\n", XLogCtl->LogwrtResult.Flush);
 	/*
 	 * Perform end of recovery actions for any SLRUs that need it.
 	 */
@@ -6860,7 +6980,7 @@ StartupXLOG_Comp(void)
 		close(readFile);
 		readFile = -1;
 	}
-	XLogReaderFree(xlogreader);
+	//XLogReaderFree(xlogreader);
 
 	/*
 	 * If any of the critical GUCs have changed, log them before we allow
@@ -8333,7 +8453,7 @@ StartupXLOG(void)
 
     XLogCtl->LogwrtRqst.Write = EndOfLog;
     XLogCtl->LogwrtRqst.Flush = EndOfLog;
-
+	
     /*
      * Update full_page_writes in shared memory and write an XLOG_FPW_CHANGE
      * record before resource manager writes cleanup WAL records or checkpoint
@@ -8490,6 +8610,10 @@ StartupXLOG(void)
      */
     InRecovery = false;
 
+	//synchronize config here
+	write_syncconffile(DataDir, true);
+	printf("Synchronize Config \n\n");
+
     /* start the archive_timeout timer and LSN running */
     XLogCtl->lastSegSwitchTime = (pg_time_t) time(NULL);
     XLogCtl->lastSegSwitchLSN = EndOfLog;
@@ -8515,7 +8639,7 @@ StartupXLOG(void)
      */
     TrimCLOG();
     TrimMultiXact();
-
+	
     /* Reload shared-memory state for prepared transactions */
     RecoverPreparedTransactions();
 
@@ -8687,6 +8811,9 @@ CheckRecoveryConsistency(void)
 
 		SendPostmasterSignal(PMSIGNAL_BEGIN_HOT_STANDBY);
 	}
+	//synchronize config here
+	printf("Synchronize Config \n\n");
+	write_syncconffile(DataDir, true);
 }
 
 /*
@@ -13450,4 +13577,137 @@ readRcvBuf(XLogRecPtr startPtr, Size count, char *buf)
 		SpinLockRelease(&WalRcvBuf->mutex);
 	}
 	return true;
+}
+
+
+/*
+ * get_syncconffile()
+ *
+ * Get syncconffile values.  The result is returned as a palloc'd copy of the
+ * syncconf file data.
+ *
+ * crc_ok_p can be used by the caller to see whether the CRC of the syncconf
+ * file data is correct.
+ */
+void
+get_syncconffile(const char *DataDir)
+{
+	SyncConfFileData SyncConfFile;
+	int			fd;
+	char		SyncConfFilePath[MAXPGPATH];
+	int			r;
+
+	snprintf(SyncConfFilePath, MAXPGPATH, "%s/global/pg_syncconf", DataDir);
+
+	if ((fd = OpenTransientFile(SyncConfFilePath, O_RDONLY | PG_BINARY)) == -1)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not open file \"%s\" for reading: %m",
+						SyncConfFilePath)));
+
+	r = read(fd, &SyncConfFile, sizeof(SyncConfFileData));
+	if (r != sizeof(SyncConfFileData))
+	{
+		if (r < 0)
+			ereport(ERROR,
+					(errcode_for_file_access(),
+					 errmsg("could not read file \"%s\": %m", SyncConfFilePath)));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_CORRUPTED),
+					 errmsg("could not read file \"%s\": read %d of %zu",
+							SyncConfFilePath, r, sizeof(SyncConfFileData))));
+	}
+
+	if (CloseTransientFile(fd) != 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not close file \"%s\": %m",
+						SyncConfFilePath)));
+
+	SpinLockAcquire(&XLogCtl->info_lck);
+	XLogCtl->lastReplayedEndRecPtr = SyncConfFile.lastReplayedEndRecPtr;
+	SpinLockRelease(&XLogCtl->info_lck);
+}
+
+/*
+ * write_syncconffile()
+ *
+ * Update syncconffile values with the contents given by caller.  The
+ * contents to write are included in "SyncConfFile". "do_sync" can be
+ * optionally used to flush the updated syncconf file.  Note that it is up
+ * to the caller to properly lock SyncConfFileLock when calling this
+ * routine in the backend.
+ */
+void
+write_syncconffile(const char *DataDir, bool do_sync)
+{
+	int			fd;
+	char		buffer[PG_SYNCCONF_FILE_SIZE];
+	char		SyncConfFilePath[MAXPGPATH];
+	SyncConfFileData SyncConfFile;
+
+	/*
+	 * Apply the same static assertions as in backend's WriteSyncConfFile().
+	 */
+	StaticAssertStmt(sizeof(SyncConfFileData) <= PG_SYNCCONF_FILE_SIZE,
+					 "sizeof(SyncConfFileData) exceeds PG_SYNCCONF_FILE_SIZE");
+
+	SpinLockAcquire(&XLogCtl->info_lck);
+	SyncConfFile.lastReplayedEndRecPtr = XLogCtl->lastReplayedEndRecPtr;
+	SpinLockRelease(&XLogCtl->info_lck);
+
+	/*
+	 * Write out PG_SYNCCONF_FILE_SIZE bytes into pg_syncconf by zero-padding
+	 * the excess over sizeof(SyncConfFileData), to avoid premature EOF related
+	 * errors when reading it.
+	 */
+	memset(buffer, 0, PG_SYNCCONF_FILE_SIZE);
+	memcpy(buffer, &SyncConfFile, sizeof(SyncConfFileData));
+
+	snprintf(SyncConfFilePath, sizeof(SyncConfFilePath), "%s/%s", DataDir, "global/pg_syncconf");
+
+
+	/*
+	 * All errors issue a PANIC, so no need to use OpenTransientFile() and to
+	 * worry about file descriptor leaks.
+	 */
+	if ((fd = BasicOpenFile(SyncConfFilePath, O_CREAT | O_RDWR | PG_BINARY)) < 0)
+		ereport(PANIC,
+				(errcode_for_file_access(),
+				 errmsg("could not open file \"%s\": %m",
+						SyncConfFilePath)));
+
+	errno = 0;
+	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_WRITE_UPDATE);
+	if (write(fd, buffer, PG_SYNCCONF_FILE_SIZE) != PG_SYNCCONF_FILE_SIZE)
+	{
+		/* if write didn't set errno, assume problem is no disk space */
+		if (errno == 0)
+			errno = ENOSPC;
+		ereport(PANIC,
+				(errcode_for_file_access(),
+				 errmsg("could not write file \"%s\": %m",
+						SyncConfFilePath)));
+	}
+	pgstat_report_wait_end();
+
+	if (do_sync)
+	{
+		pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_SYNC_UPDATE);
+		if (pg_fsync(fd) != 0)
+			ereport(PANIC,
+					(errcode_for_file_access(),
+					 errmsg("could not fsync file \"%s\": %m",
+							SyncConfFilePath)));
+		pgstat_report_wait_end();
+	}
+
+	if (close(fd) != 0)
+	{
+		ereport(PANIC,
+				(errcode_for_file_access(),
+				 errmsg("could not close file \"%s\": %m",
+						SyncConfFilePath)));
+	}
 }

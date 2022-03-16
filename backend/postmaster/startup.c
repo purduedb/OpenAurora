@@ -204,8 +204,8 @@ StartupProcessMain(void)
     char path[MAXPGPATH];
     snprintf(path, sizeof(path), "%s/client.signal", DataDir);
     if (access(path, F_OK) == 0)
-	    //StartupXLOG_Comp();
-		StartupXLOG();
+	    StartupXLOG_Comp();
+		//StartupXLOG();
     else
 	    StartupXLOG();
 

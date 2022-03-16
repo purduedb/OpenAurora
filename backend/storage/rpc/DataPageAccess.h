@@ -19,8 +19,6 @@ namespace tutorial {
   #pragma warning (disable : 4250 ) //inheriting methods via dominance 
 #endif
 
-#define RPCPORT 9090
-
 /**
  * Ahh, now onto the cool part, defining a service. Services just need a name
  * and can optionally inherit from another service using the extends keyword.
@@ -46,6 +44,10 @@ class DataPageAccessIf {
   virtual int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) = 0;
   virtual _Off_t RpcFileSize(const _File _fd) = 0;
   virtual void RpcInitFile(_Page& _return, const _Path& _path) = 0;
+  virtual _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) = 0;
+  virtual void RpcCloseTransientFile(const _File _fd) = 0;
+  virtual void Rpcread(_Page& _return, const _File _fd, const int32_t size) = 0;
+  virtual int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -112,6 +114,20 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
   }
   void RpcInitFile(_Page& /* _return */, const _Path& /* _path */) {
     return;
+  }
+  _File RpcOpenTransientFile(const _Path& /* _filename */, const int32_t /* _fileflags */) {
+    _File _return = 0;
+    return _return;
+  }
+  void RpcCloseTransientFile(const _File /* _fd */) {
+    return;
+  }
+  void Rpcread(_Page& /* _return */, const _File /* _fd */, const int32_t /* size */) {
+    return;
+  }
+  int32_t Rpcwrite(const _File /* _fd */, const _Page& /* _page */, const int32_t /* size */) {
+    int32_t _return = 0;
+    return _return;
   }
   void zip() {
     return;
@@ -1067,6 +1083,432 @@ class DataPageAccess_RpcInitFile_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcOpenTransientFile_args__isset {
+  _DataPageAccess_RpcOpenTransientFile_args__isset() : _filename(false), _fileflags(false) {}
+  bool _filename :1;
+  bool _fileflags :1;
+} _DataPageAccess_RpcOpenTransientFile_args__isset;
+
+class DataPageAccess_RpcOpenTransientFile_args {
+ public:
+
+  DataPageAccess_RpcOpenTransientFile_args(const DataPageAccess_RpcOpenTransientFile_args&);
+  DataPageAccess_RpcOpenTransientFile_args& operator=(const DataPageAccess_RpcOpenTransientFile_args&);
+  DataPageAccess_RpcOpenTransientFile_args() : _filename(), _fileflags(0) {
+  }
+
+  virtual ~DataPageAccess_RpcOpenTransientFile_args() noexcept;
+  _Path _filename;
+  int32_t _fileflags;
+
+  _DataPageAccess_RpcOpenTransientFile_args__isset __isset;
+
+  void __set__filename(const _Path& val);
+
+  void __set__fileflags(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcOpenTransientFile_args & rhs) const
+  {
+    if (!(_filename == rhs._filename))
+      return false;
+    if (!(_fileflags == rhs._fileflags))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcOpenTransientFile_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcOpenTransientFile_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcOpenTransientFile_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcOpenTransientFile_pargs() noexcept;
+  const _Path* _filename;
+  const int32_t* _fileflags;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcOpenTransientFile_result__isset {
+  _DataPageAccess_RpcOpenTransientFile_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcOpenTransientFile_result__isset;
+
+class DataPageAccess_RpcOpenTransientFile_result {
+ public:
+
+  DataPageAccess_RpcOpenTransientFile_result(const DataPageAccess_RpcOpenTransientFile_result&);
+  DataPageAccess_RpcOpenTransientFile_result& operator=(const DataPageAccess_RpcOpenTransientFile_result&);
+  DataPageAccess_RpcOpenTransientFile_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcOpenTransientFile_result() noexcept;
+  _File success;
+
+  _DataPageAccess_RpcOpenTransientFile_result__isset __isset;
+
+  void __set_success(const _File val);
+
+  bool operator == (const DataPageAccess_RpcOpenTransientFile_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcOpenTransientFile_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcOpenTransientFile_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcOpenTransientFile_presult__isset {
+  _DataPageAccess_RpcOpenTransientFile_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcOpenTransientFile_presult__isset;
+
+class DataPageAccess_RpcOpenTransientFile_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcOpenTransientFile_presult() noexcept;
+  _File* success;
+
+  _DataPageAccess_RpcOpenTransientFile_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcCloseTransientFile_args__isset {
+  _DataPageAccess_RpcCloseTransientFile_args__isset() : _fd(false) {}
+  bool _fd :1;
+} _DataPageAccess_RpcCloseTransientFile_args__isset;
+
+class DataPageAccess_RpcCloseTransientFile_args {
+ public:
+
+  DataPageAccess_RpcCloseTransientFile_args(const DataPageAccess_RpcCloseTransientFile_args&);
+  DataPageAccess_RpcCloseTransientFile_args& operator=(const DataPageAccess_RpcCloseTransientFile_args&);
+  DataPageAccess_RpcCloseTransientFile_args() : _fd(0) {
+  }
+
+  virtual ~DataPageAccess_RpcCloseTransientFile_args() noexcept;
+  _File _fd;
+
+  _DataPageAccess_RpcCloseTransientFile_args__isset __isset;
+
+  void __set__fd(const _File val);
+
+  bool operator == (const DataPageAccess_RpcCloseTransientFile_args & rhs) const
+  {
+    if (!(_fd == rhs._fd))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcCloseTransientFile_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcCloseTransientFile_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcCloseTransientFile_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcCloseTransientFile_pargs() noexcept;
+  const _File* _fd;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcCloseTransientFile_result {
+ public:
+
+  DataPageAccess_RpcCloseTransientFile_result(const DataPageAccess_RpcCloseTransientFile_result&);
+  DataPageAccess_RpcCloseTransientFile_result& operator=(const DataPageAccess_RpcCloseTransientFile_result&);
+  DataPageAccess_RpcCloseTransientFile_result() {
+  }
+
+  virtual ~DataPageAccess_RpcCloseTransientFile_result() noexcept;
+
+  bool operator == (const DataPageAccess_RpcCloseTransientFile_result & /* rhs */) const
+  {
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcCloseTransientFile_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcCloseTransientFile_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcCloseTransientFile_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcCloseTransientFile_presult() noexcept;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_Rpcread_args__isset {
+  _DataPageAccess_Rpcread_args__isset() : _fd(false), size(false) {}
+  bool _fd :1;
+  bool size :1;
+} _DataPageAccess_Rpcread_args__isset;
+
+class DataPageAccess_Rpcread_args {
+ public:
+
+  DataPageAccess_Rpcread_args(const DataPageAccess_Rpcread_args&);
+  DataPageAccess_Rpcread_args& operator=(const DataPageAccess_Rpcread_args&);
+  DataPageAccess_Rpcread_args() : _fd(0), size(0) {
+  }
+
+  virtual ~DataPageAccess_Rpcread_args() noexcept;
+  _File _fd;
+  int32_t size;
+
+  _DataPageAccess_Rpcread_args__isset __isset;
+
+  void __set__fd(const _File val);
+
+  void __set_size(const int32_t val);
+
+  bool operator == (const DataPageAccess_Rpcread_args & rhs) const
+  {
+    if (!(_fd == rhs._fd))
+      return false;
+    if (!(size == rhs.size))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_Rpcread_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_Rpcread_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_Rpcread_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_Rpcread_pargs() noexcept;
+  const _File* _fd;
+  const int32_t* size;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_Rpcread_result__isset {
+  _DataPageAccess_Rpcread_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_Rpcread_result__isset;
+
+class DataPageAccess_Rpcread_result {
+ public:
+
+  DataPageAccess_Rpcread_result(const DataPageAccess_Rpcread_result&);
+  DataPageAccess_Rpcread_result& operator=(const DataPageAccess_Rpcread_result&);
+  DataPageAccess_Rpcread_result() : success() {
+  }
+
+  virtual ~DataPageAccess_Rpcread_result() noexcept;
+  _Page success;
+
+  _DataPageAccess_Rpcread_result__isset __isset;
+
+  void __set_success(const _Page& val);
+
+  bool operator == (const DataPageAccess_Rpcread_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_Rpcread_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_Rpcread_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_Rpcread_presult__isset {
+  _DataPageAccess_Rpcread_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_Rpcread_presult__isset;
+
+class DataPageAccess_Rpcread_presult {
+ public:
+
+
+  virtual ~DataPageAccess_Rpcread_presult() noexcept;
+  _Page* success;
+
+  _DataPageAccess_Rpcread_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_Rpcwrite_args__isset {
+  _DataPageAccess_Rpcwrite_args__isset() : _fd(false), _page(false), size(false) {}
+  bool _fd :1;
+  bool _page :1;
+  bool size :1;
+} _DataPageAccess_Rpcwrite_args__isset;
+
+class DataPageAccess_Rpcwrite_args {
+ public:
+
+  DataPageAccess_Rpcwrite_args(const DataPageAccess_Rpcwrite_args&);
+  DataPageAccess_Rpcwrite_args& operator=(const DataPageAccess_Rpcwrite_args&);
+  DataPageAccess_Rpcwrite_args() : _fd(0), _page(), size(0) {
+  }
+
+  virtual ~DataPageAccess_Rpcwrite_args() noexcept;
+  _File _fd;
+  _Page _page;
+  int32_t size;
+
+  _DataPageAccess_Rpcwrite_args__isset __isset;
+
+  void __set__fd(const _File val);
+
+  void __set__page(const _Page& val);
+
+  void __set_size(const int32_t val);
+
+  bool operator == (const DataPageAccess_Rpcwrite_args & rhs) const
+  {
+    if (!(_fd == rhs._fd))
+      return false;
+    if (!(_page == rhs._page))
+      return false;
+    if (!(size == rhs.size))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_Rpcwrite_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_Rpcwrite_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_Rpcwrite_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_Rpcwrite_pargs() noexcept;
+  const _File* _fd;
+  const _Page* _page;
+  const int32_t* size;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_Rpcwrite_result__isset {
+  _DataPageAccess_Rpcwrite_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_Rpcwrite_result__isset;
+
+class DataPageAccess_Rpcwrite_result {
+ public:
+
+  DataPageAccess_Rpcwrite_result(const DataPageAccess_Rpcwrite_result&);
+  DataPageAccess_Rpcwrite_result& operator=(const DataPageAccess_Rpcwrite_result&);
+  DataPageAccess_Rpcwrite_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_Rpcwrite_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_Rpcwrite_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_Rpcwrite_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_Rpcwrite_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_Rpcwrite_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_Rpcwrite_presult__isset {
+  _DataPageAccess_Rpcwrite_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_Rpcwrite_presult__isset;
+
+class DataPageAccess_Rpcwrite_presult {
+ public:
+
+
+  virtual ~DataPageAccess_Rpcwrite_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_Rpcwrite_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 
 class DataPageAccess_zip_args {
  public:
@@ -1164,6 +1606,18 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void RpcInitFile(_Page& _return, const _Path& _path);
   void send_RpcInitFile(const _Path& _path);
   void recv_RpcInitFile(_Page& _return);
+  _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
+  void send_RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
+  _File recv_RpcOpenTransientFile();
+  void RpcCloseTransientFile(const _File _fd);
+  void send_RpcCloseTransientFile(const _File _fd);
+  void recv_RpcCloseTransientFile();
+  void Rpcread(_Page& _return, const _File _fd, const int32_t size);
+  void send_Rpcread(const _File _fd, const int32_t size);
+  void recv_Rpcread(_Page& _return);
+  int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size);
+  void send_Rpcwrite(const _File _fd, const _Page& _page, const int32_t size);
+  int32_t recv_Rpcwrite();
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -1195,6 +1649,10 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcFileTruncate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcFileSize(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcInitFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcOpenTransientFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcCloseTransientFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_Rpcread(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_Rpcwrite(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_zip(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
@@ -1208,6 +1666,10 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcFileTruncate"] = &DataPageAccessProcessor::process_RpcFileTruncate;
     processMap_["RpcFileSize"] = &DataPageAccessProcessor::process_RpcFileSize;
     processMap_["RpcInitFile"] = &DataPageAccessProcessor::process_RpcInitFile;
+    processMap_["RpcOpenTransientFile"] = &DataPageAccessProcessor::process_RpcOpenTransientFile;
+    processMap_["RpcCloseTransientFile"] = &DataPageAccessProcessor::process_RpcCloseTransientFile;
+    processMap_["Rpcread"] = &DataPageAccessProcessor::process_Rpcread;
+    processMap_["Rpcwrite"] = &DataPageAccessProcessor::process_Rpcwrite;
     processMap_["zip"] = &DataPageAccessProcessor::process_zip;
   }
 
@@ -1329,6 +1791,43 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return;
   }
 
+  _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcOpenTransientFile(_filename, _fileflags);
+    }
+    return ifaces_[i]->RpcOpenTransientFile(_filename, _fileflags);
+  }
+
+  void RpcCloseTransientFile(const _File _fd) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcCloseTransientFile(_fd);
+    }
+    ifaces_[i]->RpcCloseTransientFile(_fd);
+  }
+
+  void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->Rpcread(_return, _fd, size);
+    }
+    ifaces_[i]->Rpcread(_return, _fd, size);
+    return;
+  }
+
+  int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->Rpcwrite(_fd, _page, size);
+    }
+    return ifaces_[i]->Rpcwrite(_fd, _page, size);
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -1410,6 +1909,18 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void RpcInitFile(_Page& _return, const _Path& _path);
   int32_t send_RpcInitFile(const _Path& _path);
   void recv_RpcInitFile(_Page& _return, const int32_t seqid);
+  _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
+  int32_t send_RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
+  _File recv_RpcOpenTransientFile(const int32_t seqid);
+  void RpcCloseTransientFile(const _File _fd);
+  int32_t send_RpcCloseTransientFile(const _File _fd);
+  void recv_RpcCloseTransientFile(const int32_t seqid);
+  void Rpcread(_Page& _return, const _File _fd, const int32_t size);
+  int32_t send_Rpcread(const _File _fd, const int32_t size);
+  void recv_Rpcread(_Page& _return, const int32_t seqid);
+  int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size);
+  int32_t send_Rpcwrite(const _File _fd, const _Page& _page, const int32_t size);
+  int32_t recv_Rpcwrite(const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

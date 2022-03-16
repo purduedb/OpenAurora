@@ -133,6 +133,38 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     std::cout << "RpcInitFile" << std::endl;
   }
 
+  _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
+    char		path[MAXPGPATH];
+		std::size_t length = _filename.copy(path, _filename.size());
+		path[length] = '\0';
+
+    std::cout << "RpcOpenTransientFile" << std::endl;
+
+    return OpenTransientFile(path, _fileflags);
+  }
+
+  void RpcCloseTransientFile(const _File _fd) {
+    CloseTransientFile(_fd);
+    std::cout << "RpcCloseTransientFile" << std::endl;
+  }
+
+  void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
+    char buf[size];
+    read(_fd, buf, size);
+    _return.assign(buf, size);
+
+    std::cout << "Rpcread" << std::endl;
+  }
+
+  int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
+    char  buf[size];
+    _page.copy(buf, size);
+
+    std::cout << "Rpcwrite" << std::endl;
+
+    return write(_fd, buf, size);
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -170,3 +202,4 @@ RpcServerLoop(void){
 
   server.serve();
 }
+

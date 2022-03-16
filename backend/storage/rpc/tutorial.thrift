@@ -111,6 +111,16 @@ service DataPageAccess {
 
    _Page RpcInitFile(1:_Path _path),
 
+   _File RpcOpenTransientFile(1:_Path _filename, 2:i32 _fileflags),
+
+   void RpcCloseTransientFile(1:_File _fd),
+
+   _Page Rpcread(1:_File _fd, 2:i32 size),
+
+   i32 Rpcwrite(1:_File _fd, 2:_Page _page, 3:i32 size),
+
+
+
 
 
    /**

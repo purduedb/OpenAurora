@@ -111,7 +111,7 @@ rpcinit(void)
 
 	snprintf(path, sizeof(path), "%s/client.signal", DataDir);
 
-	if (access(path, F_OK) == 0);
+	if (access(path, F_OK) == 0)
 	{
 		rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
 		rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
@@ -1192,3 +1192,79 @@ void TryRpcInitFile(_Page& _return, _Path& _path)
 		}
 	}while(trycount < maxcount);
 };
+
+File TryRpcOpenTransientFile(const char * filename, int fileflags) {
+    int trycount=0;
+	int maxcount=3;
+	_Path _filename;
+	_File result;
+	_filename.assign(filename);
+	do{
+		try{
+			rpctransport->open();
+			result = client->RpcOpenTransientFile(_filename, fileflags);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return result;
+}
+
+int TryRpcCloseTransientFile(const File fd) {
+    int trycount=0;
+	int maxcount=3;
+	do{
+		try{
+			rpctransport->open();
+			client->RpcCloseTransientFile(fd);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return 0;
+}
+
+int TryRpcread(File fd,void * buf,  int size) {
+    int trycount=0;
+	int maxcount=3;
+	_Page _buf;
+	do{
+		try{
+			rpctransport->open();
+			client->Rpcread(_buf, fd, size);
+			rpctransport->close();
+			trycount=maxcount;
+		}catch(TException& tx){
+			std::cout << "ERROR: " << tx.what() << std::endl;
+			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+			delete client;
+			client = new DataPageAccessClient(rpcprotocol);
+			
+			trycount++;
+			printf("Try again %d\n", trycount);
+		}
+	}while(trycount < maxcount);
+	return _buf.copy((char*)buf, size);
+}
