@@ -78,7 +78,7 @@ WalRcvShmemInit(void)
 		MemSet(WalRcvBuf, 0, sizeof(WalRcvBufData));
 		WalRcvBuf -> rcvBufStartPos = 0;
 		WalRcvBuf -> rcvBufEndPos = 0;
-		WalRcvBuf->buf = (char *)ShmemInitStruct("WalRcvBufDataBuffer", RCV_SHMEM_BUF_SIZE, &foundWalRcvBuf);
+		WalRcvBuf->buf = (char *)ShmemInitStruct("WalRcvBufDataBuffer", RCV_SHMEM_BUF_SIZE, &found);
 		SpinLockInit(&WalRcvBuf->mutex);
 	}
 }
