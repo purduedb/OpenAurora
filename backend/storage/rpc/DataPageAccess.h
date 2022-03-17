@@ -14,6 +14,8 @@
 
 namespace tutorial {
 
+#define RPCPORT 9090
+
 #ifdef _MSC_VER
   #pragma warning( push )
   #pragma warning (disable : 4250 ) //inheriting methods via dominance 
