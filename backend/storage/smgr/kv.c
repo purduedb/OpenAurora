@@ -67,16 +67,24 @@ static void kvregister_forget_request(RelFileNodeBackend rnode, ForkNumber forkn
 
 
 
-const char * KV_FILE_PAGE_NUM = "kv_file_page_num_%s";//filename -> how many pages
-const char * KV_GET_FILE_PAGE = "kv_get_%s_%d"; //(filename, pageid) -> page
-const char * KV_FILE_PAGE_NUM_PREFIX = "kv_file_page_num_\0";//filename -> how many pages
-const char * KV_GET_FILE_PAGE_PREFIX = "kv_get_\0"; //(filename, pageid) -> page
+char * KV_FILE_PAGE_NUM = "kv_file_page_num_%s";//filename -> how many pages
+char * KV_GET_FILE_PAGE = "kv_get_%s_%d"; //(filename, pageid) -> page
+char * KV_FILE_PAGE_NUM_PREFIX = "kv_file_page_num_\0";//filename -> how many pages
+char * KV_GET_FILE_PAGE_PREFIX = "kv_get_\0"; //(filename, pageid) -> page
 //! Input BlockNum is index no, start from 0
 //! KV_PAGE_NUM is real page number, start from 1
 
 void
 kvinit(void)
 {
+    char		path[MAXPGPATH];
+    snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+    if (access(path, F_OK) == 0) {
+        KV_FILE_PAGE_NUM = "cli_kv_file_page_num_%s";//filename -> how many pages
+        KV_GET_FILE_PAGE = "cli_kv_get_%s_%d"; //(filename, pageid) -> page
+        KV_FILE_PAGE_NUM_PREFIX = "cli_kv_file_page_num_\0";//filename -> how many pages
+        KV_GET_FILE_PAGE_PREFIX = "cli_kv_get_\0"; //(filename, pageid) -> page
+    }
     MdCxt = AllocSetContextCreate(TopMemoryContext,
                                   "KvSmgr",
                                   ALLOCSET_DEFAULT_SIZES);
