@@ -61,8 +61,8 @@ endif
 endif
 else # not PGXS
 vpath_build = no
-abs_top_builddir = /Users/rainman/pgsql/source_code/postgresql-13.0
-abs_top_srcdir = /Users/rainman/pgsql/source_code/postgresql-13.0
+abs_top_builddir = /home/pang65/TestRocksdb/postgresql-13.0
+abs_top_srcdir = /home/pang65/TestRocksdb/postgresql-13.0
 
 ifneq ($(vpath_build),yes)
 top_srcdir = $(top_builddir)
@@ -94,7 +94,7 @@ ifndef PGXS
 # Note that prefix, exec_prefix, and datarootdir aren't defined in a PGXS build;
 # makefiles may only use the derived variables such as bindir.
 
-prefix := /Users/rainman/pgsql/builted_project
+prefix := /home/pang65/TestRocksdb/built_project
 exec_prefix := ${prefix}
 datarootdir := ${prefix}/share
 
@@ -239,7 +239,7 @@ BITCODE_CXXFLAGS =  -O2
 # Compilers
 
 CPP = gcc -E
-CPPFLAGS =  
+CPPFLAGS =  -D_GNU_SOURCE 
 PG_SYSROOT = 
 
 override CPPFLAGS := $(ICU_CFLAGS) $(CPPFLAGS)
@@ -257,13 +257,13 @@ CC = gcc
 GCC = yes
 SUN_STUDIO_CC = no
 CXX = g++
-CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -Wno-unused-command-line-argument -g -ggdb -O0
-CFLAGS_SL = 
+CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -O2
+CFLAGS_SL = -fPIC
 CFLAGS_VECTOR =  -funroll-loops -ftree-vectorize
 CFLAGS_SSE42 = -msse4.2
 CFLAGS_ARMV8_CRC32C = 
 PERMIT_DECLARATION_AFTER_STATEMENT = -Wno-declaration-after-statement
-CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -g -O2
+CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -g -O2
 
 LLVM_CPPFLAGS = 
 LLVM_CFLAGS = 
@@ -272,7 +272,7 @@ LLVM_CXXFLAGS =
 # Kind-of compilers
 
 BISON = /usr/bin/bison
-BISONFLAGS =  $(YFLAGS)
+BISONFLAGS =  -Wno-deprecated $(YFLAGS)
 FLEX = /usr/bin/flex
 FLEXFLAGS =  $(LFLAGS)
 DTRACE = 
@@ -284,14 +284,14 @@ ZIC =
 AR = ar
 DLLTOOL = 
 DLLWRAP = 
-LIBS = -lz -lreadline -lm 
+LIBS = -lpthread -lz -lreadline -lrt -ldl -lm 
 LDAP_LIBS_FE = 
 LDAP_LIBS_BE = 
 UUID_LIBS = 
 UUID_EXTRA_OBJS = 
 LLVM_LIBS=
-LD = /Library/Developer/CommandLineTools/usr/bin/ld
-with_gnu_ld = no
+LD = /usr/bin/ld
+with_gnu_ld = yes
 
 # It's critical that within LDFLAGS, all -L switches pointing to build-tree
 # directories come before any -L switches pointing to external directories.
@@ -312,7 +312,7 @@ ifdef PGXS
 else
   LDFLAGS_INTERNAL = -L$(top_builddir)/src/port -L$(top_builddir)/src/common
 endif
-LDFLAGS = $(LDFLAGS_INTERNAL)   -Wl,-dead_strip_dylibs
+LDFLAGS = $(LDFLAGS_INTERNAL) -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd  -ldl -lpthread -lthrift -lrocksdb -lhiredis -std=c++17 -lstdc++ -lzstd -llz4 -lz -lbz2 -lsnappy -I. -I/usr/local/include -I/usr/include -L/usr/local/lib   -Wl,--as-needed
 
 LDFLAGS_EX = 
 # LDFLAGS_SL might have already been assigned by calling makefile
@@ -339,7 +339,7 @@ perl_embed_ldflags	=
 
 # Miscellaneous
 
-AWK	= awk
+AWK	= mawk
 LN_S	= ln -s
 MSGFMT  = 
 MSGFMT_FLAGS = 
@@ -477,20 +477,20 @@ INSTALL_SHLIB	= $(INSTALL_SHLIB_ENV) $(INSTALL) $(INSTALL_SHLIB_OPTS) $(INSTALL_
 # Override in Makefile.port if necessary
 INSTALL_SHLIB_OPTS = -m 755
 
-MKDIR_P = ${SHELL} ${top_srcdir}/config/install-sh -c -d
+MKDIR_P = /usr/bin/mkdir -p
 
 missing		= $(SHELL) $(top_srcdir)/config/missing
 
-STRIP		= strip -x
+STRIP		= strip
 STRIP_STATIC_LIB = strip -x
-STRIP_SHARED_LIB = strip -x
+STRIP_SHARED_LIB = strip --strip-unneeded
 
 # Documentation
 
 DBTOEPUB	= 
 FOP				= 
-XMLLINT			= /Users/rainman/opt/anaconda3/bin/xmllint
-XSLTPROC		= /Users/rainman/opt/anaconda3/bin/xsltproc
+XMLLINT			= 
+XSLTPROC		= 
 
 # Code coverage
 
@@ -510,12 +510,12 @@ WANTED_LANGUAGES =
 #
 
 # Name of the "template"
-PORTNAME= darwin
+PORTNAME= linux
 
-build_os = darwin20.6.0
+build_os = linux-gnu
 
-host_tuple = x86_64-apple-darwin20.6.0
-host_os = darwin20.6.0
+host_tuple = x86_64-pc-linux-gnu
+host_os = linux-gnu
 host_cpu = x86_64
 
 # Backend stack size limit has to be hard-wired on Windows (it's in bytes)
@@ -716,7 +716,7 @@ endif
 # substitute implementations of C library routines (see src/port/)
 # note we already included -L.../src/port in LDFLAGS above
 
-LIBOBJS =  ${LIBOBJDIR}explicit_bzero$U.o
+LIBOBJS =  ${LIBOBJDIR}fls$U.o ${LIBOBJDIR}getpeereid$U.o ${LIBOBJDIR}strlcat$U.o ${LIBOBJDIR}strlcpy$U.o
 
 # files needed for the chosen CRC-32C implementation
 PG_CRC32C_OBJS = pg_crc32c_sse42.o pg_crc32c_sb8.o pg_crc32c_sse42_choose.o
@@ -898,7 +898,7 @@ recurse_always = $(foreach target,$(if $1,$1,$(standard_always_targets)),$(forea
 # whether this file needs to be updated. The dependency files are kept
 # in the .deps subdirectory of each directory.
 
-autodepend = yes
+autodepend = 
 
 ifeq ($(autodepend), yes)
 

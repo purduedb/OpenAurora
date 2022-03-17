@@ -42,7 +42,7 @@
 #include "utils/memutils.h"
 #include "utils/pg_locale.h"
 #include "utils/ps_status.h"
-
+#include "storage/kvstore.h"
 
 const char *progname;
 
@@ -59,7 +59,7 @@ static void check_root(const char *progname);
 int
 main(int argc, char *argv[])
 {
-	bool		do_check_root = true;
+    bool		do_check_root = true;
 
 	/*
 	 * If supported on the current platform, set up a handler to be called if
@@ -198,6 +198,7 @@ main(int argc, char *argv[])
 	pgwin32_signal_initialize();
 #endif
 
+    //atexit(KvClose);
 	if (argc > 1 && strcmp(argv[1], "--boot") == 0)
 		AuxiliaryProcessMain(argc, argv);	/* does not return */
 	else if (argc > 1 && strcmp(argv[1], "--describe-config") == 0)

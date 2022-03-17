@@ -1,9 +1,0 @@
-Name: libecpg
-Description: PostgreSQL libecpg library
-Url: https://www.postgresql.org/
-Version: 13.0
-Requires: 
-Requires.private: libpq libpgtypes
-Cflags: -I/Users/rainman/pgsql/builted_project/include
-Libs: -L/Users/rainman/pgsql/builted_project/lib -lecpg
-Libs.private:  -lm

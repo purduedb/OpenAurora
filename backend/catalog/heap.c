@@ -331,6 +331,10 @@ heap_create(const char *relname,
 						get_namespace_name(relnamespace), relname),
 				 errdetail("System catalog modifications are currently disallowed.")));
 
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Creat]]1\n\n\n")));
+
 	*relfrozenxid = InvalidTransactionId;
 	*relminmxid = InvalidMultiXactId;
 
@@ -388,7 +392,9 @@ heap_create(const char *relname,
 	 */
 	if (reltablespace == MyDatabaseTableSpace)
 		reltablespace = InvalidOid;
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Creat]]2\n\n\n")));
 	/*
 	 * build the relcache entry.
 	 */
@@ -404,6 +410,10 @@ heap_create(const char *relname,
 									 relpersistence,
 									 relkind);
 
+
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Creat]]3\n\n\n")));
 	/*
 	 * Have the storage manager create the relation's disk file, if needed.
 	 *
@@ -411,10 +421,18 @@ heap_create(const char *relname,
 	 * indexes only the main fork is created. The other forks will be created
 	 * on demand.
 	 */
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Creat]]!!!!\n\n\n")));
 	if (create_storage)
 	{
+        ereport(NOTICE,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                        errmsg("[HEAP Creat]]4\n\n\n")));
 		RelationOpenSmgr(rel);
-
+        ereport(NOTICE,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                        errmsg("[HEAP Creat]]%c\n\n\n", rel->rd_rel->relkind)));
 		switch (rel->rd_rel->relkind)
 		{
 			case RELKIND_VIEW:
@@ -438,6 +456,9 @@ heap_create(const char *relname,
 												relfrozenxid, relminmxid);
 				break;
 		}
+        ereport(NOTICE,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                        errmsg("[HEAP Creat]]6\n\n\n")));
 	}
 
 	return rel;

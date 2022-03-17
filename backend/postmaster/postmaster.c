@@ -77,6 +77,7 @@
 #include <netdb.h>
 #include <limits.h>
 
+
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
@@ -124,6 +125,7 @@
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
 #include "storage/rpcclient.h"
+#include "storage/kvstore.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/datetime.h"
@@ -133,6 +135,7 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+
 
 #ifdef EXEC_BACKEND
 #include "storage/spin.h"
@@ -904,6 +907,7 @@ PostmasterMain(int argc, char *argv[])
 	if (!SelectConfigFiles(userDoption, progname))
 		ExitPostmaster(2);
 
+
 	if (output_config_variable != NULL)
 	{
 		/*
@@ -1437,6 +1441,7 @@ PostmasterMain(int argc, char *argv[])
 	/*
 	 * ServerLoop probably shouldn't ever return, but if it does, close down.
 	 */
+    KvClose();
 	ExitPostmaster(status != STATUS_OK);
 
 	abort();					/* not reached */

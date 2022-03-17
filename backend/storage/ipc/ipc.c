@@ -30,7 +30,7 @@
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "tcop/tcopprot.h"
-
+#include "storage/kvstore.h"
 
 /*
  * This flag is set during proc_exit() to change ereport()'s behavior,
@@ -103,9 +103,12 @@ static int	on_proc_exit_index,
 void
 proc_exit(int code)
 {
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("----[proc_exit] start code = %d\n\n\n", code)));
 	/* Clean up everything that must be cleaned up */
 	proc_exit_prepare(code);
-
+    KvClose();
 #ifdef PROFILE_PID_DIR
 	{
 		/*
@@ -149,7 +152,10 @@ proc_exit(int code)
 
 	elog(DEBUG3, "exit(%d)", code);
 
-	exit(code);
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("----[proc_exit] end code = %d\n\n\n", code)));
+    exit(code);
 }
 
 /*
@@ -160,6 +166,23 @@ proc_exit(int code)
 static void
 proc_exit_prepare(int code)
 {
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[proc_exit_prepare] prepare started ! code = %d pid=%ld  ppid=%ld", code, (long)getpid(), (long)getppid())));
+
+    if (code == -1) {
+        char *path = malloc(MAXPGPATH);
+        if (path != NULL) {
+            if (readlink("/proc/self/exe", path, MAXPGPATH) == -1) {
+                free(path);
+                path = NULL;
+            }
+        }
+        ereport(NOTICE,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                        errmsg("[proc_exit_prepare] path = %s \n\n\n", path)));
+        free(path);
+    }
 	/*
 	 * Once we set this flag, we are committed to exit.  Any ereport() will
 	 * NOT send control back to the main loop, but right back here.

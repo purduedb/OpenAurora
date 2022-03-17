@@ -9281,11 +9281,17 @@ ShutdownXLOG(int code, Datum arg)
 			RequestXLogSwitch(false);
 
 		CreateCheckPoint(CHECKPOINT_IS_SHUTDOWN | CHECKPOINT_IMMEDIATE);
+        ereport(NOTICE,
+                (errcode(ERRCODE_INTERNAL_ERROR),
+                        errmsg("Create CheckPoints 2\n\n\n")));
 	}
 	ShutdownCLOG();
 	ShutdownCommitTs();
 	ShutdownSUBTRANS();
 	ShutdownMultiXact();
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("Create CheckPoints ****\n\n\n")));
 }
 
 /*
@@ -9838,6 +9844,7 @@ CreateCheckPoint(int flags)
 	KeepLogSeg(recptr, &_logSegNo);
 	InvalidateObsoleteReplicationSlots(_logSegNo);
 	_logSegNo--;
+
 	RemoveOldXlogFiles(_logSegNo, RedoRecPtr, recptr);
 
 	/*

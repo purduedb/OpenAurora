@@ -92,6 +92,14 @@ static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 	(a).segno = (xx_segno) \
 )
 
+#define INIT_KV_FILETAG(a,xx_rnode,xx_forknum,xx_segno) \
+( \
+	memset(&(a), 0, sizeof(FileTag)), \
+	(a).handler = SYNC_HANDLER_KV, \
+	(a).rnode = (xx_rnode), \
+	(a).forknum = (xx_forknum), \
+	(a).segno = (xx_segno) \
+)
 
 /*** behavior for mdopen & _mdfd_getseg ***/
 /* ereport if segment not present */
@@ -979,7 +987,11 @@ ForgetDatabaseSyncRequests(Oid dbid)
 	rnode.spcNode = 0;
 	rnode.relNode = 0;
 
-	INIT_MD_FILETAG(tag, rnode, InvalidForkNumber, InvalidBlockNumber);
+#ifdef USE_KV_STORE
+    INIT_KV_FILETAG(tag, rnode, InvalidForkNumber, InvalidBlockNumber);
+#else
+    INIT_MD_FILETAG(tag, rnode, InvalidForkNumber, InvalidBlockNumber);
+#endif
 
 	RegisterSyncRequest(&tag, SYNC_FILTER_REQUEST, true /* retryOnError */ );
 }

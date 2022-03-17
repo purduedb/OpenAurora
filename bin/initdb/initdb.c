@@ -74,7 +74,6 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 
-
 /* Ideally this would be in a .h file, but it hardly seems worth the trouble */
 extern const char *select_default_timezone(const char *share_path);
 
@@ -2867,7 +2866,7 @@ warn_on_mount_point(int error)
 
 
 void
-initialize_data_directory(void)
+    initialize_data_directory(void)
 {
 	PG_CMD_DECL;
 	int			i;
@@ -2926,10 +2925,10 @@ initialize_data_directory(void)
 	/* Bootstrap template1 */
 	bootstrap_template1();
 
-	/*
-	 * Make the per-database PG_VERSION for template1 only after init'ing it
-	 */
-	write_version_file("base/1");
+    /*
+     * Make the per-database PG_VERSION for template1 only after init'ing it
+     */
+    write_version_file("base/1");
 
 	/*
 	 * Create the stuff we don't need to use bootstrap mode for, using a

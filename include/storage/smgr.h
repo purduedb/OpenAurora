@@ -18,6 +18,8 @@
 #include "storage/block.h"
 #include "storage/relfilenode.h"
 
+#define USE_KV_STORE
+
 /*
  * smgr.c maintains a table of SMgrRelation objects, which are essentially
  * cached file handles.  An SMgrRelation is created (if not already present)
@@ -105,5 +107,6 @@ extern void smgrtruncate(SMgrRelation reln, ForkNumber *forknum,
 						 int nforks, BlockNumber *nblocks);
 extern void smgrimmedsync(SMgrRelation reln, ForkNumber forknum);
 extern void AtEOXact_SMgr(void);
+extern void smgrcopydir(char* srcPath, char* dstPath);
 
 #endif							/* SMGR_H */

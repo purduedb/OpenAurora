@@ -28,6 +28,7 @@
 #include "storage/bufmgr.h"
 #include "storage/ipc.h"
 #include "storage/md.h"
+#include "storage/kv.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 #include "utils/memutils.h"
@@ -96,7 +97,12 @@ static const SyncOps syncsw[] = {
 		.sync_syncfiletag = mdsyncfiletag,
 		.sync_unlinkfiletag = mdunlinkfiletag,
 		.sync_filetagmatches = mdfiletagmatches
-	}
+	},
+    {
+            .sync_syncfiletag = kvsyncfiletag,
+            .sync_unlinkfiletag = kvunlinkfiletag,
+            .sync_filetagmatches = kvfiletagmatches
+    }
 };
 
 /*

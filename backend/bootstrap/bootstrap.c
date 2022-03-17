@@ -16,6 +16,7 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <zconf.h>
 
 #include "access/genam.h"
 #include "access/heapam.h"
@@ -50,6 +51,7 @@
 #include "utils/ps_status.h"
 #include "utils/rel.h"
 #include "utils/relmapper.h"
+#include "storage/kvstore.h"
 
 uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
@@ -200,6 +202,9 @@ static IndexList *ILHead = NULL;
 void
 AuxiliaryProcessMain(int argc, char *argv[])
 {
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[AuxiliaryProcessMain HERE!!!] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
 	char	   *progname = argv[0];
 	int			flag;
 	char	   *userDoption = NULL;
@@ -442,8 +447,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			bootstrap_signals();
 			BootStrapXLOG();
 			BootstrapModeMain();
+            ereport(NOTICE,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                            errmsg("[BootstrapModeMain] Ended\n\n\n")));
 			proc_exit(1);		/* should never return */
-
 		case StartupProcess:
 			/* don't set signals, startup process has its own agenda */
 			StartupProcessMain();
@@ -502,6 +509,7 @@ CheckerModeMain(void)
 static void
 BootstrapModeMain(void)
 {
+
 	int			i;
 
 	Assert(!IsUnderPostmaster);
@@ -532,9 +540,18 @@ BootstrapModeMain(void)
 	 * Process bootstrap input.
 	 */
 	StartTransactionCommand();
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[BootstrapModeMain]]111\n\n\n")));
 	boot_yyparse();
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[BootstrapModeMain]]222\n\n\n")));
 	CommitTransactionCommand();
 
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[BootstrapModeMain]pid=%ld  ppid=%ld", (long)getpid(), (long)getppid())));
 	/*
 	 * We should now know about all mapped relations, so it's okay to write
 	 * out the initial relation mapping files.
@@ -543,7 +560,14 @@ BootstrapModeMain(void)
 
 	/* Clean up and exit */
 	cleanup();
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[BootstrapModeMain]]444\n\n\n")));
+    KvClose();
 	proc_exit(0);
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[BootstrapModeMain]]555\n\n\n")));
 }
 
 

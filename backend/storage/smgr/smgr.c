@@ -26,6 +26,7 @@
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 #include "miscadmin.h"
+#include "storage/kv.h"
 
 
 /*
@@ -63,6 +64,7 @@ typedef struct f_smgr
 	void		(*smgr_truncate) (SMgrRelation reln, ForkNumber forknum,
 								  BlockNumber nblocks);
 	void		(*smgr_immedsync) (SMgrRelation reln, ForkNumber forknum);
+    void        (*smgr_copydir) (char *srcPath, char *dstPath);
 } f_smgr;
 
 static const f_smgr smgrsw[] = {
@@ -85,24 +87,44 @@ static const f_smgr smgrsw[] = {
 		.smgr_immedsync = mdimmedsync,
 	},
 
+
 	/* rpc client */
-	{
-		.smgr_init = rpcinit,
-		.smgr_shutdown = rpcshutdown,
-		.smgr_open = rpcopen,
-		.smgr_close = rpcclose,
-		.smgr_create = rpccreate,
-		.smgr_exists = rpcexists,
-		.smgr_unlink = rpcunlink,
-		.smgr_extend = rpcextend,
-		.smgr_prefetch = NULL,
-		.smgr_read = rpcread,
-		.smgr_write = NULL,
-		.smgr_writeback = NULL,
-		.smgr_nblocks = rpcnblocks,
-		.smgr_truncate = rpctruncate,
-		.smgr_immedsync = NULL,
-	}
+//	{
+//		.smgr_init = rpcinit,
+//		.smgr_shutdown = rpcshutdown,
+//		.smgr_open = rpcopen,
+//		.smgr_close = rpcclose,
+//		.smgr_create = rpccreate,
+//		.smgr_exists = rpcexists,
+//		.smgr_unlink = rpcunlink,
+//		.smgr_extend = rpcextend,
+//		.smgr_prefetch = NULL,
+//		.smgr_read = rpcread,
+//		.smgr_write = NULL,
+//		.smgr_writeback = NULL,
+//		.smgr_nblocks = rpcnblocks,
+//		.smgr_truncate = rpctruncate,
+//		.smgr_immedsync = NULL,
+//	}
+
+    {
+        .smgr_init = kvinit,
+        .smgr_shutdown = NULL,
+        .smgr_open = kvopen,
+        .smgr_close = kvclose,
+        .smgr_create = kvcreate,
+        .smgr_exists = kvexists,
+        .smgr_unlink = kvunlink,
+        .smgr_extend = kvextend,
+        .smgr_prefetch = kvprefetch,
+        .smgr_read = kvread,
+        .smgr_write = kvwrite,
+        .smgr_writeback = kvwriteback,
+        .smgr_nblocks = kvnblocks,
+        .smgr_truncate = kvtruncate,
+        .smgr_immedsync = kvimmedsync,
+        .smgr_copydir = kvcopydb
+    }
 };
 
 static const int NSmgr = lengthof(smgrsw);
@@ -157,11 +179,20 @@ smgrshutdown(int code, Datum arg)
 	}
 }
 
+void
+smgrcopydir(char* srcPath, char* dstPath) {
+#ifdef USE_KV_STORE
+    smgrsw[1].smgr_copydir(srcPath, dstPath);
+#endif
+}
+
 /*
  *	smgropen() -- Return an SMgrRelation object, creating it if need be.
  *
  *		This does not attempt to actually open the underlying file.
  */
+//! Update here
+//! Using KvStore
 SMgrRelation
 smgropen(RelFileNode rnode, BackendId backend)
 {
@@ -200,11 +231,14 @@ smgropen(RelFileNode rnode, BackendId backend)
 		reln->smgr_targblock = InvalidBlockNumber;
 		reln->smgr_fsm_nblocks = InvalidBlockNumber;
 		reln->smgr_vm_nblocks = InvalidBlockNumber;
+
 		/*use rpc at present */
-		reln->smgr_which = 0;
-		/*TODO*/
-		if (access(path, F_OK) == 0)
-			reln->smgr_which = 1;
+//		reln->smgr_which = 0;
+//		/*TODO*/
+//		if (access(path, F_OK) == 0)
+//			reln->smgr_which = 1;
+
+		reln->smgr_which = 1;	/* we only have md.c at present */
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);
@@ -649,6 +683,7 @@ smgrimmedsync(SMgrRelation reln, ForkNumber forknum)
 {
 	smgrsw[reln->smgr_which].smgr_immedsync(reln, forknum);
 }
+
 
 /*
  * AtEOXact_SMgr
