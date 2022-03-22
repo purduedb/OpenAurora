@@ -106,11 +106,12 @@ TryRpcKvNblocks(char * key, XLogRecPtr LSN)
 }
 
 void 
-TryRpcKvRead(_Page& _return, Oid spcNode, Oid _dbNode, Oid _relNode, ForkNumber forknum, 
+TryRpcKvRead(char * buf, Oid spcNode, Oid _dbNode, Oid _relNode, ForkNumber forknum, 
 BlockNumber blocknum, XLogRecPtr LSN)
 {
 	int trycount=0;
 	int maxcount=3;
+	_Page _return;
 	_Oid _spcNode = spcNode;
     _Oid _dbNode = dbNode;
     _Oid _relNode = relNode;
@@ -135,6 +136,7 @@ BlockNumber blocknum, XLogRecPtr LSN)
 			printf("Try again %d\n", trycount);
 		}
 	}while(trycount < maxcount);
+	_return.copy(buf, BLCKSZ);
 }
 
 void

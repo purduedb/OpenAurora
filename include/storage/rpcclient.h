@@ -24,7 +24,7 @@ extern "C" {
 #endif
 extern int64_t TryRpcKvNblocks(char * key, XLogRecPtr LSN);
 
-extern void TryRpcKvRead(_Page& _return, Oid spcNode, 
+extern void TryRpcKvRead(char * buf, Oid spcNode, 
 Oid _dbNode, Oid _relNode, ForkNumber forknum, 
 BlockNumber blocknum, XLogRecPtr LSN);
 

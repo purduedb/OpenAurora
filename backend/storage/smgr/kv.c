@@ -16,6 +16,7 @@
 #include "storage/fd.h"
 #include "storage/kv.h"
 #include "storage/kvstore.h"
+#include "storage/rpcclient.h"
 #include "storage/relfilenode.h"
 #include "storage/smgr.h"
 #include "storage/sync.h"
@@ -532,14 +533,9 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     snprintf(kvPageKey, sizeof(kvPageKey), KV_GET_FILE_PAGE, path, blocknum);
     if ( KvGet(kvPageKey, &buffer) ) {
         /*fail to read*/
-        if (isComp) {
-            _Page _page;
-
-            TryRpcKvRead(_page, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+        if (isComp)
+            TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
              reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
-
-            _page.copy(buffer, BLCKSZ);
-        }
         else
         ereport(ERROR,
                 (errcode(ERRCODE_WINDOWING_ERROR),
