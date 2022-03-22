@@ -60,64 +60,43 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _fd
+   * @param _path
+   * @param upperLSN
+   * @param lowerLSN
    */
-  void RpcFileClose(const _File _fd) {
-    FileClose(_fd);
-    std::cout << "RpcFileClose" << std::endl;
+  int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN) {
+    char kvNumKey[MAXPGPATH];
+    XLogRecPtr LSN = (((uint64_t)upperLSN) << 32) | ((uint64_t)lowerLSN); 
+    BlockNumber totalPageNum = 0;
+    int err = 0;
+
+    _path.copy(kvNumKey, _path.size());
+
+    err = KvGetInt(kvNumKey, &totalPageNum);
+    if (err == -1)
+      return -1;
+    else
+      return (int64_t)totalPageNum;
+    std::cout << "RpcKvNblocks" << std::endl;
   }
 
-  void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
-    Oid spcnode = _spcnode;
-    Oid dbnode = _dbnode;
-    TablespaceCreateDbspace(spcnode, dbnode, isRedo);
-    std::cout << "RpcTablespaceCreateDbspace" << std::endl;
-  }
-
-  _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
-    char		path[MAXPGPATH];
-		std::size_t length = _path.copy(path, _path.size());
-		path[length] = '\0';
-
-    std::cout << "RpcPathNameOpenFile" << std::endl;
-
-    return PathNameOpenFile(path, _flag);
-  }
-
-  int32_t RpcFileWrite(const _File _fd, const _Page& _page, const _Off_t _seekpos) {
-    char  buf[BLCKSZ];
-    _page.copy(buf, BLCKSZ);
-
-    std::cout << "RpcFileWrite" << std::endl;
-
-    return FileWrite(_fd, buf, BLCKSZ, _seekpos, WAIT_EVENT_DATA_FILE_EXTEND);
-  }
-
-  void RpcFilePathName(_Path& _return, const _File _fd) {
-    char	*path = FilePathName(_fd);
-    _return.assign(path);
-
-    std::cout << "RpcFilePathName" << std::endl;
-  }
-
-  void RpcFileRead(_Page& _return, const _File _fd, const _Off_t _seekpos) {
+  void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, 
+  const _Oid _relNode, const int32_t fork, const int64_t block, 
+  const int64_t upperLSN, const int64_t lowerLSN) {
+    RelFileNode rnode;
+    rnode.spcNode = (Oid)_spcNode;
+    rnode.dbNode = (Oid)_dbNode;
+    rnode.relNode = (Oid)_relNode;
+    XLogRecPtr LSN = (((uint64_t)upperLSN) << 32) | ((uint64_t)lowerLSN); 
     char buf[BLCKSZ];
-    FileRead(_fd, buf, BLCKSZ, _seekpos, WAIT_EVENT_DATA_FILE_READ);
+
+    SMgrRelation rel = smgropen(rnode, InvalidBackendId);
+
+    smgrread(rel, (ForkNumber)fork, (BlockNumber)block, buf);
+
     _return.assign(buf, BLCKSZ);
-
-    std::cout << "RpcFileRead" << std::endl;
-  }
-
-  int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
-    std::cout << "RpcFileTruncate" << std::endl;
-
-    return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
-  }
-
-  _Off_t RpcFileSize(const _File _fd) {
-    std::cout << "RpcFileSize" << std::endl;
-
-    return FileSize(_fd);
+    
+    std::cout << "RpcKvRead" << std::endl;
   }
 
   void RpcInitFile(_Page& _return, const _Path& _path) {

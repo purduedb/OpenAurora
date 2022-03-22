@@ -30,6 +30,8 @@ typedef struct _MdfdVec
 
 static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 
+static bool isComp = false;
+
 /* Populate a file tag describing an md.c segment file. */
 #define INIT_KV_FILETAG(a,xx_rnode,xx_forknum,xx_segno) \
 ( \
@@ -84,6 +86,7 @@ kvinit(void)
         KV_GET_FILE_PAGE = "cli_kv_get_%s_%d"; //(filename, pageid) -> page
         KV_FILE_PAGE_NUM_PREFIX = "cli_kv_file_page_num_\0";//filename -> how many pages
         KV_GET_FILE_PAGE_PREFIX = "cli_kv_get_\0"; //(filename, pageid) -> page
+        isComp = true;
     }
     MdCxt = AllocSetContextCreate(TopMemoryContext,
                                   "KvSmgr",
@@ -94,13 +97,14 @@ kvinit(void)
 BlockNumber
 kvnblocks(SMgrRelation reln, ForkNumber forknum)
 {
+/*A totally read function. Try to read from Stor if fail in Comp. Rpc input kvNumKey, output totalPageNum or err*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvnblocks start\n")));
 //    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 
     char *path;
-    int totalPageNum = 0;
+    BlockNumber totalPageNum = 0;
     char kvNumKey[MAXPGPATH];
     int err = 0;
 
@@ -110,7 +114,21 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 
     err = KvGetInt(kvNumKey, &totalPageNum);
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
-        return -1;
+        if (isComp)
+        {
+            int64_t result;
+            result = TryRpcKvNblocks(kvNumKey, 0);  //-1 for err
+            if (result == -1)
+                ereport(ERROR,
+                (errcode(ERRCODE_WINDOWING_ERROR),
+                        errmsg("[kvnblocks] Stor KvGetInt failed")));
+            totalPageNum = (BlockNumber)result;
+        }
+            
+        else
+            ereport(ERROR,
+                (errcode(ERRCODE_WINDOWING_ERROR),
+                        errmsg("[kvnblocks] KvGetInt failed")));
     }
 //    if (err != 0) {
 //        ereport(ERROR,
@@ -131,6 +149,8 @@ kvcopydb(char *srcPath, char*dstPath) {
 void
 kvopen(SMgrRelation reln)
 {
+/* Open function is a part initialization of smgropen. Struct SMgrRelation should serve for one node since 
+there is a SmgrRelation hashmap.*/
     /* mark it not open */
     for (int forknum = 0; forknum <= MAX_FORKNUM; forknum++)
         reln->md_num_open_segs[forknum] = 0;
@@ -139,6 +159,7 @@ kvopen(SMgrRelation reln)
 bool
 kvexists(SMgrRelation reln, ForkNumber forkNum)
 {
+/*Rely on kvnblocks.*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvexists start\n")));
@@ -186,6 +207,7 @@ kvexists(SMgrRelation reln, ForkNumber forkNum)
 void
 kvclose(SMgrRelation reln, ForkNumber forknum)
 {
+/*Is it a good choice to delete files in KV when a relation is totally closed?*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvclose start\n")));
@@ -197,7 +219,7 @@ kvclose(SMgrRelation reln, ForkNumber forknum)
 void
 kvcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
-
+/*Only need to create a new file in Comp, smgr xlogs serve the Stor. But what if we find that key exist when we redo?*/
 //    printf("[kvcreate] dbNum = %d, relNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode);
     MdfdVec    *mdfd;
     char	   *filename;
@@ -230,6 +252,7 @@ kvcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 void
 kvunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 {
+/*Only unlink KV locally. Comp will unlink files in Comp, and Stor will unlink files in redo*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvunlink start\n")));
@@ -321,6 +344,7 @@ void
 kvextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
          char *buffer, bool skipFsync)
 {
+/*Extend locally. Stor will extend when the target page does not exist in ReadBufferForReplay_common.*/
 //    printf("[kvextend] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
     char *path;
     path = relpath(reln->smgr_rnode, forknum);
@@ -450,6 +474,7 @@ void
 kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer)
 {
+/*Read locally, and try to read from Stor if fail. We need to read through Buffer so a SMgrRelation should be reconstruct.*/
 //    printf("[kvread] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
@@ -506,6 +531,16 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     // Get page from kv
     snprintf(kvPageKey, sizeof(kvPageKey), KV_GET_FILE_PAGE, path, blocknum);
     if ( KvGet(kvPageKey, &buffer) ) {
+        /*fail to read*/
+        if (isComp) {
+            _Page _page;
+
+            TryRpcKvRead(_page, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+             reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
+
+            _page.copy(buffer, BLCKSZ);
+        }
+        else
         ereport(ERROR,
                 (errcode(ERRCODE_WINDOWING_ERROR),
                         errmsg("[kvread] KvGet failed")));
@@ -519,6 +554,7 @@ void
 kvwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         char *buffer, bool skipFsync)
 {
+/*Write locally.*/
 //    printf("[kvwrite] dbNum = %d   relNum = %d  blockNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
 
     char *path;
@@ -599,6 +635,7 @@ kvwriteback(SMgrRelation reln, ForkNumber forknum,
 void
 kvtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+/*truncate locally*/
 //    printf("[kvtruncate] dbNum = %d, relNum = %d, nBlocks = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, nblocks);
 
     char *path;

@@ -93,21 +93,9 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
-   void RpcFileClose(1:_File _fd),
+   i64 RpcKvNblocks(1:_Path _path, 2:i64 upperLSN, 3:i64 lowerLSN),
 
-   void RpcTablespaceCreateDbspace(1:_Oid _spcnode, 2:_Oid _dbnode 3:bool isRedo),
-
-   _File RpcPathNameOpenFile(1:_Path _path, 2:_Flag _flag),
-
-   i32 RpcFileWrite(1:_File _fd, 2:_Page _page, 3:_Off_t _seekpos),
-
-   _Path RpcFilePathName(1:_File _fd),
-
-   _Page RpcFileRead(1:_File _fd, 2:_Off_t _seekpos),
-
-   i32 RpcFileTruncate(1:_File _fd, 2:_Off_t _offset),
-
-   _Off_t RpcFileSize(1:_File _fd),
+   _Page RpcKvRead(1:_Oid _spcNode, 2:_Oid _dbNode, 3:_Oid _relNode, 4:i32 fork, 5:i64 block, 6:i64 upperLSN,7:i64 lowerLSN),
 
    _Page RpcInitFile(1:_Path _path),
 

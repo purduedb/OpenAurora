@@ -22,33 +22,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+extern int64_t TryRpcKvNblocks(char * key, XLogRecPtr LSN);
 
-extern void rpcinit(void);
-
-extern void rpcshutdown(void);
-
-extern void rpcopen(SMgrRelation reln);
-
-extern void rpcclose(SMgrRelation reln, ForkNumber forknum);
-
-extern void rpccreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo);
-
-extern bool rpcexists(SMgrRelation reln, ForkNumber forkNum);
-
-extern void rpcunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo);
-
-extern void rpcextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
-		 char *buffer, bool skipFsync);
-
-extern void rpcread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
-	   char *buffer);
-
-extern void rpcwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
-		char *buffer, bool skipFsync);
-
-extern BlockNumber rpcnblocks(SMgrRelation reln, ForkNumber forknum);
-
-extern void rpctruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks);
+extern void TryRpcKvRead(_Page& _return, Oid spcNode, 
+Oid _dbNode, Oid _relNode, ForkNumber forknum, 
+BlockNumber blocknum, XLogRecPtr LSN);
 
 extern void rpcinitfile(char * db_dir_raw, char * fp);
 
