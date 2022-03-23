@@ -35,6 +35,8 @@
 #include "storage/md.h"
 #include "storage/rpcserver.h"
 #include "storage/relfilenode.h"
+#include "storage/kv.h"
+#include "storage/kvstore.h"
 #include "storage/smgr.h"
 #include "storage/sync.h"
 #include "utils/hsearch.h"
@@ -60,24 +62,34 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _path
+   * @param _spcNode
+   * @param _dbNode
+   * @param _relNode
+   * @param fork
    * @param upperLSN
    * @param lowerLSN
    */
-  int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN) {
+  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN) {
+    char *path;
+    RelFileNodeBackend brnode;
+    brnode.backend = InvalidBackendId;
+    brnode.node.spcNode = (Oid)_spcNode;
+    brnode.node.dbNode = (Oid)_dbNode;
+    brnode.node.relNode = (Oid)_relNode;
+    int totalPageNum = 0;
     char kvNumKey[MAXPGPATH];
-    XLogRecPtr LSN = (((uint64_t)upperLSN) << 32) | ((uint64_t)lowerLSN); 
-    BlockNumber totalPageNum = 0;
     int err = 0;
 
-    _path.copy(kvNumKey, _path.size());
+    path = relpath(brnode, (ForkNumber)fork);
+    snprintf(kvNumKey, sizeof(kvNumKey), KV_FILE_PAGE_NUM, path);
+    pfree(path);
 
     err = KvGetInt(kvNumKey, &totalPageNum);
-    if (err == -1)
+    if (err == -1)  // err==-1 means $kvNumKey doesn't exist in kv_store
       return -1;
-    else
-      return (int64_t)totalPageNum;
+
     std::cout << "RpcKvNblocks" << std::endl;
+    return totalPageNum;
   }
 
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, 

@@ -74,20 +74,30 @@ DataPageAccessClient *client;
 
 void TryRpcInitFile(_Page& _return, _Path& _path);
 
+void RpcInit()
+{
+	rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+	rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
+	rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
+	client = new DataPageAccessClient(rpcprotocol);
+}
+
 int64_t 
-TryRpcKvNblocks(char * key, XLogRecPtr LSN)
+TryRpcKvNblocks(Oid spcNode, Oid dbNode, Oid relNode, ForkNumber forknum, XLogRecPtr LSN)
 {
 	int trycount=0;
 	int maxcount=3;
-	_Path keystring;
+	_Oid _spcNode = spcNode;
+    _Oid _dbNode = dbNode;
+    _Oid _relNode = relNode;
 	int64_t upperLSN = LSN >> 32;
 	int64_t lowerLSN = LSN & 0x00000000ffffffff;
 	int64_t	result;
-	keystring.assign(key);
 	do{
 		try{
 			rpctransport->open();
-			result = client->RpcKvNblocks(keystring, upperLSN, lowerLSN);
+			result = client->RpcKvNblocks(_spcNode, _dbNode, _relNode, 
+			(int32_t)forknum, upperLSN, lowerLSN);
 			rpctransport->close();
 			trycount=maxcount;
 		}catch(TException& tx){
@@ -106,7 +116,7 @@ TryRpcKvNblocks(char * key, XLogRecPtr LSN)
 }
 
 void 
-TryRpcKvRead(char * buf, Oid spcNode, Oid _dbNode, Oid _relNode, ForkNumber forknum, 
+TryRpcKvRead(char * buf, Oid spcNode, Oid dbNode, Oid relNode, ForkNumber forknum, 
 BlockNumber blocknum, XLogRecPtr LSN)
 {
 	int trycount=0;

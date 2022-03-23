@@ -93,7 +93,7 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
-   i64 RpcKvNblocks(1:_Path _path, 2:i64 upperLSN, 3:i64 lowerLSN),
+   i64 RpcKvNblocks(1:_Oid _spcNode, 2:_Oid _dbNode, 3:_Oid _relNode, 4:i32 fork, 5:i64 upperLSN, 6:i64 lowerLSN),
 
    _Page RpcKvRead(1:_Oid _spcNode, 2:_Oid _dbNode, 3:_Oid _relNode, 4:i32 fork, 5:i64 block, 6:i64 upperLSN,7:i64 lowerLSN),
 

@@ -83,6 +83,7 @@ kvinit(void)
     char		path[MAXPGPATH];
     snprintf(path, sizeof(path), "%s/client.signal", DataDir);
     if (access(path, F_OK) == 0) {
+        RpcInit();
         KV_FILE_PAGE_NUM = "cli_kv_file_page_num_%s";//filename -> how many pages
         KV_GET_FILE_PAGE = "cli_kv_get_%s_%d"; //(filename, pageid) -> page
         KV_FILE_PAGE_NUM_PREFIX = "cli_kv_file_page_num_\0";//filename -> how many pages
@@ -105,7 +106,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 //    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 
     char *path;
-    BlockNumber totalPageNum = 0;
+    int totalPageNum = 0;
     char kvNumKey[MAXPGPATH];
     int err = 0;
 
@@ -116,20 +117,10 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
     err = KvGetInt(kvNumKey, &totalPageNum);
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
         if (isComp)
-        {
-            int64_t result;
-            result = TryRpcKvNblocks(kvNumKey, 0);  //-1 for err
-            if (result == -1)
-                ereport(ERROR,
-                (errcode(ERRCODE_WINDOWING_ERROR),
-                        errmsg("[kvnblocks] Stor KvGetInt failed")));
-            totalPageNum = (BlockNumber)result;
-        }
-            
+            return TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+             reln->smgr_rnode.node.relNode, forknum, 0);  //-1 for err  
         else
-            ereport(ERROR,
-                (errcode(ERRCODE_WINDOWING_ERROR),
-                        errmsg("[kvnblocks] KvGetInt failed")));
+            return -1;
     }
 //    if (err != 0) {
 //        ereport(ERROR,

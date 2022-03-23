@@ -35,14 +35,38 @@ uint32_t DataPageAccess_RpcKvNblocks_args::read(::apache::thrift::protocol::TPro
     switch (fid)
     {
       case 1:
-        if (ftype == ::apache::thrift::protocol::T_STRING) {
-          xfer += iprot->readBinary(this->_path);
-          this->__isset._path = true;
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_spcNode);
+          this->__isset._spcNode = true;
         } else {
           xfer += iprot->skip(ftype);
         }
         break;
       case 2:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_dbNode);
+          this->__isset._dbNode = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 3:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_relNode);
+          this->__isset._relNode = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->fork);
+          this->__isset.fork = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 5:
         if (ftype == ::apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->upperLSN);
           this->__isset.upperLSN = true;
@@ -50,7 +74,7 @@ uint32_t DataPageAccess_RpcKvNblocks_args::read(::apache::thrift::protocol::TPro
           xfer += iprot->skip(ftype);
         }
         break;
-      case 3:
+      case 6:
         if (ftype == ::apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->lowerLSN);
           this->__isset.lowerLSN = true;
@@ -75,15 +99,27 @@ uint32_t DataPageAccess_RpcKvNblocks_args::write(::apache::thrift::protocol::TPr
   ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DataPageAccess_RpcKvNblocks_args");
 
-  xfer += oprot->writeFieldBegin("_path", ::apache::thrift::protocol::T_STRING, 1);
-  xfer += oprot->writeBinary(this->_path);
+  xfer += oprot->writeFieldBegin("_spcNode", ::apache::thrift::protocol::T_I64, 1);
+  xfer += oprot->writeI64(this->_spcNode);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("upperLSN", ::apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeFieldBegin("_dbNode", ::apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeI64(this->_dbNode);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_relNode", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeI64(this->_relNode);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("fork", ::apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeI32(this->fork);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("upperLSN", ::apache::thrift::protocol::T_I64, 5);
   xfer += oprot->writeI64(this->upperLSN);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("lowerLSN", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeFieldBegin("lowerLSN", ::apache::thrift::protocol::T_I64, 6);
   xfer += oprot->writeI64(this->lowerLSN);
   xfer += oprot->writeFieldEnd();
 
@@ -102,15 +138,27 @@ uint32_t DataPageAccess_RpcKvNblocks_pargs::write(::apache::thrift::protocol::TP
   ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DataPageAccess_RpcKvNblocks_pargs");
 
-  xfer += oprot->writeFieldBegin("_path", ::apache::thrift::protocol::T_STRING, 1);
-  xfer += oprot->writeBinary((*(this->_path)));
+  xfer += oprot->writeFieldBegin("_spcNode", ::apache::thrift::protocol::T_I64, 1);
+  xfer += oprot->writeI64((*(this->_spcNode)));
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("upperLSN", ::apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeFieldBegin("_dbNode", ::apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeI64((*(this->_dbNode)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_relNode", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeI64((*(this->_relNode)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("fork", ::apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeI32((*(this->fork)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("upperLSN", ::apache::thrift::protocol::T_I64, 5);
   xfer += oprot->writeI64((*(this->upperLSN)));
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("lowerLSN", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeFieldBegin("lowerLSN", ::apache::thrift::protocol::T_I64, 6);
   xfer += oprot->writeI64((*(this->lowerLSN)));
   xfer += oprot->writeFieldEnd();
 
@@ -1536,19 +1584,22 @@ uint32_t DataPageAccess_zip_pargs::write(::apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
-int64_t DataPageAccessClient::RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN)
+int64_t DataPageAccessClient::RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN)
 {
-  send_RpcKvNblocks(_path, upperLSN, lowerLSN);
+  send_RpcKvNblocks(_spcNode, _dbNode, _relNode, fork, upperLSN, lowerLSN);
   return recv_RpcKvNblocks();
 }
 
-void DataPageAccessClient::send_RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN)
+void DataPageAccessClient::send_RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcKvNblocks", ::apache::thrift::protocol::T_CALL, cseqid);
 
   DataPageAccess_RpcKvNblocks_pargs args;
-  args._path = &_path;
+  args._spcNode = &_spcNode;
+  args._dbNode = &_dbNode;
+  args._relNode = &_relNode;
+  args.fork = &fork;
   args.upperLSN = &upperLSN;
   args.lowerLSN = &lowerLSN;
   args.write(oprot_);
@@ -2009,7 +2060,7 @@ void DataPageAccessProcessor::process_RpcKvNblocks(int32_t seqid, ::apache::thri
 
   DataPageAccess_RpcKvNblocks_result result;
   try {
-    result.success = iface_->RpcKvNblocks(args._path, args.upperLSN, args.lowerLSN);
+    result.success = iface_->RpcKvNblocks(args._spcNode, args._dbNode, args._relNode, args.fork, args.upperLSN, args.lowerLSN);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
@@ -2407,20 +2458,23 @@ void DataPageAccessProcessor::process_zip(int32_t, ::apache::thrift::protocol::T
   return processor;
 }
 
-int64_t DataPageAccessConcurrentClient::RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN)
+int64_t DataPageAccessConcurrentClient::RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN)
 {
-  int32_t seqid = send_RpcKvNblocks(_path, upperLSN, lowerLSN);
+  int32_t seqid = send_RpcKvNblocks(_spcNode, _dbNode, _relNode, fork, upperLSN, lowerLSN);
   return recv_RpcKvNblocks(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN)
+int32_t DataPageAccessConcurrentClient::send_RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
   oprot_->writeMessageBegin("RpcKvNblocks", ::apache::thrift::protocol::T_CALL, cseqid);
 
   DataPageAccess_RpcKvNblocks_pargs args;
-  args._path = &_path;
+  args._spcNode = &_spcNode;
+  args._dbNode = &_dbNode;
+  args._relNode = &_relNode;
+  args.fork = &fork;
   args.upperLSN = &upperLSN;
   args.lowerLSN = &lowerLSN;
   args.write(oprot_);

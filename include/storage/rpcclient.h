@@ -22,10 +22,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern int64_t TryRpcKvNblocks(char * key, XLogRecPtr LSN);
+
+extern void RpcInit();
+
+extern int64_t TryRpcKvNblocks(Oid spcNode, Oid dbNode,
+ Oid relNode, ForkNumber forknum, XLogRecPtr LSN);
 
 extern void TryRpcKvRead(char * buf, Oid spcNode, 
-Oid _dbNode, Oid _relNode, ForkNumber forknum, 
+Oid dbNode, Oid relNode, ForkNumber forknum, 
 BlockNumber blocknum, XLogRecPtr LSN);
 
 extern void rpcinitfile(char * db_dir_raw, char * fp);

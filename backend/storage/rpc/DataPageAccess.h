@@ -35,11 +35,14 @@ class DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _path
+   * @param _spcNode
+   * @param _dbNode
+   * @param _relNode
+   * @param fork
    * @param upperLSN
    * @param lowerLSN
    */
-  virtual int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN) = 0;
+  virtual int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN) = 0;
   virtual void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN) = 0;
   virtual void RpcInitFile(_Page& _return, const _Path& _path) = 0;
   virtual _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) = 0;
@@ -82,7 +85,7 @@ class DataPageAccessIfSingletonFactory : virtual public DataPageAccessIfFactory 
 class DataPageAccessNull : virtual public DataPageAccessIf {
  public:
   virtual ~DataPageAccessNull() {}
-  int64_t RpcKvNblocks(const _Path& /* _path */, const int64_t /* upperLSN */, const int64_t /* lowerLSN */) {
+  int64_t RpcKvNblocks(const _Oid /* _spcNode */, const _Oid /* _dbNode */, const _Oid /* _relNode */, const int32_t /* fork */, const int64_t /* upperLSN */, const int64_t /* lowerLSN */) {
     int64_t _return = 0;
     return _return;
   }
@@ -112,8 +115,11 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
 };
 
 typedef struct _DataPageAccess_RpcKvNblocks_args__isset {
-  _DataPageAccess_RpcKvNblocks_args__isset() : _path(false), upperLSN(false), lowerLSN(false) {}
-  bool _path :1;
+  _DataPageAccess_RpcKvNblocks_args__isset() : _spcNode(false), _dbNode(false), _relNode(false), fork(false), upperLSN(false), lowerLSN(false) {}
+  bool _spcNode :1;
+  bool _dbNode :1;
+  bool _relNode :1;
+  bool fork :1;
   bool upperLSN :1;
   bool lowerLSN :1;
 } _DataPageAccess_RpcKvNblocks_args__isset;
@@ -123,17 +129,26 @@ class DataPageAccess_RpcKvNblocks_args {
 
   DataPageAccess_RpcKvNblocks_args(const DataPageAccess_RpcKvNblocks_args&);
   DataPageAccess_RpcKvNblocks_args& operator=(const DataPageAccess_RpcKvNblocks_args&);
-  DataPageAccess_RpcKvNblocks_args() : _path(), upperLSN(0), lowerLSN(0) {
+  DataPageAccess_RpcKvNblocks_args() : _spcNode(0), _dbNode(0), _relNode(0), fork(0), upperLSN(0), lowerLSN(0) {
   }
 
   virtual ~DataPageAccess_RpcKvNblocks_args() noexcept;
-  _Path _path;
+  _Oid _spcNode;
+  _Oid _dbNode;
+  _Oid _relNode;
+  int32_t fork;
   int64_t upperLSN;
   int64_t lowerLSN;
 
   _DataPageAccess_RpcKvNblocks_args__isset __isset;
 
-  void __set__path(const _Path& val);
+  void __set__spcNode(const _Oid val);
+
+  void __set__dbNode(const _Oid val);
+
+  void __set__relNode(const _Oid val);
+
+  void __set_fork(const int32_t val);
 
   void __set_upperLSN(const int64_t val);
 
@@ -141,7 +156,13 @@ class DataPageAccess_RpcKvNblocks_args {
 
   bool operator == (const DataPageAccess_RpcKvNblocks_args & rhs) const
   {
-    if (!(_path == rhs._path))
+    if (!(_spcNode == rhs._spcNode))
+      return false;
+    if (!(_dbNode == rhs._dbNode))
+      return false;
+    if (!(_relNode == rhs._relNode))
+      return false;
+    if (!(fork == rhs.fork))
       return false;
     if (!(upperLSN == rhs.upperLSN))
       return false;
@@ -166,7 +187,10 @@ class DataPageAccess_RpcKvNblocks_pargs {
 
 
   virtual ~DataPageAccess_RpcKvNblocks_pargs() noexcept;
-  const _Path* _path;
+  const _Oid* _spcNode;
+  const _Oid* _dbNode;
+  const _Oid* _relNode;
+  const int32_t* fork;
   const int64_t* upperLSN;
   const int64_t* lowerLSN;
 
@@ -973,12 +997,15 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _path
+   * @param _spcNode
+   * @param _dbNode
+   * @param _relNode
+   * @param fork
    * @param upperLSN
    * @param lowerLSN
    */
-  int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN);
-  void send_RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN);
+  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN);
+  void send_RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN);
   int64_t recv_RpcKvNblocks();
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN);
   void send_RpcKvRead(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN);
@@ -1073,17 +1100,20 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _path
+   * @param _spcNode
+   * @param _dbNode
+   * @param _relNode
+   * @param fork
    * @param upperLSN
    * @param lowerLSN
    */
-  int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN) {
+  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcKvNblocks(_path, upperLSN, lowerLSN);
+      ifaces_[i]->RpcKvNblocks(_spcNode, _dbNode, _relNode, fork, upperLSN, lowerLSN);
     }
-    return ifaces_[i]->RpcKvNblocks(_path, upperLSN, lowerLSN);
+    return ifaces_[i]->RpcKvNblocks(_spcNode, _dbNode, _relNode, fork, upperLSN, lowerLSN);
   }
 
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN) {
@@ -1195,12 +1225,15 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
    * lists and exception lists are specified using the exact same syntax as
    * field lists in struct or exception definitions.
    * 
-   * @param _path
+   * @param _spcNode
+   * @param _dbNode
+   * @param _relNode
+   * @param fork
    * @param upperLSN
    * @param lowerLSN
    */
-  int64_t RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN);
-  int32_t send_RpcKvNblocks(const _Path& _path, const int64_t upperLSN, const int64_t lowerLSN);
+  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN);
+  int32_t send_RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN);
   int64_t recv_RpcKvNblocks(const int32_t seqid);
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN);
   int32_t send_RpcKvRead(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t block, const int64_t upperLSN, const int64_t lowerLSN);
