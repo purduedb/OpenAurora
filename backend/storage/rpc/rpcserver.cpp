@@ -69,27 +69,18 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * @param upperLSN
    * @param lowerLSN
    */
-  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, const _Oid _relNode, const int32_t fork, const int64_t upperLSN, const int64_t lowerLSN) {
-    char *path;
-    RelFileNodeBackend brnode;
-    brnode.backend = InvalidBackendId;
-    brnode.node.spcNode = (Oid)_spcNode;
-    brnode.node.dbNode = (Oid)_dbNode;
-    brnode.node.relNode = (Oid)_relNode;
-    int totalPageNum = 0;
-    char kvNumKey[MAXPGPATH];
-    int err = 0;
+  int64_t RpcKvNblocks(const _Oid _spcNode, const _Oid _dbNode, 
+  const _Oid _relNode, const int32_t fork, const int64_t upperLSN, 
+  const int64_t lowerLSN) {
+    RelFileNode rnode;
+    rnode.spcNode = (Oid)_spcNode;
+    rnode.dbNode = (Oid)_dbNode;
+    rnode.relNode = (Oid)_relNode;
 
-    path = relpath(brnode, (ForkNumber)fork);
-    snprintf(kvNumKey, sizeof(kvNumKey), KV_FILE_PAGE_NUM, path);
-    pfree(path);
-
-    err = KvGetInt(kvNumKey, &totalPageNum);
-    if (err == -1)  // err==-1 means $kvNumKey doesn't exist in kv_store
-      return -1;
+    SMgrRelation rel = smgropen(rnode, InvalidBackendId);
 
     std::cout << "RpcKvNblocks" << std::endl;
-    return totalPageNum;
+    return smgrnblocks(rel, (ForkNumber)fork);
   }
 
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, 
