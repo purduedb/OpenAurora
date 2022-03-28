@@ -522,15 +522,18 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
     // Get page from kv
     snprintf(kvPageKey, sizeof(kvPageKey), KV_GET_FILE_PAGE, path, blocknum);
-    if ( KvGet(kvPageKey, &buffer) ) {
-        /*fail to read*/
-        if (isComp)
+    
+    char * backup = buffer;
+    err = KvGet(kvPageKey, &backup);
+    if(err != 0)
+        ereport(ERROR,
+                    (errcode(ERRCODE_WINDOWING_ERROR),
+                        errmsg("[kvread] KvGet failed")));
+    if(backup == NULL)
+    {
+        printf("Locally kvread and kVGet fail. read %d\n\n", reln->smgr_rnode.node.relNode);
             TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
              reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
-        else
-        ereport(ERROR,
-                (errcode(ERRCODE_WINDOWING_ERROR),
-                        errmsg("[kvread] KvGet failed")));
     }
 
     pfree(path);
