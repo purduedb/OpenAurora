@@ -77,6 +77,7 @@
 #include <netdb.h>
 #include <limits.h>
 
+
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
@@ -123,6 +124,8 @@
 #include "storage/pg_shmem.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
+#include "storage/rpcclient.h"
+#include "storage/kvstore.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/datetime.h"
@@ -132,6 +135,7 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+
 
 #ifdef EXEC_BACKEND
 #include "storage/spin.h"
@@ -245,12 +249,16 @@ bool		enable_bonjour = false;
 char	   *bonjour_name;
 bool		restart_after_crash = true;
 
+/* start rpc server if true */
+static bool	enable_rpc_server = false;
+
 /* PIDs of special child processes; 0 when not running */
 static pid_t StartupPID = 0,
 			BgWriterPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
 			WalReceiverPID = 0,
+			RpcServerPID = 0,
 			AutoVacPID = 0,
 			PgArchPID = 0,
 			PgStatPID = 0,
@@ -437,6 +445,8 @@ static pid_t StartChildProcess(AuxProcType type);
 static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
 static void InitPostmasterDeathWatchHandle(void);
+static void maybe_storage_node(char *);
+static void rpc_init_file(char *);
 
 /*
  * Archiver is allowed to start up at the current postmaster state?
@@ -555,6 +565,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
 #define StartCheckpointer()		StartChildProcess(CheckpointerProcess)
 #define StartWalWriter()		StartChildProcess(WalWriterProcess)
 #define StartWalReceiver()		StartChildProcess(WalReceiverProcess)
+#define StartRpcServer()		StartChildProcess(RpcServerProcess)
 
 /* Macros to check exit status of a child process */
 #define EXIT_STATUS_0(st)  ((st) == 0)
@@ -874,12 +885,28 @@ PostmasterMain(int argc, char *argv[])
 		ExitPostmaster(1);
 	}
 
+	/* a storage node ? */
+    if(userDoption != NULL)
+	    maybe_storage_node(userDoption);
+    else
+        maybe_storage_node(NULL);
+
+	if(!enable_rpc_server)
+	{
+		if(userDoption != NULL)
+			rpc_init_file(userDoption);
+		else
+			rpc_init_file(NULL);
+	}
+		
+
 	/*
 	 * Locate the proper configuration files and data directory, and read
 	 * postgresql.conf for the first time.
 	 */
 	if (!SelectConfigFiles(userDoption, progname))
 		ExitPostmaster(2);
+
 
 	if (output_config_variable != NULL)
 	{
@@ -1414,6 +1441,7 @@ PostmasterMain(int argc, char *argv[])
 	/*
 	 * ServerLoop probably shouldn't ever return, but if it does, close down.
 	 */
+    KvClose();
 	ExitPostmaster(status != STATUS_OK);
 
 	abort();					/* not reached */
@@ -1753,13 +1781,15 @@ ServerLoop(void)
 		if (SysLoggerPID == 0 && Logging_collector)
 			SysLoggerPID = SysLogger_Start();
 
+
+
 		/*
 		 * If no background writer process is running, and we are not in a
 		 * state that prevents it, start one.  It doesn't matter if this
 		 * fails, we'll just try again later.  Likewise for the checkpointer.
 		 */
-		if (pmState == PM_RUN || pmState == PM_RECOVERY ||
-			pmState == PM_HOT_STANDBY)
+		if (enable_rpc_server &&
+                (pmState == PM_RUN || pmState == PM_RECOVERY || pmState == PM_HOT_STANDBY))
 		{
 			if (CheckpointerPID == 0)
 				CheckpointerPID = StartCheckpointer();
@@ -1772,8 +1802,11 @@ ServerLoop(void)
 		 * one.  But this is needed only in normal operation (else we cannot
 		 * be writing any new WAL).
 		 */
-		if (WalWriterPID == 0 && pmState == PM_RUN)
+		if (enable_rpc_server && WalWriterPID == 0 && pmState == PM_RUN)
 			WalWriterPID = StartWalWriter();
+
+		if (RpcServerPID == 0 && enable_rpc_server == true)
+			RpcServerPID = StartRpcServer();
 
 		/*
 		 * If we have lost the autovacuum launcher, try to start a new one. We
@@ -1781,7 +1814,8 @@ ServerLoop(void)
 		 * autovacuum might update relfrozenxid for empty tables before the
 		 * physical files are put in place.
 		 */
-		if (!IsBinaryUpgrade && AutoVacPID == 0 &&
+		if (enable_rpc_server &&
+            !IsBinaryUpgrade && AutoVacPID == 0 &&
 			(AutoVacuumingActive() || start_autovac_launcher) &&
 			pmState == PM_RUN)
 		{
@@ -1807,6 +1841,7 @@ ServerLoop(void)
 				kill(AutoVacPID, SIGUSR2);
 		}
 
+        //! Todo
 		/* If we need to start a WAL receiver, try to do that now */
 		if (WalReceiverRequested)
 			MaybeStartWalReceiver();
@@ -2723,8 +2758,9 @@ SIGHUP_handler(SIGNAL_ARGS)
 		if (SysLoggerPID != 0)
 			signal_child(SysLoggerPID, SIGHUP);
 		if (PgStatPID != 0)
-			signal_child(PgStatPID, SIGHUP);
-
+            signal_child(PgStatPID, SIGHUP);
+        if (RpcServerPID != 0)
+            signal_child(RpcServerPID, SIGHUP);
 		/* Reload authentication config files too */
 		if (!load_hba())
 			ereport(LOG,
@@ -3035,11 +3071,11 @@ reaper(SIGNAL_ARGS)
 			 * when we entered consistent recovery state.  It doesn't matter
 			 * if this fails, we'll just try again later.
 			 */
-			if (CheckpointerPID == 0)
+			if (enable_rpc_server && CheckpointerPID == 0)
 				CheckpointerPID = StartCheckpointer();
-			if (BgWriterPID == 0)
+			if (enable_rpc_server && BgWriterPID == 0)
 				BgWriterPID = StartBackgroundWriter();
-			if (WalWriterPID == 0)
+			if (enable_rpc_server && WalWriterPID == 0)
 				WalWriterPID = StartWalWriter();
 
 			/*
@@ -3821,6 +3857,10 @@ PostmasterStateMachine(void)
 			signal_child(StartupPID, SIGTERM);
 		if (WalReceiverPID != 0)
 			signal_child(WalReceiverPID, SIGTERM);
+        ereport(LOG,
+                (errmsg("Trying to stop RpcServer %d", RpcServerPID)));
+        if (RpcServerPID != 0)
+            signal_child(RpcServerPID, SIGKILL);
 		/* checkpointer, archiver, stats, and syslogger may continue for now */
 
 		/* Now transition to PM_WAIT_BACKENDS state to wait for them to die */
@@ -4139,6 +4179,8 @@ TerminateChildren(int signal)
 		signal_child(PgArchPID, signal);
 	if (PgStatPID != 0)
 		signal_child(PgStatPID, signal);
+    if (RpcServerPID != 0)
+        signal_child(RpcServerPID, signal);
 }
 
 /*
@@ -5219,9 +5261,11 @@ sigusr1_handler(SIGNAL_ARGS)
 		 * we'll just try again later.
 		 */
 		Assert(CheckpointerPID == 0);
-		CheckpointerPID = StartCheckpointer();
+        if (enable_rpc_server)
+		    CheckpointerPID = StartCheckpointer();
 		Assert(BgWriterPID == 0);
-		BgWriterPID = StartBackgroundWriter();
+        if (enable_rpc_server)
+		    BgWriterPID = StartBackgroundWriter();
 
 		/*
 		 * Start the archiver if we're responsible for (re-)archiving received
@@ -6670,4 +6714,44 @@ InitPostmasterDeathWatchHandle(void)
 				(errmsg_internal("could not duplicate postmaster handle: error code %lu",
 								 GetLastError())));
 #endif							/* WIN32 */
+}
+
+
+static void 
+maybe_storage_node(char * db_dir_raw)
+{
+
+    char * configdir;
+    if (db_dir_raw != NULL)
+        configdir = make_absolute_path(db_dir_raw);
+    else
+        configdir = make_absolute_path(getenv("PGDATA"));
+
+
+	char		path[MAXPGPATH];
+
+	snprintf(path, sizeof(path), "%s/server.signal", configdir);
+
+	if(access(path, F_OK) == 0)
+		enable_rpc_server = true;
+	
+}
+
+static void
+rpc_init_file(char * db_dir_raw)
+{
+	char * configdir;
+    if (db_dir_raw != NULL)
+        configdir = make_absolute_path(db_dir_raw);
+    else
+        configdir = make_absolute_path(getenv("PGDATA"));
+
+	rpcinitfile(configdir, "PG_VERSION");
+	//rpcinitfile(configdir, "postgresql.conf");
+	//rpcinitfile(configdir, "postgresql.auto.conf");
+	rpcinitfile(configdir, "pg_hba.conf");
+	rpcinitfile(configdir, "pg_ident.conf");
+	rpcinitfile(configdir, "global/pg_control");
+	rpcinitfile(configdir, "global/pg_control/pg_filenode.map");
+	rpcinitfile(configdir, "global/pg_syncconf");
 }

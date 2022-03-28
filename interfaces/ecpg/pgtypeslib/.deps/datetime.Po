@@ -1,0 +1,45 @@
+datetime.o: datetime.c ../../../../src/include/postgres_fe.h \
+  ../../../../src/include/c.h ../../../../src/include/postgres_ext.h \
+  ../../../../src/include/pg_config_ext.h \
+  ../../../../src/include/pg_config.h \
+  ../../../../src/include/pg_config_manual.h \
+  ../../../../src/include/pg_config_os.h ../../../../src/include/port.h \
+  ../../../../src/include/common/fe_memutils.h dt.h \
+  ../include/pgtypes_timestamp.h ../include/pgtypes.h \
+  ../include/pgtypes_interval.h ../include/ecpg_config.h \
+  ../include/pgtypes_date.h ../include/pgtypes_error.h \
+  pgtypeslib_extern.h
+
+../../../../src/include/postgres_fe.h:
+
+../../../../src/include/c.h:
+
+../../../../src/include/postgres_ext.h:
+
+../../../../src/include/pg_config_ext.h:
+
+../../../../src/include/pg_config.h:
+
+../../../../src/include/pg_config_manual.h:
+
+../../../../src/include/pg_config_os.h:
+
+../../../../src/include/port.h:
+
+../../../../src/include/common/fe_memutils.h:
+
+dt.h:
+
+../include/pgtypes_timestamp.h:
+
+../include/pgtypes.h:
+
+../include/pgtypes_interval.h:
+
+../include/ecpg_config.h:
+
+../include/pgtypes_date.h:
+
+../include/pgtypes_error.h:
+
+pgtypeslib_extern.h:

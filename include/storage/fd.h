@@ -71,6 +71,10 @@ extern int	max_safe_fds;
 #define FILE_POSSIBLY_DELETED(err)	((err) == ENOENT || (err) == EACCES)
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * prototypes for functions in fd.c
  */
@@ -82,8 +86,8 @@ extern File OpenTemporaryFile(bool interXact);
 extern void FileClose(File file);
 extern int	FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info);
 extern int	FileRead(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
-extern int	FileWrite(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
 extern int	FileSync(File file, uint32 wait_event_info);
+extern int	FileWrite(File file, char *buffer, int amount, off_t offset, uint32 wait_event_info);
 extern off_t FileSize(File file);
 extern int	FileTruncate(File file, off_t offset, uint32 wait_event_info);
 extern void FileWriteback(File file, off_t offset, off_t nbytes, uint32 wait_event_info);
@@ -99,22 +103,22 @@ extern bool PathNameDeleteTemporaryFile(const char *name, bool error_on_failure)
 extern void PathNameCreateTemporaryDir(const char *base, const char *name);
 extern void PathNameDeleteTemporaryDir(const char *name);
 extern void TempTablespacePath(char *path, Oid tablespace);
-
+ 
 /* Operations that allow use of regular stdio --- USE WITH CAUTION */
 extern FILE *AllocateFile(const char *name, const char *mode);
 extern int	FreeFile(FILE *file);
-
+ 
 /* Operations that allow use of pipe streams (popen/pclose) */
 extern FILE *OpenPipeStream(const char *command, const char *mode);
 extern int	ClosePipeStream(FILE *file);
-
+ 
 /* Operations to allow use of the <dirent.h> library routines */
 extern DIR *AllocateDir(const char *dirname);
 extern struct dirent *ReadDir(DIR *dir, const char *dirname);
 extern struct dirent *ReadDirExtended(DIR *dir, const char *dirname,
-									  int elevel);
+ 									  int elevel);
 extern int	FreeDir(DIR *dir);
-
+ 
 /* Operations to allow use of a plain kernel FD, with automatic cleanup */
 extern int	OpenTransientFile(const char *fileName, int fileFlags);
 extern int	OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode);
@@ -160,6 +164,10 @@ extern int	durable_unlink(const char *fname, int loglevel);
 extern int	durable_rename_excl(const char *oldfile, const char *newfile, int loglevel);
 extern void SyncDataDirectory(void);
 extern int	data_sync_elevel(int elevel);
+
+#ifdef __cplusplus
+}
+#endif
 
 /* Filename components */
 #define PG_TEMP_FILES_DIR "pgsql_tmp"

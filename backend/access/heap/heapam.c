@@ -402,6 +402,7 @@ heapgetpage(TableScanDesc sscan, BlockNumber page)
 	LockBuffer(buffer, BUFFER_LOCK_SHARE);
 
 	dp = BufferGetPage(buffer);
+
 	TestForOldSnapshot(snapshot, scan->rs_base.rs_rd, dp);
 	lines = PageGetMaxOffsetNumber(dp);
 	ntup = 0;
@@ -1980,11 +1981,11 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	}
 
 	END_CRIT_SECTION();
-
-	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
-	sharedpage = BufferGetPage(buffer);
-
-	memcpy(sharedpage, TempPage, BLCKSZ);
+//
+//	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
+//	sharedpage = BufferGetPage(buffer);
+//
+//	memcpy(sharedpage, TempPage, BLCKSZ);
 
 	UnlockReleaseBuffer(buffer);
 	if (vmbuffer != InvalidBuffer)
@@ -2769,11 +2770,11 @@ l1:
 	}
 
 	END_CRIT_SECTION();
-
-	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
-	Page sharedpage = BufferGetPage(buffer);
-
-	memcpy(sharedpage, TempPage, BLCKSZ);
+//
+//	BufferDesc *buf = GetBufferDescriptor(buffer - 1);
+//	Page sharedpage = BufferGetPage(buffer);
+//
+//	memcpy(sharedpage, TempPage, BLCKSZ);
 
 	LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 

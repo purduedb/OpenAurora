@@ -1,0 +1,1 @@
+lwlocknames.o: lwlocknames.c

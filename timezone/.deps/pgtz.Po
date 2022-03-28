@@ -1,0 +1,45 @@
+pgtz.o: pgtz.c ../../src/include/postgres.h ../../src/include/c.h \
+  ../../src/include/postgres_ext.h ../../src/include/pg_config_ext.h \
+  ../../src/include/pg_config.h ../../src/include/pg_config_manual.h \
+  ../../src/include/pg_config_os.h ../../src/include/port.h \
+  ../../src/include/utils/elog.h ../../src/include/utils/errcodes.h \
+  ../../src/include/utils/palloc.h \
+  ../../src/include/datatype/timestamp.h ../../src/include/miscadmin.h \
+  ../../src/include/pgtime.h pgtz.h tzfile.h \
+  ../../src/include/storage/fd.h ../../src/include/utils/hsearch.h
+
+../../src/include/postgres.h:
+
+../../src/include/c.h:
+
+../../src/include/postgres_ext.h:
+
+../../src/include/pg_config_ext.h:
+
+../../src/include/pg_config.h:
+
+../../src/include/pg_config_manual.h:
+
+../../src/include/pg_config_os.h:
+
+../../src/include/port.h:
+
+../../src/include/utils/elog.h:
+
+../../src/include/utils/errcodes.h:
+
+../../src/include/utils/palloc.h:
+
+../../src/include/datatype/timestamp.h:
+
+../../src/include/miscadmin.h:
+
+../../src/include/pgtime.h:
+
+pgtz.h:
+
+tzfile.h:
+
+../../src/include/storage/fd.h:
+
+../../src/include/utils/hsearch.h:

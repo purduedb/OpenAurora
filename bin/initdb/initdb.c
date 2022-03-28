@@ -74,7 +74,6 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 
-
 /* Ideally this would be in a .h file, but it hardly seems worth the trouble */
 extern const char *select_default_timezone(const char *share_path);
 
@@ -113,6 +112,7 @@ static const char *const auth_methods_local[] = {
 #endif
 	NULL
 };
+
 
 /*
  * these values are passed in by makefile defines
@@ -242,6 +242,7 @@ static int	get_encoding_id(const char *encoding_name);
 static void set_input(char **dest, const char *filename);
 static void check_input(char *path);
 static void write_version_file(const char *extrapath);
+static void write_rpcserver_file(void);
 static void set_null_conf(void);
 static void test_config_settings(void);
 static void setup_config(void);
@@ -853,7 +854,31 @@ write_version_file(const char *extrapath)
 		exit(1);
 	}
 	free(path);
+
 }
+
+
+static void
+write_rpcserver_file() {
+    FILE *rpc_server_file;
+    char *path;
+
+    path = psprintf("%s/server.signal", pg_data);
+
+    if ((rpc_server_file = fopen(path, PG_BINARY_W)) == NULL)
+    {
+        pg_log_error("could not open file \"%s\" for writing: %m", path);
+        exit(1);
+    }
+    if (fprintf(rpc_server_file, "%s\n", PG_MAJORVERSION) < 0 ||
+        fclose(rpc_server_file))
+    {
+        pg_log_error("could not write file \"%s\": %m", path);
+        exit(1);
+    }
+    free(path);
+}
+
 
 /*
  * set up an empty config file so we can check config settings by launching
@@ -1071,7 +1096,7 @@ setup_config(void)
 	char		path[MAXPGPATH];
 	char	   *autoconflines[3];
 
-	fputs(_("creating configuration files ... "), stdout);
+    fputs(_("creating configuration files ... "), stdout);
 	fflush(stdout);
 
 	/* postgresql.conf */
@@ -1352,6 +1377,7 @@ setup_config(void)
 
 	check_ok();
 }
+
 
 
 /*
@@ -2712,6 +2738,7 @@ create_data_directory(void)
 			pg_log_error("could not access directory \"%s\": %m", pg_data);
 			exit(1);
 	}
+
 }
 
 
@@ -2839,7 +2866,7 @@ warn_on_mount_point(int error)
 
 
 void
-initialize_data_directory(void)
+    initialize_data_directory(void)
 {
 	PG_CMD_DECL;
 	int			i;
@@ -2858,7 +2885,9 @@ initialize_data_directory(void)
 
 	create_xlog_or_symlink();
 
-	/* Create required subdirectories (other than pg_wal) */
+    write_rpcserver_file();
+
+    /* Create required subdirectories (other than pg_wal) */
 	printf(_("creating subdirectories ... "));
 	fflush(stdout);
 
@@ -2896,10 +2925,10 @@ initialize_data_directory(void)
 	/* Bootstrap template1 */
 	bootstrap_template1();
 
-	/*
-	 * Make the per-database PG_VERSION for template1 only after init'ing it
-	 */
-	write_version_file("base/1");
+    /*
+     * Make the per-database PG_VERSION for template1 only after init'ing it
+     */
+    write_version_file("base/1");
 
 	/*
 	 * Create the stuff we don't need to use bootstrap mode for, using a

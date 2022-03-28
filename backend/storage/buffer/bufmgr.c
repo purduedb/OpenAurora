@@ -716,6 +716,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				  BlockNumber blockNum, ReadBufferMode mode,
 				  BufferAccessStrategy strategy, bool *hit)
 {
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[ReadBuffer_common] dbNode = %d, relNode = %d, forkNum = %d, blockNum = %d, isExtend = %d\n", smgr->smgr_rnode.node.dbNode, smgr->smgr_rnode.node.relNode, forkNum, blockNum, blockNum == P_NEW)));
+
 	BufferDesc *bufHdr;
 	Block		bufBlock;
 	bool		found;
@@ -740,7 +744,11 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	if (isExtend)
 		blockNum = smgrnblocks(smgr, forkNum);
 
-	if (isLocalBuf)
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[ReadBuffer_common] BlockNum = %d\n ", blockNum)));
+
+    if (isLocalBuf)
 	{
 		bufHdr = LocalBufferAlloc(smgr, forkNum, blockNum, &found);
 		if (found)
@@ -773,6 +781,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	/* if it was already in the buffer pool, we're done */
 	if (found)
 	{
+
+//        ereport(NOTICE,
+//                (errcode(ERRCODE_INTERNAL_ERROR),
+//                        errmsg("[ReadBuffer_common]  FOUND ????????????????????\n")));
 		if (!isExtend)
 		{
 			/* Just need to update stats before we exit */
@@ -859,22 +871,28 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		}
 	}
 
-	/*
-	 * if we have gotten to this point, we have allocated a buffer for the
-	 * page but its contents are not yet valid.  IO_IN_PROGRESS is set for it,
-	 * if it's a shared buffer.
-	 *
-	 * Note: if smgrextend fails, we will end up with a buffer that is
-	 * allocated but not marked BM_VALID.  P_NEW will still select the same
-	 * block number (because the relation didn't get any longer on disk) and
-	 * so future attempts to extend the relation will find the same buffer (if
-	 * it's not been recycled) but come right back here to try smgrextend
-	 * again.
-	 */
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[ReadBuffer_common]  Not FOUND!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")));
+
+    /*
+     * if we have gotten to this point, we have allocated a buffer for the
+     * page but its contents are not yet valid.  IO_IN_PROGRESS is set for it,
+     * if it's a shared buffer.
+     *
+     * Note: if smgrextend fails, we will end up with a buffer that is
+     * allocated but not marked BM_VALID.  P_NEW will still select the same
+     * block number (because the relation didn't get any longer on disk) and
+     * so future attempts to extend the relation will find the same buffer (if
+     * it's not been recycled) but come right back here to try smgrextend
+     * again.
+     */
 	Assert(!(pg_atomic_read_u32(&bufHdr->state) & BM_VALID));	/* spinlock not needed */
 
 	bufBlock = isLocalBuf ? LocalBufHdrGetBlock(bufHdr) : BufHdrGetBlock(bufHdr);
-
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[ReadBuffer_common]  isExtend =%d\n", isExtend)));
 	if (isExtend)
 	{
 		/* new buffers are zero-filled */
@@ -915,6 +933,14 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				INSTR_TIME_ADD(pgBufferUsage.blk_read_time, io_time);
 			}
 
+            if (smgr->smgr_rnode.node.relNode == 1260) {
+                PageHeader		dp;
+                dp = (PageHeader) bufBlock;
+                int a = -1, b = -1;
+                b = ((PageHeader) (dp))->pd_lower;
+                a = ((PageHeader) (dp))->pd_lower - SizeOfPageHeaderData;
+                printf("[INON 1] 1260 page :  %d %d!!!!!!!!!!!!!!!!!!!!!!!!\n", b, a);
+            }
 			/* check for garbage data */
 			if (!PageIsVerified((Page) bufBlock, blockNum))
 			{

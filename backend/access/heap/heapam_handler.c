@@ -568,6 +568,9 @@ heapam_relation_set_new_filenode(Relation rel,
 								 TransactionId *freezeXid,
 								 MultiXactId *minmulti)
 {
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Handler]] 1\n\n\n")));
 	SMgrRelation srel;
 
 	/*
@@ -586,9 +589,13 @@ heapam_relation_set_new_filenode(Relation rel,
 	 * XXX this could be refined further, but is it worth the hassle?
 	 */
 	*minmulti = GetOldestMultiXactId();
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Handler]] 2\n\n\n")));
 	srel = RelationCreateStorage(*newrnode, persistence);
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[HEAP Handler]] 3\n\n\n")));
 	/*
 	 * If required, set up an init fork for an unlogged table so that it can
 	 * be correctly reinitialized on restart.  An immediate sync is required

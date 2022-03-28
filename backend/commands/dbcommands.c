@@ -660,6 +660,10 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 			 */
 			copydir(srcpath, dstpath, false);
 
+#ifdef USE_KV_STORE
+            smgrcopydir(srcpath, dstpath);
+#endif
+
 			/* Record the filesystem change in XLOG */
 			{
 				xl_dbase_create_rec xlrec;

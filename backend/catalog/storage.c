@@ -142,13 +142,22 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
 			elog(ERROR, "invalid relpersistence: %c", relpersistence);
 			return NULL;		/* placate compiler */
 	}
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[RelationCreateStorage] 1\n\n\n")));
 	srel = smgropen(rnode, backend);
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[RelationCreateStorage] 2\n\n\n")));
 	smgrcreate(srel, MAIN_FORKNUM, false);
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[RelationCreateStorage] 3\n\n\n")));
 	if (needs_wal)
 		log_smgrcreate(&srel->smgr_rnode.node, MAIN_FORKNUM);
-
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[RelationCreateStorage] 4\n\n\n")));
 	/* Add the relation to the list of stuff to delete at abort */
 	pending = (PendingRelDelete *)
 		MemoryContextAlloc(TopMemoryContext, sizeof(PendingRelDelete));

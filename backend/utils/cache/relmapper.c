@@ -53,6 +53,7 @@
 #include "pgstat.h"
 #include "storage/fd.h"
 #include "storage/lwlock.h"
+#include "storage/rpcclient.h"
 #include "utils/inval.h"
 #include "utils/relmapper.h"
 
@@ -703,6 +704,14 @@ load_relmap_file(bool shared)
 	int			fd;
 	int			r;
 
+	char		path[MAXPGPATH];
+	bool		isComp = false;
+
+	snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+
+	if (access(path, F_OK) == 0)
+		isComp = true;
+
 	if (shared)
 	{
 		snprintf(mapfilename, sizeof(mapfilename), "global/%s",
@@ -717,7 +726,10 @@ load_relmap_file(bool shared)
 	}
 
 	/* Read data ... */
-	fd = OpenTransientFile(mapfilename, O_RDONLY | PG_BINARY);
+	if (isComp)
+		fd = TryRpcOpenTransientFile(mapfilename, O_RDONLY | PG_BINARY);
+	else
+		fd = OpenTransientFile(mapfilename, O_RDONLY | PG_BINARY);
 	if (fd < 0)
 		ereport(FATAL,
 				(errcode_for_file_access(),
@@ -732,7 +744,10 @@ load_relmap_file(bool shared)
 	 * are able to access any relation that's affected by the change.
 	 */
 	pgstat_report_wait_start(WAIT_EVENT_RELATION_MAP_READ);
-	r = read(fd, map, sizeof(RelMapFile));
+	if (isComp)
+		r = TryRpcread(fd, map, sizeof(RelMapFile));
+	else
+		r = read(fd, map, sizeof(RelMapFile));
 	if (r != sizeof(RelMapFile))
 	{
 		if (r < 0)
@@ -747,7 +762,7 @@ load_relmap_file(bool shared)
 	}
 	pgstat_report_wait_end();
 
-	if (CloseTransientFile(fd) != 0)
+	if ((isComp ? TryRpcCloseTransientFile(fd) : CloseTransientFile(fd)) != 0)
 		ereport(FATAL,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m",
@@ -801,6 +816,14 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 	RelMapFile *realmap;
 	char		mapfilename[MAXPGPATH];
 
+	char		path[MAXPGPATH];
+	bool		isComp = false;
+
+	snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+
+	if (access(path, F_OK) == 0)
+		isComp = true;
+
 	/*
 	 * Fill in the overhead fields and update CRC.
 	 */
@@ -828,8 +851,10 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 				 dbpath, RELMAPPER_FILENAME);
 		realmap = &local_map;
 	}
-
-	fd = OpenTransientFile(mapfilename, O_WRONLY | O_CREAT | PG_BINARY);
+	if(isComp)
+		fd = TryRpcOpenTransientFile(mapfilename, O_WRONLY | O_CREAT | PG_BINARY);
+	else 
+		fd = OpenTransientFile(mapfilename, O_WRONLY | O_CREAT | PG_BINARY);
 	if (fd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -860,15 +885,18 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_RELATION_MAP_WRITE);
-	if (write(fd, newmap, sizeof(RelMapFile)) != sizeof(RelMapFile))
+	if (!isComp)
 	{
-		/* if write didn't set errno, assume problem is no disk space */
-		if (errno == 0)
-			errno = ENOSPC;
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not write file \"%s\": %m",
-						mapfilename)));
+		if (write(fd, newmap, sizeof(RelMapFile)) != sizeof(RelMapFile))
+		{
+			/* if write didn't set errno, assume problem is no disk space */
+			if (errno == 0)
+				errno = ENOSPC;
+			ereport(ERROR,
+					(errcode_for_file_access(),
+					 errmsg("could not write file \"%s\": %m",
+							mapfilename)));
+		}
 	}
 	pgstat_report_wait_end();
 
@@ -886,7 +914,7 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 						mapfilename)));
 	pgstat_report_wait_end();
 
-	if (CloseTransientFile(fd) != 0)
+	if ((isComp ? TryRpcCloseTransientFile(fd) : CloseTransientFile(fd)) != 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m",

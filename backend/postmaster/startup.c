@@ -201,7 +201,13 @@ StartupProcessMain(void)
 	/*
 	 * Do what we came for.
 	 */
-	StartupXLOG();
+    char path[MAXPGPATH];
+    snprintf(path, sizeof(path), "%s/client.signal", DataDir);
+    if (access(path, F_OK) == 0)
+	    StartupXLOG_Comp();
+		//StartupXLOG();
+    else
+	    StartupXLOG();
 
 	/*
 	 * Exit normally. Exit code 0 tells postmaster that we completed recovery

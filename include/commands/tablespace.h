@@ -43,6 +43,10 @@ typedef struct TableSpaceOpts
 	int			maintenance_io_concurrency;
 } TableSpaceOpts;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern Oid	CreateTableSpace(CreateTableSpaceStmt *stmt);
 extern void DropTableSpace(DropTableSpaceStmt *stmt);
 extern ObjectAddress RenameTableSpace(const char *oldname, const char *newname);
@@ -63,5 +67,9 @@ extern void remove_tablespace_symlink(const char *linkloc);
 extern void tblspc_redo(XLogReaderState *rptr);
 extern void tblspc_desc(StringInfo buf, XLogReaderState *rptr);
 extern const char *tblspc_identify(uint8 info);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif							/* TABLESPACE_H */

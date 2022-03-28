@@ -146,6 +146,10 @@
 
 #define TEXTDOMAIN NULL
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern bool errstart(int elevel, const char *domain);
 extern void errfinish(const char *filename, int lineno, const char *funcname);
 
@@ -173,6 +177,10 @@ extern int	errdetail_plural(const char *fmt_singular, const char *fmt_plural,
 							 unsigned long n,...) pg_attribute_printf(1, 4) pg_attribute_printf(2, 4);
 
 extern int	errhint(const char *fmt,...) pg_attribute_printf(1, 2);
+
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * errcontext() is typically called in error context callback functions, not

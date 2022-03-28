@@ -3778,6 +3778,10 @@ PostgresMain(int argc, char *argv[],
 			 const char *dbname,
 			 const char *username)
 {
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[PostgresMain HERE!!!] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
+
 	int			firstchar;
 	StringInfoData input_message;
 	sigjmp_buf	local_sigjmp_buf;
@@ -4170,7 +4174,7 @@ PostgresMain(int argc, char *argv[],
 		MemoryContextSwitchTo(MessageContext);
 		MemoryContextResetAndDeleteChildren(MessageContext);
 
-		initStringInfo(&input_message);
+            initStringInfo(&input_message);
 
 		/*
 		 * Also consider releasing our catalog snapshot if any, so that it's

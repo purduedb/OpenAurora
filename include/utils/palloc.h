@@ -74,11 +74,21 @@ extern void *MemoryContextAllocZeroAligned(MemoryContext context, Size size);
 extern void *MemoryContextAllocExtended(MemoryContext context,
 										Size size, int flags);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern void *palloc(Size size);
 extern void *palloc0(Size size);
 extern void *palloc_extended(Size size, int flags);
 extern void *repalloc(void *pointer, Size size);
+
+
 extern void pfree(void *pointer);
+
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * The result of palloc() is always word-aligned, so we can skip testing
