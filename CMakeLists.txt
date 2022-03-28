@@ -706,6 +706,8 @@ add_executable(src
         backend/storage/page/itemptr.c
         backend/storage/smgr/md.c
         backend/storage/smgr/smgr.c
+        backend/storage/smgr/kv.c
+        backend/storage/smgr/storage_kv.c
         backend/storage/sync/sync.c
         backend/tcop/cmdtag.c
         backend/tcop/dest.c

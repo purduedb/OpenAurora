@@ -17,6 +17,7 @@
 #include "lib/ilist.h"
 #include "storage/block.h"
 #include "storage/relfilenode.h"
+#include "access/xlogrecord.h"
 
 #define USE_KV_STORE
 
@@ -113,8 +114,20 @@ extern void smgrimmedsync(SMgrRelation reln, ForkNumber forknum);
 extern void AtEOXact_SMgr(void);
 extern void smgrcopydir(char* srcPath, char* dstPath);
 
+extern void smgrasync_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
+extern void smgrasync_relxlog(RelFileNode rnode, ForkNumber forknum, unsigned long lsn);
+
+extern void smgrsavexlog(unsigned long lsn, XLogRecord *record);
+extern void smgrgetxlog(unsigned long lsn, char **buffer);
+extern void smgrdeletexlog(unsigned long lsn);
+
+extern void smgrget_page_asynxlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long **targetResult);
+extern void smgrget_rel_asynxlog(RelFileNode rnode, ForkNumber forknum, unsigned long **targetResult);
+
+extern void smgrdelete_from_page_xlog_list (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
+extern void smgrdelete_from_rel_xlog_list (RelFileNode rnode, ForkNumber forknum, unsigned long lsn);
+
 #ifdef __cplusplus
 }
 #endif
-
 #endif							/* SMGR_H */

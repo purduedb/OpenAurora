@@ -27,6 +27,8 @@
 #include "utils/inval.h"
 #include "miscadmin.h"
 #include "storage/kv.h"
+#include "access/xlogrecord.h"
+#include "storage/storage_kv.h"
 
 
 /*
@@ -65,6 +67,16 @@ typedef struct f_smgr
 								  BlockNumber nblocks);
 	void		(*smgr_immedsync) (SMgrRelation reln, ForkNumber forknum);
     void        (*smgr_copydir) (char *srcPath, char *dstPath);
+    void        (*smgr_async_pagexlog) (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
+    void        (*smgr_async_relxlog) (RelFileNode rnode, ForkNumber forknum, unsigned long lsn);
+    void        (*smgr_savexlog) (unsigned long lsn, XLogRecord *record);
+    void        (*smgr_get_page_asynxlog) (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long **targetResult);
+    void        (*smgr_get_rel_asynxlog) (RelFileNode rnode, ForkNumber forknum, unsigned long **targetResult);
+    void        (*smgr_getxlog) (unsigned long lsn, char **buffer);
+    void        (*smgr_deletexlog) (unsigned long lsn);
+
+    void        (*smgr_delete_from_page_xlog_list) (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
+    void        (*smgr_delete_from_rel_xlog_list) (RelFileNode rnode, ForkNumber forknum, unsigned long lsn);
 } f_smgr;
 
 static const f_smgr smgrsw[] = {
@@ -124,6 +136,33 @@ static const f_smgr smgrsw[] = {
         .smgr_truncate = kvtruncate,
         .smgr_immedsync = kvimmedsync,
         .smgr_copydir = kvcopydb
+    },
+    {
+            .smgr_init = storage_kvinit,
+            .smgr_shutdown = NULL,
+            .smgr_open = storage_kvopen,
+            .smgr_close = storage_kvclose,
+            .smgr_create = storage_kvcreate,
+            .smgr_exists = storage_kvexists,
+            .smgr_unlink = storage_kvunlink,
+            .smgr_extend = storage_kvextend,
+            .smgr_prefetch = storage_kvprefetch,
+            .smgr_read = storage_kvread,
+            .smgr_write = storage_kvwrite,
+            .smgr_writeback = storage_kvwriteback,
+            .smgr_nblocks = storage_kvnblocks,
+            .smgr_truncate = storage_kvtruncate,
+            .smgr_immedsync = storage_kvimmedsync,
+            .smgr_copydir = storage_kvcopydb,
+            .smgr_async_pagexlog = storage_async_pagexlog,
+            .smgr_async_relxlog = storage_async_relxlog,
+            .smgr_savexlog = storage_savexlog,
+            .smgr_get_page_asynxlog = storage_get_page_asynxlog_list,
+            .smgr_get_rel_asynxlog = storage_get_rel_asynxlog_list,
+            .smgr_getxlog = storage_getxlog,
+            .smgr_deletexlog = storage_deletexlog,
+            .smgr_delete_from_page_xlog_list = storage_delete_from_page_xlog_list,
+            .smgr_delete_from_rel_xlog_list = storage_delete_from_rel_xlog_list,
     }
 };
 
@@ -164,6 +203,55 @@ smgrinit(void)
 	on_proc_exit(smgrshutdown, 0);
 }
 
+void
+smgrdelete_from_page_xlog_list (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn) {
+    return smgrsw[2].smgr_delete_from_page_xlog_list(rnode, forknum, blocknum, lsn);
+}
+
+void
+smgrdelete_from_rel_xlog_list (RelFileNode rnode, ForkNumber forknum, unsigned long lsn) {
+    return smgrsw[2].smgr_delete_from_rel_xlog_list(rnode, forknum, lsn);
+}
+
+void
+smgrgetxlog(unsigned long lsn, char **buffer) {
+    return smgrsw[2].smgr_getxlog(lsn, buffer);
+}
+
+void
+smgrsavexlog(unsigned long lsn, XLogRecord *record) {
+    //todo if use storage_kv
+    return smgrsw[2].smgr_savexlog(lsn, record);
+}
+
+void
+smgrdeletexlog(unsigned long lsn) {
+    return smgrsw[2].smgr_deletexlog(lsn);
+}
+
+
+void
+smgrasync_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn) {
+    return smgrsw[2].smgr_async_pagexlog(rnode, forknum, blocknum, lsn);
+}
+
+void
+smgrasync_relxlog(RelFileNode rnode, ForkNumber forknum, unsigned long lsn) {
+    return smgrsw[2].smgr_async_relxlog(rnode, forknum, lsn);
+}
+
+
+void
+smgrget_page_asynxlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long **targetResult) {
+    return smgrsw[2].smgr_get_page_asynxlog(rnode, forknum, blocknum, targetResult);
+}
+
+void
+smgrget_rel_asynxlog(RelFileNode rnode, ForkNumber forknum, unsigned long **targetResult) {
+    return smgrsw[2].smgr_get_rel_asynxlog(rnode, forknum, targetResult);
+}
+
+
 /*
  * on_proc_exit hook for smgr cleanup during backend shutdown
  */
@@ -182,7 +270,7 @@ smgrshutdown(int code, Datum arg)
 void
 smgrcopydir(char* srcPath, char* dstPath) {
 #ifdef USE_KV_STORE
-    smgrsw[1].smgr_copydir(srcPath, dstPath);
+    smgrsw[2].smgr_copydir(srcPath, dstPath);
 #endif
 }
 
@@ -238,7 +326,7 @@ smgropen(RelFileNode rnode, BackendId backend)
 //		if (access(path, F_OK) == 0)
 //			reln->smgr_which = 1;
 
-		reln->smgr_which = 1;	/* we only have md.c at present */
+		reln->smgr_which = 2;	/* we only have md.c at present */
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);

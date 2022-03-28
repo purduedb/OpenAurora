@@ -13,6 +13,7 @@ top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = \
+	storage_kv.o \
 	kv.o \
 	md.o \
 	smgr.o

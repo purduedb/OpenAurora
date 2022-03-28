@@ -446,6 +446,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			SetProcessingMode(BootstrapProcessing);
 			bootstrap_signals();
 			BootStrapXLOG();
+            ereport(NOTICE,
+                    (errcode(ERRCODE_INTERNAL_ERROR),
+                            errmsg("[BootStrapXLOG] Ended\n\n\n")));
 			BootstrapModeMain();
             ereport(NOTICE,
                     (errcode(ERRCODE_INTERNAL_ERROR),
@@ -543,12 +546,14 @@ BootstrapModeMain(void)
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]]111\n\n\n")));
+    printf("[BootstrapModeMain]]111\n\n\n");
 	boot_yyparse();
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]]222\n\n\n")));
+    printf("[BootstrapModeMain]]222\n\n\n");
 	CommitTransactionCommand();
-
+    printf("[BootstrapModeMain]]333\n\n\n");
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]pid=%ld  ppid=%ld", (long)getpid(), (long)getppid())));
@@ -560,14 +565,19 @@ BootstrapModeMain(void)
 
 	/* Clean up and exit */
 	cleanup();
+    printf("[BootstrapModeMain]]444\n\n\n");
+
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]]444\n\n\n")));
     KvClose();
-	proc_exit(0);
+    printf("[BootstrapModeMain]]555\n\n\n");
+
+    proc_exit(0);
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]]555\n\n\n")));
+
 }
 
 
