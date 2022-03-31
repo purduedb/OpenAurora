@@ -1006,6 +1006,10 @@ typedef struct SyncConfFileData
 	 * XLOG_FPW_CHANGE record that instructs full_page_writes is disabled.
 	 */
 	XLogRecPtr	lastFpwDisableRecPtr;
+
+
+	//static global var
+	XLogRecPtr LastRec;
 } SyncConfFileData;
 
 static bool readRcvBuf(XLogRecPtr startPtr, Size count, char *buf);
@@ -13635,6 +13639,8 @@ get_syncconffile(const char *DataDir)
 	SpinLockAcquire(&XLogCtl->info_lck);
 	XLogCtl->lastReplayedEndRecPtr = SyncConfFile.lastReplayedEndRecPtr;
 	SpinLockRelease(&XLogCtl->info_lck);
+
+	LastRec = SyncConfFile.LastRec;
 }
 
 /*
@@ -13663,6 +13669,8 @@ write_syncconffile(const char *DataDir, bool do_sync)
 	SpinLockAcquire(&XLogCtl->info_lck);
 	SyncConfFile.lastReplayedEndRecPtr = XLogCtl->lastReplayedEndRecPtr;
 	SpinLockRelease(&XLogCtl->info_lck);
+
+	SyncConfFile.LastRec = LastRec;
 
 	/*
 	 * Write out PG_SYNCCONF_FILE_SIZE bytes into pg_syncconf by zero-padding
