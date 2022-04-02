@@ -99,6 +99,7 @@ kvinit(void)
 BlockNumber
 kvnblocks(SMgrRelation reln, ForkNumber forknum)
 {
+    printf("[!!!!!!!!!] %s\n", KV_FILE_PAGE_NUM);
 /*A totally read function. Try to read from Stor if fail in Comp. Rpc input kvNumKey, output totalPageNum or err*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
@@ -508,7 +509,8 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         else
             ereport(ERROR,
                     (errcode(ERRCODE_DATA_CORRUPTED),
-                            errmsg("[kvread] read page corrupted.")));
+                            errmsg("[kvread] read page corrupted, dbOid=%d, relOid=%d",
+                                   reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode)));
         return;
     }
 
@@ -531,7 +533,7 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
                         errmsg("[kvread] KvGet failed")));
     if(backup == NULL)
     {
-        printf("Locally kvread and kVGet fail. read %d\n\n", reln->smgr_rnode.node.relNode);
+        //printf("Locally kvread and kVGet fail. read %d\n\n", reln->smgr_rnode.node.relNode);
             TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
              reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
     }

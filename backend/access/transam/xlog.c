@@ -1006,6 +1006,9 @@ typedef struct SyncConfFileData
 	 * XLOG_FPW_CHANGE record that instructs full_page_writes is disabled.
 	 */
 	XLogRecPtr	lastFpwDisableRecPtr;
+
+    //static global var
+    XLogRecPtr LastRec;
 } SyncConfFileData;
 
 static bool readRcvBuf(XLogRecPtr startPtr, Size count, char *buf);
@@ -4539,6 +4542,7 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+    printf("[ReadRecord] XLOG READER Start ReadRecord, StartPosition = %d\n", xlogreader->EndRecPtr);
 	XLogRecord *record;
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 
@@ -6550,6 +6554,8 @@ StartupXLOG_Comp(void)
 	bool		fast_promoted = false;
 	struct stat st;
 
+    printf("[StartupXLog_Comp]  1111\n");
+    fflush(stdout);
 	/*
 	 * We should have an aux process resource owner to use, and we should not
 	 * be in a transaction that's installed some other resowner.
@@ -6565,6 +6571,9 @@ StartupXLOG_Comp(void)
 	if (!XRecOffIsValid(ControlFile->checkPoint))
 		ereport(FATAL,
 				(errmsg("control file contains invalid checkpoint location")));
+
+
+    printf("[StartupXLog_Comp] CheckPoint location is %d\n", ControlFile->checkPoint);
 
 	//! Temporary disabled
     /*
@@ -6641,7 +6650,7 @@ StartupXLOG_Comp(void)
 
 
 
-	/* Set up XLOG reader facility 
+	/* Set up XLOG reader facility
 	MemSet(&private, 0, sizeof(XLogPageReadPrivate));
 	xlogreader =
 		XLogReaderAllocate(wal_segment_size, NULL,
@@ -7065,6 +7074,8 @@ StartupXLOG(void)
     bool		fast_promoted = false;
     struct stat st;
 
+    printf("[StartupXLog] 11111\n");
+    fflush(stdout);
     /*
      * We should have an aux process resource owner to use, and we should not
      * be in a transaction that's installed some other resowner.
@@ -7237,7 +7248,8 @@ StartupXLOG(void)
 
     XLogReplayBufferInit();
     XLogReplayModuleInit();
-
+    printf("[StartupXLog] 22222\n");
+    fflush(stdout);
     /*
      * Allocate two page buffers dedicated to WAL consistency checks.  We do
      * it this way, rather than just making static arrays, for two reasons:
@@ -7400,6 +7412,11 @@ StartupXLOG(void)
 
         /* Get the last valid checkpoint record. */
         checkPointLoc = ControlFile->checkPoint;
+
+        printf("[StartupXLog] Checkpoint initialization location is %d\n", checkPointLoc);
+        fflush(stdout);
+
+
         RedoStartLSN = ControlFile->checkPointCopy.redo;
         record = ReadCheckpointRecord(xlogreader, checkPointLoc, 1, true);
         if (record != NULL)
@@ -7464,6 +7481,10 @@ StartupXLOG(void)
                                   (uint32) (switchpoint >> 32),
                                   (uint32) switchpoint)));
     }
+
+
+    printf("[StartupXLog] 444444\n");
+    fflush(stdout);
 
     /*
      * The min recovery point should be part of the requested timeline's
@@ -7554,6 +7575,10 @@ StartupXLOG(void)
     //! Temporary disabled in compute node
     StartupReplicationOrigin();
 
+
+    printf("[StartupXLog] 66666666\n");
+    fflush(stdout);
+
     /*
      * Initialize unlogged LSN. On a clean shutdown, it's restored from the
      * control file. On recovery, all unlogged relations are blown away, so
@@ -7625,9 +7650,14 @@ StartupXLOG(void)
         InRecovery = true;
     }
 
+    printf("[StartupXLog] 777777\n");
+    fflush(stdout);
+
     /* REDO */
     if (InRecovery)
     {
+        printf("[StartupXLog] InRecovery\n");
+        fflush(stdout);
         int			rmid;
 
         /*
@@ -7900,6 +7930,9 @@ StartupXLOG(void)
          */
         CheckRecoveryConsistency();
 
+        printf("[StartupXLog] 99999\n");
+        fflush(stdout);
+
         /*
          * Find the first record that logically follows the checkpoint --- it
          * might physically precede it, though.
@@ -7932,6 +7965,13 @@ StartupXLOG(void)
              */
             do
             {
+                printf("[StartupXLog] parse record success.\n");
+
+                printf("[StartupXLog] rmid = %d, totalLen = %d\n", xlogreader->decoded_record->xl_rmid, xlogreader->decoded_record->xl_tot_len);
+
+
+                fflush(stdout);
+
                 bool		switchedTLI = false;
 
 #ifdef WAL_DEBUG
@@ -8135,7 +8175,8 @@ StartupXLOG(void)
                     reachedRecoveryTarget = true;
                     break;
                 }
-
+                printf("[StartupXLog] Will start a new ReadRecord\n");
+                fflush(stdout);
                 /* Else, try to fetch the next WAL record */
                 record = ReadRecord(xlogreader, LOG, false);
             } while (record != NULL);
@@ -12646,6 +12687,7 @@ static int
 XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr, int reqLen,
 			 XLogRecPtr targetRecPtr, char *readBuf)
 {
+    printf("[XLogPageRead] Start, targetPagePtr = %ld , targetRecPtr = %ld\n", targetPagePtr, targetRecPtr);
 	XLogPageReadPrivate *private =
 	(XLogPageReadPrivate *) xlogreader->private_data;
 	int			emode = private->emode;
@@ -12732,15 +12774,18 @@ retry:
 	readOff = targetPageOff;
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
-	if (readSource == XLOG_FROM_STREAM)
-	{
-		readRcvBuf(targetPagePtr, XLOG_BLCKSZ, readBuf);
-		r = XLOG_BLCKSZ;
-	}
-	else
+//    printf("[XLogPageRead] ReadSource = %d \n", readSource);
+//	if (readSource == XLOG_FROM_STREAM)
+//	{
+//        printf("[XLogPageRead] Start Call readRcvBuf, pageLoc = %d, recordLoc = %d\n", targetPagePtr, targetRecPtr);
+//		readRcvBuf(targetPagePtr, XLOG_BLCKSZ, readBuf);
+//		r = XLOG_BLCKSZ;
+//	}
+//	else
 		r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
 	if (r != XLOG_BLCKSZ)
 	{
+        printf("[XLogPageRead] readRcvBuf didn't return a XLOG_BLXKSZ data\n");
 		char		fname[MAXFNAMELEN];
 		int			save_errno = errno;
 
@@ -12797,11 +12842,12 @@ retry:
 	 */
 	if (!XLogReaderValidatePageHeader(xlogreader, targetPagePtr, readBuf))
 	{
+        printf("[XLogPageRead] XlogReader Validate page header failed.\n");
 		/* reset any error XLogReaderValidatePageHeader() might have set */
 		xlogreader->errormsg_buf[0] = '\0';
 		goto next_record_is_invalid;
 	}
-
+    printf("[XLogPageRead] Read success.\n");
 	return readLen;
 
 next_record_is_invalid:
@@ -13561,7 +13607,9 @@ readRcvBuf(XLogRecPtr startPtr, Size count, char *buf)
 {
 	int startPos = getRcvBufIndex(startPtr);
 
-	if(count >= RCV_SHMEM_BUF_SIZE)
+    printf("[readRcvBuf] startPtr = %d, startPos = %d, size = %d\n", startPtr, startPos, count);
+
+    if(count >= RCV_SHMEM_BUF_SIZE)
 	{
 		elog(ERROR, "Require size exceed maximum");
 		return false;
@@ -13572,7 +13620,7 @@ readRcvBuf(XLogRecPtr startPtr, Size count, char *buf)
 
 		if(startPos + count >= RCV_SHMEM_BUF_SIZE)
 		{
-			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos - 1;
+			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
 			memcpy(buf, WalRcvBuf->buf + startPos, firstWrite);
 			memcpy(buf + firstWrite, WalRcvBuf->buf, count - firstWrite);
 		}
@@ -13635,6 +13683,8 @@ get_syncconffile(const char *DataDir)
 	SpinLockAcquire(&XLogCtl->info_lck);
 	XLogCtl->lastReplayedEndRecPtr = SyncConfFile.lastReplayedEndRecPtr;
 	SpinLockRelease(&XLogCtl->info_lck);
+
+    LastRec = SyncConfFile.LastRec;
 }
 
 /*
@@ -13664,6 +13714,7 @@ write_syncconffile(const char *DataDir, bool do_sync)
 	SyncConfFile.lastReplayedEndRecPtr = XLogCtl->lastReplayedEndRecPtr;
 	SpinLockRelease(&XLogCtl->info_lck);
 
+    SyncConfFile.LastRec = LastRec;
 	/*
 	 * Write out PG_SYNCCONF_FILE_SIZE bytes into pg_syncconf by zero-padding
 	 * the excess over sizeof(SyncConfFileData), to avoid premature EOF related

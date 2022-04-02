@@ -268,6 +268,7 @@ XLogBeginRead(XLogReaderState *state, XLogRecPtr RecPtr)
 XLogRecord *
 XLogReadRecord(XLogReaderState *state, char **errormsg)
 {
+    printf("[XLogReadRecord] XlogReader starts read a record, and start position = %d\n", state->EndRecPtr);
 	XLogRecPtr	RecPtr;
 	XLogRecord *record;
 	XLogRecPtr	targetPagePtr;
@@ -322,6 +323,7 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	targetPagePtr = RecPtr - (RecPtr % XLOG_BLCKSZ);
 	targetRecOff = RecPtr % XLOG_BLCKSZ;
 
+    printf("[XLogReadRecord] targetPagePtr = %ld, targetRecOff = %ld\n", targetPagePtr, targetRecOff);
 	/*
 	 * Read the page containing the record into state->readBuf. Request enough
 	 * byte to cover the whole record header, or at least the part of it that
@@ -374,6 +376,7 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	 */
 	record = (XLogRecord *) (state->readBuf + RecPtr % XLOG_BLCKSZ);
 	total_len = record->xl_tot_len;
+    printf("[XLogReadRecord] total record page = %d\n", total_len);
 
 	/*
 	 * If the whole record header is on this page, validate it immediately.
@@ -405,6 +408,7 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	}
 
 	len = XLOG_BLCKSZ - RecPtr % XLOG_BLCKSZ;
+    printf("[XLogReadRecord] First page contains record len = %d\n", len);
 	if (total_len > len)
 	{
 		/* Need to reassemble record */
@@ -604,6 +608,7 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 	 */
 	if (targetSegNo != state->seg.ws_segno && targetPageOff != 0)
 	{
+        printf("[ReadPageInternal] start to read the segment first page\n");
 		XLogRecPtr	targetSegmentPtr = pageptr - targetPageOff;
 
 		readLen = state->routine.page_read(state, targetSegmentPtr, XLOG_BLCKSZ,
@@ -616,10 +621,15 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 		Assert(readLen == XLOG_BLCKSZ);
 
 		if (!XLogReaderValidatePageHeader(state, targetSegmentPtr,
-										  state->readBuf))
-			goto err;
+										  state->readBuf)) {
+            printf("[ReadPageInternal] XLogReaderValidatePageHeader failed, pagePtr = %ld\n", targetSegmentPtr);
+            goto err;
+        }
+
+        printf("[ReadPageInternal] XLogReaderValidatePageHeader succeed, pagePtr = %ld\n", targetSegmentPtr);
 	}
 
+    printf("[ReadPageInternal] read real record ptr = %ld\n", pageptr);
 	/*
 	 * First, read the requested data length, but at least a short page header
 	 * so that we can validate it.
@@ -643,6 +653,7 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 	/* still not enough */
 	if (readLen < XLogPageHeaderSize(hdr))
 	{
+        printf("[ReadPageInternal] readlen not enough, start a new read with len = %d\n", XLogPageHeaderSize(hdr));
 		readLen = state->routine.page_read(state, pageptr, XLogPageHeaderSize(hdr),
 										   state->currRecPtr,
 										   state->readBuf);
@@ -653,14 +664,18 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 	/*
 	 * Now that we know we have the full header, validate it.
 	 */
-	if (!XLogReaderValidatePageHeader(state, pageptr, (char *) hdr))
-		goto err;
+    printf("[ReadPageInternal] final validate header, ptr = %ld\n", pageptr);
+	if (!XLogReaderValidatePageHeader(state, pageptr, (char *) hdr)){
+        printf("[ReadPageInternal] FAIL to final validate header, ptr = %ld\n", pageptr);
+        goto err;
+    }
+
 
 	/* update read state information */
 	state->seg.ws_segno = targetSegNo;
 	state->segoff = targetPageOff;
 	state->readLen = readLen;
-
+    printf("[ReadPageInternal] Successful!\n");
 	return readLen;
 
 err:

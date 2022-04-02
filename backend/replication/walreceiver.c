@@ -452,6 +452,7 @@ WalReceiverMain(void)
 				}
 
 				/* See if we can read data immediately */
+                //printf("[WalReceiverMain] Prepare to read message from sender\n");
 				len = walrcv_receive(wrconn, &buf, &wait_fd);
 				if (len != 0)
 				{
@@ -461,6 +462,7 @@ WalReceiverMain(void)
 					 */
 					for (;;)
 					{
+                        printf("[WalReceiverMain] Receiver received message len > 0 from sender\n");
 						if (len > 0)
 						{
 							/*
@@ -485,7 +487,7 @@ WalReceiverMain(void)
 						}
 						len = walrcv_receive(wrconn, &buf, &wait_fd);
 					}
-
+                    printf("[WalReceiverMain] REACH HERE!!!!!!!!!!!!!!!!!!!!!!\n");
 					/* Let the master know that we received some data. */
 					XLogWalRcvSendReply(false, false);
 
@@ -494,7 +496,9 @@ WalReceiverMain(void)
 					 * let the startup process and primary server know about
 					 * them.
 					 */
+                    printf("[WalReceiverMain] Receiving a message finished, Start flush\n");
 					XLogWalRcvFlush(false);
+                    printf("[WalReceiverMain] Flush XLOG finished\n");
 				}
 
 				/* Check if we need to exit the streaming loop. */
@@ -522,6 +526,7 @@ WalReceiverMain(void)
 				if (rc & WL_LATCH_SET)
 				{
 					ResetLatch(walrcv->latch);
+                    printf("[ProcessWalRcvInterrupts] 2\n");
 					ProcessWalRcvInterrupts();
 
 					if (walrcv->force_reply)
@@ -674,6 +679,7 @@ WalRcvWaitForStartPosition(XLogRecPtr *startpoint, TimeLineID *startpointTLI)
 	{
 		ResetLatch(walrcv->latch);
 
+        printf("[ProcessWalRcvInterrupts] 3\n");
 		ProcessWalRcvInterrupts();
 
 		SpinLockAcquire(&walrcv->mutex);
@@ -852,8 +858,8 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 				dataStart = pq_getmsgint64(&incoming_message);
 				walEnd = pq_getmsgint64(&incoming_message);
 				sendTime = pq_getmsgint64(&incoming_message);
-				ProcessWalSndrMessage(walEnd, sendTime);
-
+                printf("[XLogWalRcvProcessMsg] Received XLog message, len = %d\n", len);
+                ProcessWalSndrMessage(walEnd, sendTime);
 				buf += hdrlen;
 				len -= hdrlen;
 				XLogWalRcvWrite(buf, len, dataStart);
@@ -869,6 +875,7 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 							 errmsg_internal("invalid keepalive message received from primary")));
 				appendBinaryStringInfo(&incoming_message, buf, hdrlen);
 
+                printf("[XLogWalRcvProcessMsg] Received heartbeat message, len = %d\n", len);
 				/* read the fields */
 				walEnd = pq_getmsgint64(&incoming_message);
 				sendTime = pq_getmsgint64(&incoming_message);
@@ -895,6 +902,7 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 static void
 XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 {
+    printf("[XLogWalRcvWrite] Start\n");
 	int			startoff;
 	int			byteswritten;
 
@@ -906,11 +914,19 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 	}
 	else
 	{
+        printf("[XLogWalRcvWrite] Write xlog to WalRcvBuf, SenderLSN = %d,  start position = %d, size = %d\n", recptr, startPos, nbytes);
 		SpinLockAcquire(&WalRcvBuf->mutex);
 		if(startPos + nbytes >= RCV_SHMEM_BUF_SIZE)
 		{
+            // todo How to make sure the previous logs have been flushed??
 			/* Put the data at the start of the buffer when the length exceeds the size of the buffer */
-			int firstWrite = RCV_SHMEM_BUF_SIZE - startPos - 1;
+			// XLOG_SIZE = 10  CurrPtr = 5
+            // A B C D E   F G H I J
+            // FirstWrite = 10 -5 = 5
+            // 0 1 2 3 4 5 6 7 8 9
+            //           A B C D E
+            // F G H I J
+            int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
 			memcpy(WalRcvBuf->buf + startPos, buf, firstWrite);
 			memcpy(WalRcvBuf->buf, buf + firstWrite, nbytes - firstWrite);
 		}
@@ -1011,6 +1027,8 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 
 	/* Update shared-memory status */
 	pg_atomic_write_u64(&WalRcv->writtenUpto, LogstreamResult.Write);
+    printf("[XLogWalRcvWrite] END\n");
+    fflush(stdout);
 }
 
 /*
@@ -1041,6 +1059,7 @@ XLogWalRcvFlush(bool dying)
 		SpinLockRelease(&walrcv->mutex);
 
 		/* Signal the startup process and walsender that new WAL has arrived */
+        printf("[XLogWalRcvFlush] Wakeup Recovery to redo xlog\n");
 		WakeupRecovery();
 		if (AllowCascadeReplication())
 			WalSndWakeup();
@@ -1266,6 +1285,7 @@ XLogWalRcvSendHSFeedback(bool immed)
 static void
 ProcessWalSndrMessage(XLogRecPtr walEnd, TimestampTz sendTime)
 {
+    printf("[ProcessWalSndrMessage] Start\n");
 	WalRcvData *walrcv = WalRcv;
 
 	TimestampTz lastMsgReceiptTime = GetCurrentTimestamp();
@@ -1306,6 +1326,7 @@ ProcessWalSndrMessage(XLogRecPtr walEnd, TimestampTz sendTime)
 		pfree(sendtime);
 		pfree(receipttime);
 	}
+    printf("[ProcessWalSndrMessage] End\n");
 }
 
 /*

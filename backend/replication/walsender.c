@@ -2801,6 +2801,7 @@ retry:
 	memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
 		   tmpbuf.data, sizeof(int64));
 
+    printf("[XLogSendPhysical] Send message, len = %d\n", nbytes);
 	pq_putmessage_noblock('d', output_message.data, output_message.len);
 
 	sentPtr = endptr;

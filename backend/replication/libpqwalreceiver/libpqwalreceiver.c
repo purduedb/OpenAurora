@@ -200,6 +200,7 @@ libpqrcv_connect(const char *conninfo, bool logical, const char *appname,
 		if (rc & WL_LATCH_SET)
 		{
 			ResetLatch(MyLatch);
+            printf("[ProcessWalRcvInterrupts] 4\n");
 			ProcessWalRcvInterrupts();
 		}
 
