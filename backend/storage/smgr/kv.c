@@ -99,7 +99,6 @@ kvinit(void)
 BlockNumber
 kvnblocks(SMgrRelation reln, ForkNumber forknum)
 {
-    printf("[!!!!!!!!!] %s\n", KV_FILE_PAGE_NUM);
 /*A totally read function. Try to read from Stor if fail in Comp. Rpc input kvNumKey, output totalPageNum or err*/
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
