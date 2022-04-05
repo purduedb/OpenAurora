@@ -278,6 +278,8 @@ kvextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         return;
     }
 
+    reln->md_num_open_segs[forknum] = 1;
+
     // No need to extend
     if (currPageNum >= blocknum+1) {
         return;
@@ -383,6 +385,7 @@ void
 kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer)
 {
+    reln->md_num_open_segs[forknum] = 1;
     printf("[kvread] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
@@ -445,15 +448,9 @@ void
 kvwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         char *buffer, bool skipFsync)
 {
+    reln->md_num_open_segs[forknum] = 1;
     printf("[kvwrite] dbNum = %d   relNum = %d  blockNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
-    if (reln->smgr_rnode.node.relNode == 1260) {
-        PageHeader		dp;
-        dp = (PageHeader) buffer;
-        int a = -1, b = -1;
-        b = ((PageHeader) (dp))->pd_lower;
-        a = ((PageHeader) (dp))->pd_lower - SizeOfPageHeaderData;
-        printf("[kvwrite] page1260 %d %d !!!!!!!!!!!!!!!!!!!!!!!!!!\n", b, a);
-    }
+
     char *path;
     int totalPageNum = 0;
     char kvNumKey[MAXPGPATH];
@@ -510,6 +507,7 @@ void
 kvwriteback(SMgrRelation reln, ForkNumber forknum,
             BlockNumber blocknum, BlockNumber nblocks)
 {
+    reln->md_num_open_segs[forknum] = 1;
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvwriteback start\n")));
@@ -525,6 +523,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
                     errmsg("kvnblocks start\n")));
     printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 
+    reln->md_num_open_segs[forknum] = 1;
     char *path;
     int totalPageNum = 0;
     char kvNumKey[MAXPGPATH];
@@ -552,6 +551,12 @@ void
 kvtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
     printf("[kvtruncate] dbNum = %d, relNum = %d, nBlocks = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, nblocks);
+
+    if(nblocks == 0) {
+        reln->md_num_open_segs[forknum] = 0;
+    } else {
+        reln->md_num_open_segs[forknum] = 1;
+    }
 
     char *path;
     int totalPageNum = 0;
