@@ -1,0 +1,3 @@
+/home/pang65/test_kv/postgresql-13.0/src/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/pang65/test_kv/postgresql-13.0/src/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/pang65/test_kv/postgresql-13.0/src/cmake-build-debug/CMakeFiles/src.dir
