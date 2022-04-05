@@ -77,14 +77,14 @@ char * KV_GET_FILE_PAGE_PREFIX = "kv_get_\0"; //(filename, pageid) -> page
 void
 kvinit(void)
 {
-    char		path[MAXPGPATH];
-    snprintf(path, sizeof(path), "%s/../client.signal", DataDir);
-    if (access(path, F_OK) == 0) {
-        KV_FILE_PAGE_NUM = "cli_kv_file_page_num_%s";//filename -> how many pages
-        KV_GET_FILE_PAGE = "cli_kv_get_%s_%d"; //(filename, pageid) -> page
-        KV_FILE_PAGE_NUM_PREFIX = "cli_kv_file_page_num_\0";//filename -> how many pages
-        KV_GET_FILE_PAGE_PREFIX = "cli_kv_get_\0"; //(filename, pageid) -> page
-    }
+//    char		path[MAXPGPATH];
+//    snprintf(path, sizeof(path), "%s/../client.signal", DataDir);
+//    if (access(path, F_OK) == 0) {
+//        KV_FILE_PAGE_NUM = "cli_kv_file_page_num_%s";//filename -> how many pages
+//        KV_GET_FILE_PAGE = "cli_kv_get_%s_%d"; //(filename, pageid) -> page
+//        KV_FILE_PAGE_NUM_PREFIX = "cli_kv_file_page_num_\0";//filename -> how many pages
+//        KV_GET_FILE_PAGE_PREFIX = "cli_kv_get_\0"; //(filename, pageid) -> page
+//    }
     MdCxt = AllocSetContextCreate(TopMemoryContext,
                                   "KvSmgr",
                                   ALLOCSET_DEFAULT_SIZES);
@@ -156,7 +156,7 @@ void
 kvcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
 
-    printf("[kvcreate] dbNum = %d, relNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode);
+    printf("[kvcreate] dbNum = %d, relNum = %d, forknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum);
     MdfdVec    *mdfd;
     char	   *filename;
     File		fd;
@@ -386,7 +386,7 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer)
 {
     reln->md_num_open_segs[forknum] = 1;
-    printf("[kvread] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
+    printf("[kvread] dbNum = %d, relNum = %d, forknum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum);
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[kvread ]  start\n")));
@@ -521,7 +521,6 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("kvnblocks start\n")));
-    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 
     reln->md_num_open_segs[forknum] = 1;
     char *path;
@@ -537,9 +536,10 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
     if (err != 0) {
         ereport(ERROR,
                 (errcode(ERRCODE_INTERNAL_ERROR),
-                        errmsg("[kvnblocks] KvGetInt failed, db=%d, rel=%d, fork=%d", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum)));
+                        errmsg("[kvnblocks] KvGetInt failed, db=%d, rel=%d, fork=%d, kv_key=%s", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, kvNumKey)));
         return 0;
     }
+    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d, return_result = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, totalPageNum);
 
     return totalPageNum;
 }
