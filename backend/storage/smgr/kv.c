@@ -217,7 +217,8 @@ kvcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
     char	   *filename;
     File		fd;
 
-    if (isRedo && reln->md_num_open_segs[forkNum] > 0)
+    int blockNum = kvnblocks(reln, forkNum);
+    if (blockNum > 0)
         return;					/* created and opened already... */
 
     Assert(reln->md_num_open_segs[forkNum] == 0);

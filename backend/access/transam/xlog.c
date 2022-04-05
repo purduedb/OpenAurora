@@ -12774,7 +12774,7 @@ retry:
 	readOff = targetPageOff;
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
-//    printf("[XLogPageRead] ReadSource = %d \n", readSource);
+    printf("[XLogPageRead] updated ! ReadSource = %d \n", readSource);
 //	if (readSource == XLOG_FROM_STREAM)
 //	{
 //        printf("[XLogPageRead] Start Call readRcvBuf, pageLoc = %d, recordLoc = %d\n", targetPagePtr, targetRecPtr);

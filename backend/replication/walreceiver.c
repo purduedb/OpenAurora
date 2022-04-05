@@ -906,35 +906,35 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 	int			startoff;
 	int			byteswritten;
 
-	int startPos = getRcvBufIndex(recptr);
-
-	if(nbytes >= RCV_SHMEM_BUF_SIZE)
-	{
-		elog(ERROR, "Reciever buffer has no enough space. recieve %lu bytes", nbytes);
-	}
-	else
-	{
-        printf("[XLogWalRcvWrite] Write xlog to WalRcvBuf, SenderLSN = %d,  start position = %d, size = %d\n", recptr, startPos, nbytes);
-		SpinLockAcquire(&WalRcvBuf->mutex);
-		if(startPos + nbytes >= RCV_SHMEM_BUF_SIZE)
-		{
-            // todo How to make sure the previous logs have been flushed??
-			/* Put the data at the start of the buffer when the length exceeds the size of the buffer */
-			// XLOG_SIZE = 10  CurrPtr = 5
-            // A B C D E   F G H I J
-            // FirstWrite = 10 -5 = 5
-            // 0 1 2 3 4 5 6 7 8 9
-            //           A B C D E
-            // F G H I J
-            int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
-			memcpy(WalRcvBuf->buf + startPos, buf, firstWrite);
-			memcpy(WalRcvBuf->buf, buf + firstWrite, nbytes - firstWrite);
-		}
-		else
-			memcpy(WalRcvBuf->buf + startPos, buf, nbytes);
-
-		SpinLockRelease(&WalRcvBuf->mutex);
-	}
+//	int startPos = getRcvBufIndex(recptr);
+//
+//	if(nbytes >= RCV_SHMEM_BUF_SIZE)
+//	{
+//		elog(ERROR, "Reciever buffer has no enough space. recieve %lu bytes", nbytes);
+//	}
+//	else
+//	{
+//        printf("[XLogWalRcvWrite] Write xlog to WalRcvBuf, SenderLSN = %d,  start position = %d, size = %d\n", recptr, startPos, nbytes);
+//		SpinLockAcquire(&WalRcvBuf->mutex);
+//		if(startPos + nbytes >= RCV_SHMEM_BUF_SIZE)
+//		{
+//            // todo How to make sure the previous logs have been flushed??
+//			/* Put the data at the start of the buffer when the length exceeds the size of the buffer */
+//			// XLOG_SIZE = 10  CurrPtr = 5
+//            // A B C D E   F G H I J
+//            // FirstWrite = 10 -5 = 5
+//            // 0 1 2 3 4 5 6 7 8 9
+//            //           A B C D E
+//            // F G H I J
+//            int firstWrite = RCV_SHMEM_BUF_SIZE - startPos;
+//			memcpy(WalRcvBuf->buf + startPos, buf, firstWrite);
+//			memcpy(WalRcvBuf->buf, buf + firstWrite, nbytes - firstWrite);
+//		}
+//		else
+//			memcpy(WalRcvBuf->buf + startPos, buf, nbytes);
+//
+//		SpinLockRelease(&WalRcvBuf->mutex);
+//	}
 
 	while (nbytes > 0)
 	{
