@@ -802,6 +802,7 @@ bool
 XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 							 char *phdr)
 {
+    printf("[XLogReaderValidatePageHeader] Start \n");
 	XLogRecPtr	recaddr;
 	XLogSegNo	segno;
 	int32		offset;
@@ -816,6 +817,7 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 
 	if (hdr->xlp_magic != XLOG_PAGE_MAGIC)
 	{
+        printf("[XLogReaderValidatePageHeader] xlp_magic\n");
 		char		fname[MAXFNAMELEN];
 
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
@@ -830,7 +832,9 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 
 	if ((hdr->xlp_info & ~XLP_ALL_FLAGS) != 0)
 	{
-		char		fname[MAXFNAMELEN];
+        printf("[XLogReaderValidatePageHeader] xlp_info\n");
+
+        char		fname[MAXFNAMELEN];
 
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
@@ -844,11 +848,14 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 
 	if (hdr->xlp_info & XLP_LONG_HEADER)
 	{
-		XLogLongPageHeader longhdr = (XLogLongPageHeader) hdr;
+        printf("[XLogReaderValidatePageHeader] xlp_info2\n");
 
-		if (state->system_identifier &&
+        XLogLongPageHeader longhdr = (XLogLongPageHeader) hdr;
+
+		if (false && state->system_identifier &&
 			longhdr->xlp_sysid != state->system_identifier)
 		{
+            printf("[XLogReaderValidatePageHeader] aa\n");
 			report_invalid_record(state,
 								  "WAL file is from different database system: WAL file database system identifier is %llu, pg_control database system identifier is %llu",
 								  (unsigned long long) longhdr->xlp_sysid,
@@ -857,12 +864,14 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 		}
 		else if (longhdr->xlp_seg_size != state->segcxt.ws_segsize)
 		{
+            printf("[XLogReaderValidatePageHeader] bb\n");
 			report_invalid_record(state,
 								  "WAL file is from different database system: incorrect segment size in page header");
 			return false;
 		}
 		else if (longhdr->xlp_xlog_blcksz != XLOG_BLCKSZ)
 		{
+            printf("[XLogReaderValidatePageHeader] cc\n");
 			report_invalid_record(state,
 								  "WAL file is from different database system: incorrect XLOG_BLCKSZ in page header");
 			return false;
@@ -870,7 +879,9 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 	}
 	else if (offset == 0)
 	{
-		char		fname[MAXFNAMELEN];
+        printf("[XLogReaderValidatePageHeader] offset\n");
+
+        char		fname[MAXFNAMELEN];
 
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
@@ -890,7 +901,9 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 	 */
 	if (hdr->xlp_pageaddr != recaddr)
 	{
-		char		fname[MAXFNAMELEN];
+        printf("[XLogReaderValidatePageHeader] xlp_pageaddr\n");
+
+        char		fname[MAXFNAMELEN];
 
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
@@ -913,7 +926,8 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 	 */
 	if (recptr > state->latestPagePtr)
 	{
-		if (hdr->xlp_tli < state->latestPageTLI)
+        printf("[XLogReaderValidatePageHeader] latestPagePtr\n");
+        if (hdr->xlp_tli < state->latestPageTLI)
 		{
 			char		fname[MAXFNAMELEN];
 

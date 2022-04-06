@@ -103,7 +103,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("kvnblocks start\n")));
-//    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
+    printf("[kvnblocks] dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 
     char *path;
     int totalPageNum = 0;
@@ -118,7 +118,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
         if (isComp)
             return TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
-             reln->smgr_rnode.node.relNode, forknum, 0);  //-1 for err  
+             reln->smgr_rnode.node.relNode, forknum, 0);  //-1 for err
         else
             return -1;
     }
@@ -129,6 +129,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 //        return 0;
 //    }
 
+    printf("[kvnblocks] END, return value is %d \n", totalPageNum);
     return totalPageNum;
 }
 
@@ -468,7 +469,7 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer)
 {
 /*Read locally, and try to read from Stor if fail. We need to read through Buffer so a SMgrRelation should be reconstruct.*/
-//    printf("[kvread] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
+    printf("[kvread] dbNum = %d, relNum = %d, blocknum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, blocknum);
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("[kvread ]  start\n")));
@@ -539,7 +540,7 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     }
 
     pfree(path);
-
+    printf("[kvread] END\n");
 }
 
 void

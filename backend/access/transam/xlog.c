@@ -12782,6 +12782,8 @@ retry:
 //		r = XLOG_BLCKSZ;
 //	}
 //	else
+    printf("[XLogPageRead] Start Call readRcvBuf, pageLoc = %d, recordLoc = %d\n", targetPagePtr, targetRecPtr);
+    printf("[XLogPageRead] readoff = %d\n", readOff);
 		r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
 	if (r != XLOG_BLCKSZ)
 	{
