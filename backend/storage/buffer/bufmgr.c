@@ -939,7 +939,6 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
                 int a = -1, b = -1;
                 b = ((PageHeader) (dp))->pd_lower;
                 a = ((PageHeader) (dp))->pd_lower - SizeOfPageHeaderData;
-                printf("[INON 1] 1260 page :  %d %d!!!!!!!!!!!!!!!!!!!!!!!!\n", b, a);
             }
 			/* check for garbage data */
 			if (!PageIsVerified((Page) bufBlock, blockNum))
