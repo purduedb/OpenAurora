@@ -29,6 +29,7 @@
 #include "storage/ipc.h"
 #include "storage/md.h"
 #include "storage/kv.h"
+#include "storage/storage_kv.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 #include "utils/memutils.h"
@@ -102,6 +103,11 @@ static const SyncOps syncsw[] = {
             .sync_syncfiletag = kvsyncfiletag,
             .sync_unlinkfiletag = kvunlinkfiletag,
             .sync_filetagmatches = kvfiletagmatches
+    },
+    {
+            .sync_syncfiletag = storage_kvsyncfiletag,
+            .sync_unlinkfiletag = storage_kvunlinkfiletag,
+            .sync_filetagmatches = storage_kvfiletagmatches
     }
 };
 

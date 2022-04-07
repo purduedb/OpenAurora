@@ -357,6 +357,8 @@ extern void CreateXlogReplayMemoryContext(void);
 extern void XLogReplayModuleInit(void);
 extern void XLogReplayBufferInit(void);
 
+extern void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long targetLsn);
+extern void RedoPageXlogForAsync(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long targetLsn);
 /*
  * Routines to start, stop, and get status of a base backup.
  */
