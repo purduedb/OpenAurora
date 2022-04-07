@@ -6754,4 +6754,6 @@ rpc_init_file(char * db_dir_raw)
 	rpcinitfile(configdir, "global/pg_control");
 	rpcinitfile(configdir, "global/pg_control/pg_filenode.map");
 	rpcinitfile(configdir, "global/pg_syncconf");
+	rpcinitfile(configdir, "pg_xact/0000");
+	rpcinitfile(configdir, "pg_wal/000000010000000000000001");
 }
