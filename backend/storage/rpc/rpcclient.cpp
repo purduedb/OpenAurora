@@ -76,7 +76,7 @@ void TryRpcInitFile(_Page& _return, _Path& _path);
 
 void RpcInit()
 {
-	rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+	rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 	rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 	rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 	client = new DataPageAccessClient(rpcprotocol);
@@ -102,7 +102,7 @@ TryRpcKvNblocks(Oid spcNode, Oid dbNode, Oid relNode, ForkNumber forknum, XLogRe
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
@@ -136,7 +136,7 @@ BlockNumber blocknum, XLogRecPtr LSN)
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
@@ -154,7 +154,7 @@ rpcinitfile(char * db_dir_raw, char * fp)
 {
 	char		mpath[MAXPGPATH];
 
-	rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+	rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 	rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 	rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 	client = new DataPageAccessClient(rpcprotocol);
@@ -189,7 +189,7 @@ void TryRpcInitFile(_Page& _return, _Path& _path)
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
@@ -215,7 +215,7 @@ File TryRpcOpenTransientFile(const char * filename, int fileflags) {
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
@@ -239,7 +239,7 @@ int TryRpcCloseTransientFile(const File fd) {
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
@@ -264,7 +264,7 @@ int TryRpcread(File fd,void * buf,  int size) {
 			trycount=maxcount;
 		}catch(TException& tx){
 			std::cout << "ERROR: " << tx.what() << std::endl;
-			rpcsocket = std::make_shared<TSocket>("localhost", RPCPORT);
+			rpcsocket = std::make_shared<TSocket>("192.168.1.139", RPCPORT);
 			rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
 			rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
 			delete client;
