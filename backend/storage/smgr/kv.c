@@ -116,12 +116,18 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 
     err = KvGetInt(kvNumKey, &totalPageNum);
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
-        if (isComp)
-            return TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+        if (isComp) {
+            totalPageNum = TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
              reln->smgr_rnode.node.relNode, forknum, 0);  //-1 for err
+            
+            if (totalPageNum != -1)
+                KvPutInt(kvNumKey, totalPageNum);
+
+            return totalPageNum;
+        }
         else
             return -1;
-    }
+    } 
 //    if (err != 0) {
 //        ereport(ERROR,
 //                (errcode(ERRCODE_WINDOWING_ERROR),
@@ -535,8 +541,14 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     if(backup == NULL)
     {
         //printf("Locally kvread and kVGet fail. read %d\n\n", reln->smgr_rnode.node.relNode);
-            TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
-             reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
+        TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+            reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
+
+        if ( KvPut(kvPageKey, buffer, BLCKSZ) ) {
+        ereport(ERROR,
+                (errcode(ERRCODE_WINDOWING_ERROR),
+                        errmsg("[kvread] KvPut failed")));
+    }
     }
 
     pfree(path);
