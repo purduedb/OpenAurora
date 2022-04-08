@@ -638,7 +638,7 @@ XLogRecordAssemble(RmgrId rmid, uint8 info,
 			 * struct
 			 */
 			bkpb.fork_flags |= BKPBLOCK_HAS_IMAGE;
-
+            printf("[XLogRecordAssemble] Set has_image flag, block_id = %d\n", block_id);
 			/* Report a full page image constructed for the WAL record */
 			*num_fpi += 1;
 
@@ -701,6 +701,7 @@ XLogRecordAssemble(RmgrId rmid, uint8 info,
 			 * Link the caller-supplied rdata chain for this buffer to the
 			 * overall list.
 			 */
+            printf("[XLogRecordAssemble] Set has_data flag, blockid = %d\n", block_id);
 			bkpb.fork_flags |= BKPBLOCK_HAS_DATA;
 			bkpb.data_length = regbuf->rdata_len;
 			total_len += regbuf->rdata_len;

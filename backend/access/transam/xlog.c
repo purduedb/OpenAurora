@@ -7054,15 +7054,21 @@ StartupXLOG_Comp(void)
 static bool
 _asyncRedoXlog(XLogReaderState *xlogreader, XLogRecord *record) {
     bool need_async_redo = false;
-    if (xlogreader->max_block_id > 0) {
-        for (int i = 0; i < xlogreader->max_block_id; i++) {
+    printf("[_asyncRedoXlog] max_block_id = %d\n", xlogreader->max_block_id);
+    if (xlogreader->max_block_id >= 0) {
+        for (int i = 0; i <= xlogreader->max_block_id; i++) {
+            printf("[_asyncRedoXlog] block_id = %d, has_data = %d, has_image = %d\n", i, xlogreader->blocks[i].has_data, xlogreader->blocks[i].has_image);
             if(xlogreader->blocks[i].has_data == true || xlogreader->blocks[i].has_image == true) {
                 need_async_redo = true;
+                printf("[_asyncRedoXlog] 111\n");
                 smgrsavexlog(xlogreader->EndRecPtr, record);
+                printf("[_asyncRedoXlog] 222\n");
                 smgrasync_pagexlog(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum,
                                    xlogreader->blocks[i].blkno, xlogreader->EndRecPtr);
+                printf("[_asyncRedoXlog] 333\n");
                 smgrasync_relxlog(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum,
                                   xlogreader->EndRecPtr);
+                printf("[_asyncRedoXlog] 444\n");
             }
         }
     }
