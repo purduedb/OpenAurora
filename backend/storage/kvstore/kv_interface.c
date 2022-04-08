@@ -13,7 +13,7 @@
 #include "miscadmin.h"
 #include "postgres.h"
 
-#define DEBUG_INFO
+//#define DEBUG_INFO
 #ifdef USE_ROCKS_KV
 #include "rocksdb/c.h"
 rocksdb_t *db = NULL;

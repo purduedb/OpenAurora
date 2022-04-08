@@ -118,9 +118,14 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
 
     err = KvGetInt(kvNumKey, &totalPageNum);
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
-        if (isComp)
-            return TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
-             reln->smgr_rnode.node.relNode, forknum, LogwrtResult.Flush);  //-1 for err
+        if (isComp) {
+            printf("[kvnblocks] Start sending message to RpcKvNblocks\n");
+            int tempResult = TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
+                                   reln->smgr_rnode.node.relNode, forknum, LogwrtResult.Flush);  //-1 for err
+            printf("[kvnblocks] Recived result from Rpc Server\n");
+            return tempResult;
+        }
+
         else
             return -1;
     }

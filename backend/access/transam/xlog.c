@@ -7994,6 +7994,7 @@ StartupXLOG(void)
                 bool need_asyn_redo = false;
                 //CurrentRedoLsn = xlogreader->EndRecPtr;
                 need_asyn_redo = _asyncRedoXlog(xlogreader, record);
+                printf("[StartupXLog] this log need wait to do asyn redo? %d\n", need_asyn_redo);
 
 
                 bool		switchedTLI = false;
@@ -13606,9 +13607,9 @@ void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long ta
     unsigned long * xlogListForRedo = NULL;
 
     smgrget_rel_asynxlog(rnode, forknum, &xlogListForRedo);
-    printf("[RedoRelXlogForAsync] 1\n");
+    //printf("[RedoRelXlogForAsync] 1\n");
     if(xlogListForRedo == NULL) {
-        printf("[RedoRelXlogForAsync] 2\n");
+        printf("[RedoRelXlogForAsync] do nothing\n");
         // no xlog needs to redo
         return;
     }
