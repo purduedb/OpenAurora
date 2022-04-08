@@ -90,6 +90,7 @@ const char * KV_XLOG_LIST_PREFIX = "kv_xlog_list_\0"; // lsn -> xlog_record
 //! KV_PAGE_NUM is real page number, start from 1
 
 unsigned long CurrentRedoLsn = 0;
+//extern XLogwrtResult LogwrtResult;
 
 void
 storage_kvinit(void)
@@ -313,8 +314,9 @@ storage_kvcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
     char	   *filename;
 
+    int blockNum = storage_kvnblocks(reln, forkNum);
 
-    if (isRedo && reln->md_num_open_segs[forkNum] > 0)
+    if (blockNum > 0)
         return;					/* created and opened already... */
 
     filename = relpath(reln->smgr_rnode, forkNum);

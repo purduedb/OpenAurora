@@ -321,12 +321,15 @@ smgropen(RelFileNode rnode, BackendId backend)
 		reln->smgr_vm_nblocks = InvalidBlockNumber;
 
 		/*use rpc at present */
+
 //		reln->smgr_which = 0;
 //		/*TODO*/
-//		if (access(path, F_OK) == 0)
-//			reln->smgr_which = 1;
+		if (access(path, F_OK) == 0)
+			reln->smgr_which = 1;
+        else {
+            reln->smgr_which = 2;
+        }
 
-		reln->smgr_which = 2;	/* we only have md.c at present */
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);

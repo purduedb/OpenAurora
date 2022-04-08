@@ -403,4 +403,11 @@ extern SessionBackupState get_backup_status(void);
 #define PROMOTE_SIGNAL_FILE		"promote"
 #define FALLBACK_PROMOTE_SIGNAL_FILE  "fallback_promote"
 
+typedef struct XLogwrtResult
+{
+    XLogRecPtr	Write;			/* last byte + 1 written out */
+    XLogRecPtr	Flush;			/* last byte + 1 flushed */
+} XLogwrtResult;
+
+
 #endif							/* XLOG_H */

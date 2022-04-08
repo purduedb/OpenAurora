@@ -461,11 +461,7 @@ typedef struct XLogwrtRqst
 	XLogRecPtr	Flush;			/* last byte + 1 to flush */
 } XLogwrtRqst;
 
-typedef struct XLogwrtResult
-{
-	XLogRecPtr	Write;			/* last byte + 1 written out */
-	XLogRecPtr	Flush;			/* last byte + 1 flushed */
-} XLogwrtResult;
+
 
 /*
  * Inserting to WAL is protected by a small fixed number of WAL insertion
@@ -790,7 +786,7 @@ static int	UsableBytesInSegment;
  * Private, possibly out-of-date copy of shared LogwrtResult.
  * See discussion above.
  */
-static XLogwrtResult LogwrtResult = {0, 0};
+XLogwrtResult LogwrtResult = {0, 0};
 
 /*
  * Codes indicating where we got a WAL file from during recovery, or where

@@ -77,6 +77,8 @@ char * KV_GET_FILE_PAGE_PREFIX = "kv_get_\0"; //(filename, pageid) -> page
 //! Input BlockNum is index no, start from 0
 //! KV_PAGE_NUM is real page number, start from 1
 
+extern XLogwrtResult LogwrtResult;
+
 void
 kvinit(void)
 {
@@ -118,7 +120,7 @@ kvnblocks(SMgrRelation reln, ForkNumber forknum)
     if (err == -1) { // err==-1 means $kvNumKey doesn't exist in kv_store
         if (isComp)
             return TryRpcKvNblocks(reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
-             reln->smgr_rnode.node.relNode, forknum, 0);  //-1 for err
+             reln->smgr_rnode.node.relNode, forknum, LogwrtResult.Flush);  //-1 for err
         else
             return -1;
     }
@@ -536,7 +538,7 @@ kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     {
         //printf("Locally kvread and kVGet fail. read %d\n\n", reln->smgr_rnode.node.relNode);
             TryRpcKvRead(buffer, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode,
-             reln->smgr_rnode.node.relNode, forknum, blocknum, 0);
+             reln->smgr_rnode.node.relNode, forknum, blocknum, LogwrtResult.Flush);
     }
 
     pfree(path);
