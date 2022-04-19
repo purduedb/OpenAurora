@@ -90,7 +90,7 @@ const char * KV_XLOG_LIST_PREFIX = "kv_xlog_list_\0"; // lsn -> xlog_record
 //! KV_PAGE_NUM is real page number, start from 1
 
 unsigned long CurrentRedoLsn = 0;
-//extern XLogwrtResult LogwrtResult;
+extern XLogwrtResult LogwrtResult;
 
 void
 storage_kvinit(void)
@@ -117,7 +117,12 @@ storage_kvinit(void)
 
 BlockNumber
 storage_kvnblocks(SMgrRelation reln, ForkNumber forknum) {
+//    if(LogwrtResult.Flush < 0) {
+//        return storage_kvnblocks_internal(reln, forknum, -1);
+//    }
+//    return storage_kvnblocks_internal(reln, forknum, LogwrtResult.Flush);
     return storage_kvnblocks_internal(reln, forknum, -1);
+
 }
 
 
@@ -215,6 +220,7 @@ storage_kvnblocks_internal(SMgrRelation reln, ForkNumber forknum, unsigned long 
                     errmsg("storage_kvnblocks_internal end\n")));
     printf("[storage_kvnblocks_internal] END dbNum = %d, relNum = %d, forkNum = %d\n", reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
 #endif
+    fflush(stdout);
     return totalPageNum;
 }
 
@@ -663,7 +669,12 @@ storage_kvprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 void
 storage_kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
                char *buffer) {
+//    if (LogwrtResult.Flush < 0) {
+//        return storage_kvread_internal(reln, forknum, blocknum, buffer, -1);
+//    }
+//    return storage_kvread_internal(reln, forknum, blocknum, buffer, LogwrtResult.Flush);
     return storage_kvread_internal(reln, forknum, blocknum, buffer, -1);
+
 }
 
 
@@ -1115,6 +1126,7 @@ storage_async_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blockn
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("storage_async_pagexlog start\n")));
+    printf("[storage_async_pagexlog] 11111\n");
 #endif
     // first, check whether this list exist?
     char asyncXlogKey_page[MAXPGPATH];
@@ -1125,16 +1137,28 @@ storage_async_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blockn
     char * result = malloc(sizeof(unsigned long) * 64);
     char * backupPointer = result;
     int err = KvGet(path, &result);
+
+
+    printf("[storage_async_pagexlog] 222222\n");
     // if the list doesn't exist, create new one, and add this to the list
     if (result == NULL) {
         // why free: in the later Marshal function, the result will be assigned a new space
+        printf("[storage_async_pagexlog] 01010101010\n");
+
         free(backupPointer);
+        printf("[storage_async_pagexlog] 02020202020202\n");
+
         unsigned long tempList[1] = {lsn};
-        MarshalUnsignedLongList(tempList, lsn, &result);
+        MarshalUnsignedLongList(tempList, 1, &result);
+        printf("[storage_async_pagexlog] 0303030303030303\n");
+
     }
+    printf("[storage_async_pagexlog] kkkkkk\n");
+
     // if the lsn isn's bigger than largest element of list, ignore it
     AddLargestElem2OrderedKVList((unsigned long **)&result, lsn);
 
+    printf("[storage_async_pagexlog] 333333\n");
     err = KvPut(asyncXlogKey_page, result,
           sizeof(unsigned long) * (UnmarshalUnsignedLongListGetSize(result)+1));
 
@@ -1144,6 +1168,7 @@ storage_async_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blockn
                         errmsg("[storage_async_pagexlog] KvPut failed")));
     }
 
+    printf("[storage_async_pagexlog] 444444\n");
     free(result);
 #ifdef DEBUG_INFO
     ereport(NOTICE,
@@ -1173,7 +1198,7 @@ storage_async_relxlog(RelFileNode rnode, ForkNumber forknum, unsigned long lsn) 
         // why free: in the later Marshal function, the result will be assigned a new space
         free(backupPointer);
         unsigned long tempList[1] = {lsn};
-        MarshalUnsignedLongList(tempList, lsn, &result);
+        MarshalUnsignedLongList(tempList, 1, &result);
     }
     // if the lsn isn's bigger than largest element of list, ignore it
     AddLargestElem2OrderedKVList((unsigned long **)&result, lsn);
@@ -1344,6 +1369,7 @@ storage_get_rel_asynxlog_list(RelFileNode rnode, ForkNumber forknum, unsigned lo
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("storage_get_rel_asynxlog_list start\n")));
+    printf("storage_get_rel_asynxlog_list start\n");
 #endif
 
     char asyncListKey[MAXPGPATH];
@@ -1353,11 +1379,13 @@ storage_get_rel_asynxlog_list(RelFileNode rnode, ForkNumber forknum, unsigned lo
     pfree(path);
 
     int err = 0;
+    printf("storage_get_rel_asynxlog_list 1111\n");
 
     *targetResult = malloc(sizeof(unsigned long) * 64);
     unsigned long *result = *targetResult;
 
     err = KvGet(asyncListKey, (char**) targetResult);
+    printf("storage_get_rel_asynxlog_list 2222\n");
 
     if (err != 0) {
         ereport(ERROR,
@@ -1372,6 +1400,7 @@ storage_get_rel_asynxlog_list(RelFileNode rnode, ForkNumber forknum, unsigned lo
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("storage_get_rel_asynxlog_list end\n")));
+    printf("storage_get_rel_asynxlog_list end\n");
 #endif
     return;
 }

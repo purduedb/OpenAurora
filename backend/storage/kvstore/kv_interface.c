@@ -13,7 +13,7 @@
 #include "miscadmin.h"
 #include "postgres.h"
 
-//#define DEBUG_INFO
+#define DEBUG_INFO
 #ifdef USE_ROCKS_KV
 #include "rocksdb/c.h"
 rocksdb_t *db = NULL;
@@ -254,7 +254,9 @@ int KvGet(char *key, char **value) {
         initKvStore();
     }
     redisReply *reply;
+    printf("[KvGet] start rediscommand\n");
     reply = redisCommand(c,"GET %s", key);
+    printf("[KvGet] end rediscommand\n");
     if (reply->str == NULL) {
 #ifdef DEBUG_INFO
         ereport(NOTICE,
@@ -276,6 +278,7 @@ int KvGet(char *key, char **value) {
 #endif
     //*value = (char *) malloc(sizeof(char) * reply->len);
     //printf("error = %d %s %d\n", c->err, c->errstr, reply->str==NULL);
+    printf("reply->len=%d\n", reply->len);
     for (int i = 0; i < reply->len; i++) {
         (*value)[i] = reply->str[i];
     }

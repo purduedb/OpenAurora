@@ -13610,6 +13610,8 @@ void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long ta
     printf("[RedoRelXlogForAsync] dbNum = %d, relNum = %d, forkNum = %d\n", rnode.dbNode, rnode.relNode, forknum);
 #endif
 
+    printf("[RedoRelXlogForAsync] 222\n");
+
     unsigned long * xlogListForRedo = NULL;
 
     smgrget_rel_asynxlog(rnode, forknum, &xlogListForRedo);
@@ -13619,6 +13621,7 @@ void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long ta
         // no xlog needs to redo
         return;
     }
+    printf("[RedoRelXlogForAsync] 1111\n");
     unsigned long listSize = UnmarshalUnsignedLongListGetSize((char *) xlogListForRedo);
 
     int listIndex = FindLowerBound_UnsignedLong(
@@ -13633,6 +13636,8 @@ void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long ta
     }
     char *record = malloc(4096);
     char *err_msg = malloc(512);
+    printf("[RedoRelXlogForAsync] 2222\n");
+
     // redo xlog for this page from 0 to listIndex
     for (int i = 0; i <= listIndex; i++) {
         char * backupPointer = record;
@@ -13673,6 +13678,7 @@ void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long ta
         RmgrTable[ ((XLogRecord*)record) ->xl_rmid].rm_redo(replayReader);
         smgrdelete_from_rel_xlog_list(rnode, forknum, redoLsn);
     }
+    printf("[RedoRelXlogForAsync] 3333\n");
 
 
     free(record);
