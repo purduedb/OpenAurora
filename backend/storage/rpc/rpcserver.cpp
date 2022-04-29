@@ -25,6 +25,7 @@
 
 #include "access/xlog.h"
 #include "access/xlogutils.h"
+#include "access/relation.h"
 #include "commands/tablespace.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
@@ -39,8 +40,10 @@
 #include "storage/kvstore.h"
 #include "storage/smgr.h"
 #include "storage/sync.h"
+#include "storage/lmgr.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
+#include "utils/relmapper.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -86,6 +89,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
   void RpcKvRead(_Page& _return, const _Oid _spcNode, const _Oid _dbNode, 
   const _Oid _relNode, const int32_t fork, const int64_t block, 
   const int64_t upperLSN, const int64_t lowerLSN) {
+    /*
     RelFileNode rnode;
     rnode.spcNode = (Oid)_spcNode;
     rnode.dbNode = (Oid)_dbNode;
@@ -98,7 +102,26 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     smgrread(rel, (ForkNumber)fork, (BlockNumber)block, buf);
 
     _return.assign(buf, BLCKSZ);
-    
+    */
+   bool shared;
+   Oid reloid;
+   Relation rel;
+   Buffer buf;
+   Page page;
+
+   if ((Oid)_spcNode == GLOBALTABLESPACE_OID)
+    shared = true;
+
+    reloid = RelationMapFilenodeToOid((Oid)_relNode, shared);
+
+    rel = relation_open(reloid, AccessShareLock)
+
+    buf = ReadBufferExtended(rel, (ForkNumber)fork, (BlockNumber)block, RBM_NORMAL, NULL);
+
+    page = BufferGetPage(buf);
+
+    _return.assign(page, BLCKSZ);
+ 
     std::cout << "RpcKvRead" << std::endl;
   }
 
