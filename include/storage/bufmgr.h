@@ -171,6 +171,11 @@ extern PGDLLIMPORT int32 *LocalRefCount;
 /*
  * prototypes for functions in bufmgr.c
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern PrefetchBufferResult PrefetchSharedBuffer(struct SMgrRelationData *smgr_reln,
 												 ForkNumber forkNum,
 												 BlockNumber blockNum);
@@ -189,6 +194,10 @@ extern void MarkBufferDirty(Buffer buffer);
 extern void IncrBufferRefCount(Buffer buffer);
 extern Buffer ReleaseAndReadBuffer(Buffer buffer, Relation relation,
 								   BlockNumber blockNum);
+
+#ifdef __cplusplus
+}
+#endif
 
 extern void InitBufferPool(void);
 extern void InitBufferPoolAccess(void);

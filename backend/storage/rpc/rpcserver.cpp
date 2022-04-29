@@ -26,6 +26,7 @@
 #include "access/xlog.h"
 #include "access/xlogutils.h"
 #include "access/relation.h"
+#include "catalog/pg_tablespace.h"
 #include "commands/tablespace.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
@@ -114,7 +115,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
 
     reloid = RelationMapFilenodeToOid((Oid)_relNode, shared);
 
-    rel = relation_open(reloid, AccessShareLock)
+    rel = relation_open(reloid, AccessShareLock);
 
     buf = ReadBufferExtended(rel, (ForkNumber)fork, (BlockNumber)block, RBM_NORMAL, NULL);
 
