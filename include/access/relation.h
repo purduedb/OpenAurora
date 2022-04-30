@@ -18,19 +18,11 @@
 #include "storage/lockdefs.h"
 #include "utils/relcache.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 extern Relation relation_open(Oid relationId, LOCKMODE lockmode);
 extern Relation try_relation_open(Oid relationId, LOCKMODE lockmode);
 extern Relation relation_openrv(const RangeVar *relation, LOCKMODE lockmode);
 extern Relation relation_openrv_extended(const RangeVar *relation,
 										 LOCKMODE lockmode, bool missing_ok);
 extern void relation_close(Relation relation, LOCKMODE lockmode);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif							/* ACCESS_RELATION_H */

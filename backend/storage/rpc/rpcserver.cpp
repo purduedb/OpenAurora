@@ -25,7 +25,6 @@
 
 #include "access/xlog.h"
 #include "access/xlogutils.h"
-#include "access/relation.h"
 #include "catalog/pg_tablespace.h"
 #include "commands/tablespace.h"
 #include "miscadmin.h"
@@ -44,7 +43,6 @@
 #include "storage/lmgr.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
-#include "utils/relmapper.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -104,20 +102,14 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
 
     _return.assign(buf, BLCKSZ);
     */
-   bool shared;
-   Oid reloid;
-   Relation rel;
+   RelFileNode rnode;
+    rnode.spcNode = (Oid)_spcNode;
+    rnode.dbNode = (Oid)_dbNode;
+    rnode.relNode = (Oid)_relNode;
    Buffer buf;
    Page page;
 
-   if ((Oid)_spcNode == GLOBALTABLESPACE_OID)
-    shared = true;
-
-    reloid = RelationMapFilenodeToOid((Oid)_relNode, shared);
-
-    rel = relation_open(reloid, AccessShareLock);
-
-    buf = ReadBufferExtended(rel, (ForkNumber)fork, (BlockNumber)block, RBM_NORMAL, NULL);
+    buf = ReadBufferWithoutRelcache(rnode, (ForkNumber)fork, (BlockNumber)block, RBM_NORMAL, NULL);
 
     page = BufferGetPage(buf);
 
