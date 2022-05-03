@@ -134,7 +134,7 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
-
+#include "storage/kvstore.h"
 
 #ifdef EXEC_BACKEND
 #include "storage/spin.h"
@@ -908,6 +908,7 @@ PostmasterMain(int argc, char *argv[])
 	/* And switch working directory into it */
 	ChangeToDataDir();
 
+    StartRocksDbWriteProcess();
 	/*
 	 * Check for invalid combinations of GUC settings.
 	 */

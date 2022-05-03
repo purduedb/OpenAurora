@@ -80,7 +80,7 @@
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
-
+#include "storage/kvstore.h"
 /* ----------------
  *		global variables
  * ----------------
@@ -3778,10 +3778,11 @@ PostgresMain(int argc, char *argv[],
 			 const char *dbname,
 			 const char *username)
 {
-    ereport(NOTICE,
-            (errcode(ERRCODE_INTERNAL_ERROR),
-                    errmsg("[PostgresMain HERE!!!] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[PostgresMain HERE!!!] argc = %d, argv[0] = %s\n\n\n", argc, argv[0])));
 
+//    printf("[PostgresMain] Start\n");
 	int			firstchar;
 	StringInfoData input_message;
 	sigjmp_buf	local_sigjmp_buf;
@@ -3908,6 +3909,7 @@ PostgresMain(int argc, char *argv[],
 		InitializeMaxBackends();
 	}
 
+    StartRocksDbWriteProcess();
 	/* Early initialization */
 	BaseInit();
 

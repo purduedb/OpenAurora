@@ -52,7 +52,7 @@ static void init_locale(const char *categoryname, int category, const char *loca
 static void help(const char *progname);
 static void check_root(const char *progname);
 
-
+extern int ProcNoForRocksdb;
 /*
  * Any Postgres server process begins execution here.
  */
@@ -60,6 +60,10 @@ int
 main(int argc, char *argv[])
 {
     bool		do_check_root = true;
+
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("main start!!!!!!!!!!!!!!!!!!!!!\n\n\n\n\n")));
 
 	/*
 	 * If supported on the current platform, set up a handler to be called if
@@ -198,7 +202,6 @@ main(int argc, char *argv[])
 	pgwin32_signal_initialize();
 #endif
 
-    //atexit(KvClose);
 	if (argc > 1 && strcmp(argv[1], "--boot") == 0)
 		AuxiliaryProcessMain(argc, argv);	/* does not return */
 	else if (argc > 1 && strcmp(argv[1], "--describe-config") == 0)

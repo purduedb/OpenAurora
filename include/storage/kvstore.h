@@ -13,4 +13,6 @@ extern int KvGetInt(char *, int*);
 extern int KvPutInt(char *, int);
 extern int KvDelete(char *);
 extern void KvPrefixCopyDir(char* , char* , const char* );
+extern void StartRocksDbWriteProcess();
+
 #endif //SRC_KVSTORE_H

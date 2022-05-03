@@ -32,7 +32,7 @@
 #include "storage/standby.h"
 #include "utils/guc.h"
 #include "utils/timeout.h"
-
+#include "storage/kvstore.h"
 
 /*
  * Flags set by interrupt handlers for later service in the redo loop.
@@ -169,6 +169,7 @@ HandleStartupProcInterrupts(void)
 void
 StartupProcessMain(void)
 {
+    StartRocksDbWriteProcess();
 	/*
 	 * Properly accept or ignore signals the postmaster might send us.
 	 */

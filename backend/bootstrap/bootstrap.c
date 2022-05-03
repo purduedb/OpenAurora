@@ -199,9 +199,15 @@ static IndexList *ILHead = NULL;
 void
 AuxiliaryProcessMain(int argc, char *argv[])
 {
-    ereport(NOTICE,
-            (errcode(ERRCODE_INTERNAL_ERROR),
-                    errmsg("[AuxiliaryProcessMain HERE!!!] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[AuxiliaryProcessMain HERE!!!] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
+//
+//    printf("[AuxiliaryProcessMain] Start\n");
+//    StartRocksDbWriteProcess();
+//    ereport(NOTICE,
+//            (errcode(ERRCODE_INTERNAL_ERROR),
+//                    errmsg("[AuxiliaryProcessMain] argc = %d, argv[1] = %s\n\n\n", argc, argv[1])));
 	char	   *progname = argv[0];
 	int			flag;
 	char	   *userDoption = NULL;
@@ -423,6 +429,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	 */
 	SetProcessingMode(NormalProcessing);
 
+    StartRocksDbWriteProcess();
 	switch (MyAuxProcType)
 	{
 		case CheckerProcess:
@@ -496,10 +503,10 @@ CheckerModeMain(void)
  *	 The bootstrap backend doesn't speak SQL, but instead expects
  *	 commands in a special bootstrap language.
  */
+extern int ProcNoForRocksdb;
 static void
 BootstrapModeMain(void)
 {
-
 	int			i;
 
 	Assert(!IsUnderPostmaster);
@@ -553,7 +560,6 @@ BootstrapModeMain(void)
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
                     errmsg("[BootstrapModeMain]]444\n\n\n")));
-    KvClose();
 	proc_exit(0);
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
