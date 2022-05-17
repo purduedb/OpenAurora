@@ -17,12 +17,60 @@
 #include <signal.h>
 #include <sys/prctl.h>
 #include <semaphore.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <errno.h>
 
 #define USE_ROCKS_KV
 
 #ifdef USE_ROCKS_KV
 #include "rocksdb/c.h"
 
+/***************** DEFINITION of Semaphore ***************/
+#define OBJ_FLAGES (S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP)
+union semun {
+    int              val;    /* Value for SETVAL */
+    struct semid_ds *buf;    /* Buffer for IPC_STAT, IPC_SET */
+    unsigned short  *array;  /* Array for GETALL, SETALL */
+    struct seminfo  *__buf;  /* Buffer for IPC_INFO
+                                           (Linux-specific) */
+};
+
+/* return valid parameter operation number
+ * For example,
+ *          value1 = 0, value2 = 1, value3 = -1
+ *          then, valid parameter is 2 (value2 && value3)
+ */
+int prepare3SemunParam(struct sembuf *sembufList, int value1, int noWait1, int value2, int noWait2, int value3, int noWait3) {
+    if (sembufList == NULL) {
+        return 0;
+    }
+
+    int validParamNum = 0;
+
+    if(value1 != 0) {
+        sembufList[validParamNum].sem_num = 0;
+        sembufList[validParamNum].sem_op = value1;
+        sembufList[validParamNum].sem_flg = (noWait1 == 1) ? IPC_NOWAIT: (short)0;
+        validParamNum++;
+    }
+
+    if(value2 != 0) {
+        sembufList[validParamNum].sem_num = 1;
+        sembufList[validParamNum].sem_op = value2;
+        sembufList[validParamNum].sem_flg = (noWait2 == 1) ? IPC_NOWAIT: (short)0;
+        validParamNum++;
+    }
+
+    if(value3 != 0) {
+        sembufList[validParamNum].sem_num = 2;
+        sembufList[validParamNum].sem_op = value3;
+        sembufList[validParamNum].sem_flg = (noWait3 == 1) ? IPC_NOWAIT: (short)0;
+        validParamNum++;
+    }
+
+    return validParamNum;
+}
 
 /**************** DEFINITION of KvMessage ****************/
 #define SHARED_BLOCK_SIZE 12288
@@ -45,8 +93,9 @@ KvResponse  ResponseMsg;
 KvRequest   RequestMsg;
 
 #define DIFF_PROC_NUM 5
-sem_t* mySem[4*DIFF_PROC_NUM];
 char*   shemPtr[2*DIFF_PROC_NUM];
+int semIdList[DIFF_PROC_NUM];
+
 bool InitializedShem = false;
 int ProcNoForRocksdb = -1;
 /*******************************************************/
@@ -59,40 +108,48 @@ rocksdb_t *db = NULL;
 
 char KvStorePath[MAXPGPATH];
 
+int shmId;
+void *shmp;
 void initShem() {
 //    printf("initShem Start, pid = %d\n", getpid());
     if(InitializedShem == true)
         return;
     InitializedShem = true;
 
+// Initialize semaphore
+    for(int i = 0; i < DIFF_PROC_NUM; i++) {
+        semIdList[i] = semget(IPC_PRIVATE, 3, IPC_CREAT|OBJ_FLAGES);
+        if (semIdList[i] != -1) { // successful create semaphore
+            printf("create semaphore successfully\n");
+            union semun arg;
+            arg.array = calloc(3, sizeof(arg.array[0]));
+            if(arg.array == NULL) {
+                printf("calloc failed !\n");
+            }
+            arg.array[0] = 1;
 
-
-    int fd1, fd3;
-    int flag;
-
-    // Here create the semaphore shared memory
-    fd1 = open("./sem1", O_CREAT|O_RDWR|O_TRUNC, 0666);
-    ftruncate(fd1, 8192*4*DIFF_PROC_NUM);
-//    char pdd[256];
-//    getcwd(pdd, 256);
-//    printf("StartRocksDbWriteProcess cwd=%s\n", pdd);
-//    return;
-    for(int i = 0; i < 4*DIFF_PROC_NUM; i++) {
-        mySem[i] = (sem_t*) mmap(NULL, sizeof(sem_t), PROT_READ|PROT_WRITE, MAP_SHARED, fd1, i*8192);
-        if (i == 0) {
-            flag = sem_init(mySem[i], 1, 1);
+            if(errno == EEXIST){}
+            if (semctl(semIdList[i], 0, SETALL, arg) == -1) {
+                printf("set initial value of semaphore failed\n");
+                free(arg.array);
+                exit(-1);
+            } else {
+                printf("Initialize semaphore successfully\n");
+                free(arg.array);
+            }
         } else {
-            flag = sem_init(mySem[i], 1, 0);
-        }
-        if (flag != 0) {
-            printf("Initialize semaphore 1 failed\n");
+            printf("create semaphore failed\n");
         }
     }
+
+
+    shmId = shmget(IPC_PRIVATE, SHARED_BLOCK_SIZE*2*DIFF_PROC_NUM, IPC_CREAT|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+    shmp = shmat(shmId, NULL, 0);
+
     // Here initialize the shared memory for exchanging the data
-    fd3 = open("./share_memory", O_CREAT|O_RDWR|O_TRUNC, 0666);
-    ftruncate(fd3, SHARED_BLOCK_SIZE*2*DIFF_PROC_NUM);
     for(int i = 0; i < 2*DIFF_PROC_NUM; i++) {
-        shemPtr[i] = (void*) mmap(NULL, SHARED_BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd3, i*SHARED_BLOCK_SIZE);
+//        shemPtr[i] = (void*) mmap(NULL, SHARED_BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd3, i*SHARED_BLOCK_SIZE);
+        shemPtr[i] = ((char*)shmp) + i*SHARED_BLOCK_SIZE;
     }
 
 }
@@ -103,13 +160,19 @@ void closeShem() {
         return;
     }
     InitializedShem = false;
-    for(int i = 0; i < 4*DIFF_PROC_NUM; i++) {
-        sem_destroy(mySem[i]);
-        munmap(mySem[i], sizeof(sem_t));
+
+    // detach semaphore
+    for (int i = 0; i < DIFF_PROC_NUM; i++) {
+        if (semctl(semIdList[i], 3, IPC_RMID) == -1) {
+            printf("Delete semaphore failed\n");
+        } else {
+            printf("Delete semaphore succeed\n");
+        }
     }
-    for(int i = 0; i < 2*DIFF_PROC_NUM; i++) {
-        munmap(shemPtr[i], SHARED_BLOCK_SIZE);
-    }
+
+    // detach shared memory
+    shmdt(shmp);
+    shmctl(shmId, IPC_RMID, 0);
 //    printf("Out closeShem\n");
 }
 
@@ -135,6 +198,7 @@ void InitKvStore() {
 //                    errmsg("MAX FILE NUM = %d\n", max_file_num)));
 //
 //    sleep(15);
+    // todo
     rocksdb_options_set_max_open_files(options, 512);
 #if defined(OS_WIN)
     SYSTEM_INFO system_info;
@@ -152,7 +216,7 @@ void InitKvStore() {
     char *err = NULL;
     db = rocksdb_open(options, KvStorePath, &err);
     rocksdb_options_destroy(options);
-//    sleep(3);
+    sleep(3);
     return;
 }
 
@@ -182,31 +246,55 @@ void KvPut_kernel(int proc_num) {
         printf("[KvPut_kernel] put operation failed, error = %s\n", err);
     }
     memcpy(shemPtr[1+2*proc_num], (char *)&kvResp, sizeof(KvResponse));
-    sem_post(mySem[2+4*proc_num]);
+    struct sembuf sembufList[3];
+    int validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, 1, 0);
+    if(semop(semIdList[proc_num], sembufList, validParamNum) == -1) {
+        printf("[KvPut_kernel] sem_post failed\n");
+        return;
+    }
 
 }
-
 int KvPut(char *key, char *value, int valueLen) {
-//    printf("[KvPut] Start\n");
     initShem();
 
     KvRequest kvReq;
     kvReq.RequestType = 1;
-    kvReq.Key1Len = (int)strlen(key);
+    kvReq.Key1Len = (int) strlen(key);
     kvReq.Key2Len = valueLen;
 
-    sem_wait(mySem[4*ProcNoForRocksdb]);
-    memcpy(shemPtr[2*ProcNoForRocksdb], (char *)&kvReq, sizeof(KvRequest));
-    memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest), key, kvReq.Key1Len);
-    memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest)+kvReq.Key1Len, value, valueLen);
-    sem_post(mySem[1+4*ProcNoForRocksdb]);
+    int validParamList;
+    struct sembuf sembufList[3];
+
+    validParamList = prepare3SemunParam(sembufList, -1, 0, 0, 0, 0, 0);
+    if (semop(semIdList[ProcNoForRocksdb], sembufList, validParamList) == -1) {
+        printf("[KvPut] semaphore wait value1 failed\n");
+    }
+
+//    sem_wait(mySem[4*ProcNoForRocksdb]);
+    memcpy(shemPtr[2 * ProcNoForRocksdb], (char *) &kvReq, sizeof(KvRequest));
+    memcpy(shemPtr[2 * ProcNoForRocksdb] + sizeof(KvRequest), key, kvReq.Key1Len);
+    memcpy(shemPtr[2 * ProcNoForRocksdb] + sizeof(KvRequest) + kvReq.Key1Len, value, valueLen);
+//    sem_post(mySem[1+4*ProcNoForRocksdb]);
+    validParamList = prepare3SemunParam(sembufList, 0, 0, 1, 0, 0, 0);
+    if (semop(semIdList[ProcNoForRocksdb], sembufList, validParamList) == -1) {
+        printf("[KvPut] semaphore post value2 failed\n");
+    }
 
     // the request has been sent
     // now, start receive response
-    sem_wait(mySem[2+4*ProcNoForRocksdb]);
-    KvResponse *kvResp = (KvResponse*)shemPtr[1+2*ProcNoForRocksdb];
+//    sem_wait(mySem[2+4*ProcNoForRocksdb]);
+    validParamList = prepare3SemunParam(sembufList, 0, 0, 0, 0, -1, 0);
+    if (semop(semIdList[ProcNoForRocksdb], sembufList, validParamList) == -1) {
+        printf("[KvPut] semaphore wait value3 failed\n");
+    }
+    KvResponse *kvResp = (KvResponse *) shemPtr[1 + 2 * ProcNoForRocksdb];
     int status = kvResp->status;
-    sem_post(mySem[0+4*ProcNoForRocksdb]);
+
+
+    validParamList = prepare3SemunParam(sembufList, 1, 0, 0, 0, 0, 0);
+    if (semop(semIdList[ProcNoForRocksdb], sembufList, validParamList) == -1) {
+        printf("[KvPut] semaphore post value1 failed\n");
+    }
 
     return status;
 }
@@ -221,14 +309,28 @@ int KvGet(char *key, char **value) {
     kvReq.Key1Len = (int)strlen(key);
     kvReq.Key2Len = 0;
 
-    sem_wait(mySem[4*ProcNoForRocksdb]);
+    struct sembuf sembufList[3];
+    int validParamNum;
+
+    validParamNum = prepare3SemunParam(sembufList, -1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvGet] semaphore wait value1 failed\n");
+    }
+
     memcpy(shemPtr[2*ProcNoForRocksdb], (char *)&kvReq, sizeof(KvRequest));
     memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest), key, kvReq.Key1Len);
-    sem_post(mySem[1+4*ProcNoForRocksdb]);
+
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 1, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvGet] semaphore post value2 failed\n");
+    }
 
     // the request has been sent
     // now, start receive response
-    sem_wait(mySem[2+4*ProcNoForRocksdb]);
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, -1, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvGet] semaphore wait value3 failed\n");
+    }
     KvResponse *kvResp = (KvResponse*)shemPtr[1+2*ProcNoForRocksdb];
     int status = kvResp->status;
     if (kvResp->msgLen == 0) {
@@ -237,7 +339,10 @@ int KvGet(char *key, char **value) {
         memcpy(*value, shemPtr[1+2*ProcNoForRocksdb]+sizeof(KvResponse), kvResp->msgLen);
         (*value)[kvResp->msgLen] = '\0';
     }
-    sem_post(mySem[0+4*ProcNoForRocksdb]);
+    validParamNum = prepare3SemunParam(sembufList, 1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvGet] semaphore post value1 failed\n");
+    }
 //    printf("[KvGet] End\n");
     return status;
 }
@@ -278,22 +383,29 @@ void KvGet_kernel(int proc_num){
     memcpy(shemPtr[1+2*proc_num], (char *)&kvResp, sizeof(KvResponse));
     memcpy(shemPtr[1+2*proc_num]+sizeof(KvResponse), value, len);
     free(value);
-    sem_post(mySem[2+4*proc_num]);
+
+    struct sembuf sembufList[3];
+    int validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, 1, 0);
+    if(semop(semIdList[proc_num], sembufList, validParamNum) == -1) {
+        printf("[KvGet_kernel] sem_post failed\n");
+        return;
+    }
 }
 
 
 void KvClose() {
-//    printf("Start KvClose, pid = %d\n", getpid());
+    printf("Start KvClose, pid = %d\n", getpid());
     ereport(NOTICE,
             (errcode(ERRCODE_INTERNAL_ERROR),
-                    errmsg("[KvClose] Start Close\n\n\n")));
+                    errmsg("[KvClose] Try, Start Close\n\n\n")));
     if (db != NULL) {
-//        printf("KvClose really close, pid = %d\n", getpid());
+        printf("KvClose really close, pid = %d\n", getpid());
         rocksdb_close(db);
         db = NULL;
         ereport(NOTICE,
                 (errcode(ERRCODE_INTERNAL_ERROR),
                         errmsg("[KvClose] Start Close, success\n\n\n")));
+        closeShem();
     }
 
 //    closeShem();
@@ -311,17 +423,32 @@ int KvDelete(char *key) {
 
 // mySem = 2*ProcNoForRocksdb
 // shemPtr = 4*ProcNoForRocksdb
-    sem_wait(mySem[4*ProcNoForRocksdb]);
+    struct sembuf sembufList[3];
+    int validParamNum;
+
+    validParamNum = prepare3SemunParam(sembufList, -1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvDelete] semaphore wait value1 failed\n");
+    }
     memcpy(shemPtr[2*ProcNoForRocksdb], (char *)&kvReq, sizeof(KvRequest));
     memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest), key, kvReq.Key1Len);
-    sem_post(mySem[4*ProcNoForRocksdb+1]);
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 1, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvDelete] semaphore post value2 failed\n");
+    }
 
     // the request has been sent
     // now, start receive response
-    sem_wait(mySem[4*ProcNoForRocksdb+2]);
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, -1, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvDelete] semaphore wait value3 failed\n");
+    }
     KvResponse *kvResp = (KvResponse*)shemPtr[2*ProcNoForRocksdb+1];
     int status = kvResp->status;
-    sem_post(mySem[4*ProcNoForRocksdb]);
+    validParamNum = prepare3SemunParam(sembufList, 1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvDelete] semaphore post value1 failed\n");
+    }
 
     return status;
 }
@@ -353,7 +480,13 @@ void KvDelete_kernel(int proc_num) {
     }
     kvResp.msgLen = 0;
     memcpy(shemPtr[1+2*proc_num], (char *)&kvResp, sizeof(KvResponse));
-    sem_post(mySem[2+4*proc_num]);
+
+    struct sembuf sembufList[3];
+    int validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, 1, 0);
+    if(semop(semIdList[proc_num], sembufList, validParamNum) == -1) {
+        printf("[KvDelete_kernel] sem_post failed\n");
+        return;
+    }
 }
 
 void KvPrefixCopyDir(char* srcPath, char* dstPath, const char* prefixKey) {
@@ -367,7 +500,14 @@ void KvPrefixCopyDir(char* srcPath, char* dstPath, const char* prefixKey) {
     kvReq.Key2Len = (int) strlen(dstPath);
     kvReq.Key3Len = (int) strlen(prefixKey);
 
-    sem_wait(mySem[4*ProcNoForRocksdb]);
+    struct sembuf sembufList[3];
+    int validParamNum;
+
+    validParamNum = prepare3SemunParam(sembufList, -1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvPrefixCopyDir] semaphore wait value1 failed\n");
+    }
+
     memcpy(shemPtr[2*ProcNoForRocksdb], (char *)&kvReq, sizeof(KvRequest));
     memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest),
            srcPath, kvReq.Key1Len);
@@ -375,15 +515,26 @@ void KvPrefixCopyDir(char* srcPath, char* dstPath, const char* prefixKey) {
            dstPath, kvReq.Key2Len);
     memcpy(shemPtr[2*ProcNoForRocksdb]+sizeof(KvRequest)+kvReq.Key1Len+kvReq.Key2Len,
            prefixKey ,kvReq.Key3Len);
-    sem_post(mySem[1+4*ProcNoForRocksdb]);
+
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 1, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvPrefixCopyDir] semaphore post value2 failed\n");
+    }
 
     // the request has been sent
     // now, start receive response
-    sem_wait(mySem[2+4*ProcNoForRocksdb]);
+    validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, -1, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvPrefixCopyDir] semaphore wait value3 failed\n");
+    }
+
     KvResponse *kvResp = (KvResponse*)shemPtr[1+2*ProcNoForRocksdb];
     int status = kvResp->status;
-    sem_post(mySem[4*ProcNoForRocksdb]);
 
+    validParamNum = prepare3SemunParam(sembufList, 1, 0, 0, 0, 0, 0);
+    if(semop(semIdList[ProcNoForRocksdb], sembufList, validParamNum) == -1) {
+        printf("[KvPrefixCopyDir] semaphore post value1 failed\n");
+    }
 }
 
 void KvPrefixCopyDir_kernel(int proc_num) {
@@ -458,10 +609,15 @@ void KvPrefixCopyDir_kernel(int proc_num) {
     }
     kvResp.msgLen = 0;
     memcpy(shemPtr[1+2*proc_num], (char *)&kvResp, sizeof(KvResponse));
-    sem_post(mySem[2+4*proc_num]);
+    struct sembuf sembufList[3];
+    int validParamNum = prepare3SemunParam(sembufList, 0, 0, 0, 0, 1, 0);
+    if(semop(semIdList[proc_num], sembufList, validParamNum) == -1) {
+        printf("[KvCopyDir_kernel] sem_post failed\n");
+        return;
+    }
 }
 
-void sigTermHandler(int sig) {
+void sigTermHandlerSelf(int sig) {
 //    printf("Term signal is caught, pid = %d\n", getpid());
     KvClose();
     exit(0);
@@ -485,7 +641,7 @@ void StartRocksDbWriteProcess() {
     pid_t pid_before_fork = getpid();
     pid_t pid = fork();
     if (pid == 0) { // child
-//        printf("Rocksdb process pid = %d\n", getpid());
+        printf("Rocksdb process pid = %d\n", getpid());
         int r = prctl(PR_SET_PDEATHSIG, SIGTERM);
         if (r == -1) {
             printf("Prctl failed\n");
@@ -496,22 +652,36 @@ void StartRocksDbWriteProcess() {
             exit(1);
         }
 
+        atexit(KvClose);
         // Catch the TERM signal
-        struct sigaction catchTermSig;
-        struct sigaction oldSigAction;
-        catchTermSig.sa_handler = sigTermHandler;
-        int setTermSigSucc = sigaction(SIGTERM, &catchTermSig, &oldSigAction);
-        if(setTermSigSucc == -1) {
-            printf("Set signal action failed \n");
-        }
+//        struct sigaction catchTermSig;
+//        struct sigaction oldSigAction;
+//        catchTermSig.sa_handler = sigTermHandlerSelf;
+//        int setTermSigSucc = sigaction(SIGTERM, &catchTermSig, &oldSigAction);
+//        if(setTermSigSucc == -1) {
+//            printf("Set signal action failed \n");
+//        }
 
 
         while (1) {
+            struct sembuf semops[3];
+            int validParamNum = prepare3SemunParam(semops, 0, 0, -1, 1, 0, 0);
+
+            int count = 0;
             for (int i = 0; i < DIFF_PROC_NUM; i++) {
 //                printf("server process try %d\n", i);
-                if (sem_trywait(mySem[1 + 4 * i]) != 0) {
+                if(semop(semIdList[i], semops, validParamNum) == -1) {
+//                        printf("[no_wait] can not get immediately\n");
+                    if (count++ %100 == 0 ){
+                        count = 0;
+                        if(getppid() != pid_before_fork) {
+                            KvClose();
+                            exit(0);
+                        }
+                    }
                     continue;
                 }
+                count = 0;
 
                 KvRequest *kvReq = (KvRequest *) shemPtr[2 * i];
                 if (kvReq->RequestType == 0) {
