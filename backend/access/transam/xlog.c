@@ -6892,7 +6892,7 @@ StartupXLOG_Comp(void)
 
 //    XLogReplayBufferInit();
     XLogReplayModuleInit();
-    InRecovery = false;
+    InRecovery = true;
 
     /* REDO */
     if (InRecovery)
