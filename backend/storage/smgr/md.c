@@ -82,6 +82,7 @@
 static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 
 
+
 /* Populate a file tag describing an md.c segment file. */
 #define INIT_MD_FILETAG(a,xx_rnode,xx_forknum,xx_segno) \
 ( \
@@ -119,6 +120,8 @@ static MemoryContext MdCxt;		/* context for all MdfdVec objects */
  */
 #define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
 
+int rpc_get_block(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char * buffer);
+BlockNumber rpc_get_num_blocks(SMgrRelation reln, ForkNumber forknum);
 
 /*
  *	mdinit() -- Initialize private state for magnetic disk storage manager.
@@ -126,6 +129,8 @@ static MemoryContext MdCxt;		/* context for all MdfdVec objects */
 void
 mdinit(void)
 {
+    char		path[MAXPGPATH];
+	RpcInit();
 	MdCxt = AllocSetContextCreate(TopMemoryContext,
 								  "MdSmgr",
 								  ALLOCSET_DEFAULT_SIZES);
@@ -139,6 +144,7 @@ mdinit(void)
 bool
 mdexists(SMgrRelation reln, ForkNumber forkNum)
 {
+	elog(LOG, "-[%s]", __func__);
 	/*
 	 * Close it first, to ensure that we notice if the fork has been unlinked
 	 * since we opened it.
@@ -160,6 +166,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	char	   *path;
 	File		fd;
 
+	elog(LOG, "-[%s]", __func__);
 	if (isRedo && reln->md_num_open_segs[forkNum] > 0)
 		return;					/* created and opened already... */
 
@@ -255,6 +262,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 void
 mdunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 {
+	elog(LOG, "-[%s]", __func__);
 	/* Now do the per-fork work */
 	if (forkNum == InvalidForkNumber)
 	{
@@ -271,6 +279,7 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 	char	   *path;
 	int			ret;
 
+	elog(LOG, "-[%s]", __func__);
 	path = relpath(rnode, forkNum);
 
 	/*
@@ -370,6 +379,8 @@ mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	int			nbytes;
 	MdfdVec    *v;
 
+	elog(LOG, "-[%s] spcNode: %lu dbNode: %lu relNode: %lu forknum: %lu blocknum: %lu", __func__, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum);
+
 	/* This assert is too expensive to have on normally ... */
 #ifdef CHECK_WRITE_VS_EXTEND
 	Assert(blocknum >= mdnblocks(reln, forknum));
@@ -426,8 +437,7 @@ mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
  * EXTENSION_CREATE means it's OK to extend an existing relation, not to
  * invent one out of whole cloth.
  */
-MdfdVec *
-mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
+MdfdVec * mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 {
 	MdfdVec    *mdfd;
 	char	   *path;
@@ -441,6 +451,7 @@ mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
 	fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
 
+    elog(LOG, "-[%s] path: %s fd: %d", __func__, path, fd);
 	if (fd < 0)
 	{
 		if ((behavior & EXTENSION_RETURN_NULL) &&
@@ -449,9 +460,12 @@ mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 			pfree(path);
 			return NULL;
 		}
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not open file \"%s\": %m", path)));
+
+		// return mdfd with mdfd_cfd being -1
+		// rather than raising error
+		//ereport(ERROR,
+		//		(errcode_for_file_access(),
+		//		 errmsg("could not open file \"%s\": %m", path)));
 	}
 
 	pfree(path);
@@ -535,6 +549,7 @@ void
 mdwriteback(SMgrRelation reln, ForkNumber forknum,
 			BlockNumber blocknum, BlockNumber nblocks)
 {
+	elog(LOG, "-[%s]", __func__);
 	/*
 	 * Issue flush requests in as few requests as possible; have to split at
 	 * segment boundaries though, since those are actually separate files.
@@ -578,6 +593,44 @@ mdwriteback(SMgrRelation reln, ForkNumber forknum,
 }
 
 /*
+ * create an empty seg file if it doesn't exist
+ */
+MdfdVec *_mdfd_create_localseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno)
+{
+	MdfdVec *mdfd;
+	FILE	*fd;
+	File	vfd;
+	char	*fullpath;
+
+	fullpath = _mdfd_segpath(reln, forknum, segno);
+
+	/* create an empty file with maxsize of seg file */
+
+	// Future improvment: create file till needed block
+	fd=fopen(fullpath, "w");
+	//ftruncate(fileno(fd), RELSEG_SIZE * BLCKSZ);
+	ftruncate(fileno(fd), 0); // create one block size
+	fclose(fd);
+
+	/* it might not be necessary */
+	/* This will resize reln->md_seg_fds[forknum] and set md_num_open_segs[forknum] to segno + 1 */
+	if(segno >= reln->md_num_open_segs[forknum])
+		_fdvec_resize(reln, forknum, segno + 1);
+
+	vfd = PathNameOpenFile(fullpath, O_RDWR | PG_BINARY );
+
+    elog(LOG, "-[%s], path: %s vfd: %d", __func__, fullpath, vfd);
+	pfree(fullpath);
+	if (vfd < 0)
+		return NULL;
+
+	mdfd = &reln->md_seg_fds[forknum][segno];
+	mdfd->mdfd_vfd = vfd;
+	mdfd->mdfd_segno = segno;
+	return mdfd;
+}
+
+/*
  *	mdread() -- Read the specified block from a relation.
  */
 void
@@ -586,8 +639,11 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 {
 	off_t		seekpos;
 	int			nbytes;
+	BlockNumber targetseg;
 	MdfdVec    *v;
 
+	elog(LOG, "-[%s] spcNode: %lu dbNode: %lu relNode: %lu forknum: %lu blocknum: %lu", __func__, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum);
+	//elog(LOG, "-[%s] zero_damaged_pages: %lu InRecovery: %lu", __func__, zero_damaged_pages, InRecovery);
 	TRACE_POSTGRESQL_SMGR_MD_READ_START(forknum, blocknum,
 										reln->smgr_rnode.node.spcNode,
 										reln->smgr_rnode.node.dbNode,
@@ -597,11 +653,28 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	v = _mdfd_getseg(reln, forknum, blocknum, false,
 					 EXTENSION_FAIL | EXTENSION_CREATE_RECOVERY);
 
-	seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
+	/* v->mdfd_vfd < 0 means openseg didn't find the seg file */
+	if(!v || v->mdfd_vfd < 0)
+	{
+		targetseg = blocknum / ((BlockNumber) RELSEG_SIZE);
+		v = _mdfd_create_localseg(reln, forknum, targetseg);
+		rpc_get_block(reln, forknum, blocknum, buffer);
+		mdwrite(reln, forknum, blocknum, buffer, false);
+		nbytes = BLCKSZ;
+	}
+	else
+	{
+		seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
 
-	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
-
-	nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
+		Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
+		nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
+		/* <--- if get an invalid page */
+		if(*((int64_t *)buffer) == 0)
+			rpc_get_block(reln, forknum, blocknum, buffer);
+		/* update invalid page */
+		mdwrite(reln, forknum, blocknum, buffer, false);
+		nbytes = BLCKSZ;
+	}
 
 	TRACE_POSTGRESQL_SMGR_MD_READ_DONE(forknum, blocknum,
 									   reln->smgr_rnode.node.spcNode,
@@ -651,8 +724,10 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 {
 	off_t		seekpos;
 	int			nbytes;
+	BlockNumber targetseg;
 	MdfdVec    *v;
 
+	elog(LOG, "-[%s] spcNode: %lu dbNode: %lu relNode: %lu forknum: %lu blocknum: %lu", __func__, reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum);
 	/* This assert is too expensive to have on normally ... */
 #ifdef CHECK_WRITE_VS_EXTEND
 	Assert(blocknum < mdnblocks(reln, forknum));
@@ -666,6 +741,15 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	v = _mdfd_getseg(reln, forknum, blocknum, skipFsync,
 					 EXTENSION_FAIL | EXTENSION_CREATE_RECOVERY);
+
+	/* v->mdfd_vfd < 0 means openseg didn't find the seg file */
+	if(!v || v->mdfd_vfd < 0)
+	{
+
+		elog(LOG, "-[%s] v->mdfd_vfd%d", v->mdfd_vfd);
+		targetseg = blocknum / ((BlockNumber) RELSEG_SIZE);
+		v = _mdfd_create_localseg(reln, forknum, targetseg);
+	}
 
 	seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
 
@@ -717,6 +801,9 @@ mdnblocks(SMgrRelation reln, ForkNumber forknum)
 	BlockNumber nblocks;
 	BlockNumber segno = 0;
 
+	nblocks = rpc_get_num_blocks(reln, forknum);
+	elog(LOG, "-[%s] nblocks: %lu", __func__, nblocks);
+	return nblocks;
 	/* mdopen has opened the first segment */
 	Assert(reln->md_num_open_segs[forknum] > 0);
 
@@ -772,6 +859,7 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 	BlockNumber priorblocks;
 	int			curopensegs;
 
+	elog(LOG, "-[%s]", __func__);
 	/*
 	 * NOTE: mdnblocks makes sure we have opened all active segments, so that
 	 * truncation loop will get them all!
@@ -873,6 +961,7 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 	int			segno;
 	int			min_inactive_seg;
 
+	elog(LOG, "-[%s]", __func__);
 	/*
 	 * NOTE: mdnblocks makes sure we have opened all active segments, so that
 	 * fsync loop will get them all!
@@ -1105,6 +1194,7 @@ _mdfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 	/* open the file */
 	fd = PathNameOpenFile(fullpath, O_RDWR | PG_BINARY | oflags);
 
+	elog(LOG, "-[%s] path: %s fd: %d", fullpath, fd);
 	pfree(fullpath);
 
 	if (fd < 0)
@@ -1151,10 +1241,12 @@ _mdfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 
 	targetseg = blkno / ((BlockNumber) RELSEG_SIZE);
 
+    elog(LOG, "-[%s]md_num_open_segs: %lu targetseg: %lu", __func__, reln->md_num_open_segs[forknum], targetseg);
 	/* if an existing and opened segment, we're done */
 	if (targetseg < reln->md_num_open_segs[forknum])
 	{
 		v = &reln->md_seg_fds[forknum][targetseg];
+		elog(LOG, "--[%s] target existing and opened v->mdfd_vfd: %d", __func__, v->mdfd_vfd);
 		return v;
 	}
 
@@ -1267,6 +1359,10 @@ _mdnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
 	off_t		len;
 
+	/* for all non exist seg file, return RELSEG_SIZE for _mdfd_getseg to work correctly */
+	if(seg->mdfd_vfd < 0)
+		return RELSEG_SIZE;
+
 	len = FileSize(seg->mdfd_vfd);
 	if (len < 0)
 		ereport(ERROR,
@@ -1359,4 +1455,29 @@ mdfiletagmatches(const FileTag *ftag, const FileTag *candidate)
 	 * the ftag from the SYNC_FILTER_REQUEST request, so they're forgotten.
 	 */
 	return ftag->rnode.dbNode == candidate->rnode.dbNode;
+}
+
+/*
+ * Get the content of a block of the relation @reln from storage node through RPC
+ */
+int rpc_get_block(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char * buffer)
+{
+	Oid spcNode = reln->smgr_rnode.node.spcNode;
+	Oid dbNode = reln->smgr_rnode.node.dbNode;
+	Oid relNode = reln->smgr_rnode.node.relNode;
+	elog(LOG, "-[%s] spcNode: %lu dbNode: %lu relNode: %lu", __func__, spcNode, dbNode, relNode);
+	TryRpcKvRead(buffer, spcNode, dbNode, relNode, forknum, blocknum, NULL);
+	return 0;
+}
+
+/*
+ * Get number of block of relation @reln from storage node through RPC
+ */
+BlockNumber rpc_get_num_blocks(SMgrRelation reln, ForkNumber forknum)
+{
+	Oid spcNode = reln->smgr_rnode.node.spcNode;
+	Oid dbNode = reln->smgr_rnode.node.dbNode;
+	Oid relNode = reln->smgr_rnode.node.relNode;
+	elog(LOG, "-[%s] spcNode: %lu dbNode: %lu relNode: %lu", __func__, spcNode, dbNode, relNode);
+	return (BlockNumber)TryRpcKvNblocks(spcNode, dbNode, relNode, forknum, NULL);
 }
