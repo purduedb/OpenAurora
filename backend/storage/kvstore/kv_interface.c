@@ -13,6 +13,7 @@
 #include "miscadmin.h"
 #include "postgres.h"
 
+#define DEBUG_INFO
 #ifdef USE_ROCKS_KV
 #include "rocksdb/c.h"
 rocksdb_t *db = NULL;
@@ -223,6 +224,12 @@ void KvPrefixCopyDir(char* srcPath, char* dstPath, const char* prefixKey) {
 }
 
 int KvPut(char *key, char *value, int valueLen) {
+#ifdef DEBUG_INFO
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[KvPut] key = %s\n", key)));
+#endif
+
     if (c == NULL) {
         initKvStore();
     }
@@ -247,20 +254,31 @@ int KvGet(char *key, char **value) {
         initKvStore();
     }
     redisReply *reply;
-
+    printf("[KvGet] start rediscommand\n");
     reply = redisCommand(c,"GET %s", key);
+    printf("[KvGet] end rediscommand\n");
     if (reply->str == NULL) {
+#ifdef DEBUG_INFO
+        ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[KvGet] key = %s, doesn't exist\n", key)));
+#endif
+
         *value = NULL;
         return 0;
     }
-
     if (c->err != 0) {
         printf("[KvGet] error = %d, err_msg = %s\n", c->err, c->errstr);
         return c->err;
     }
-
+#ifdef DEBUG_INFO
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("[KvGet] key = %s, returned value\n", key)));
+#endif
     //*value = (char *) malloc(sizeof(char) * reply->len);
     //printf("error = %d %s %d\n", c->err, c->errstr, reply->str==NULL);
+    printf("reply->len=%d\n", reply->len);
     for (int i = 0; i < reply->len; i++) {
         (*value)[i] = reply->str[i];
     }
@@ -298,6 +316,73 @@ int* UnmarshalListGetList(char *p) {
     int *pInt = (int*)p;
     return &pInt[1];
 }
+
+
+int UnmarshalUnsignedLongListGetSize(char *p) {
+    unsigned long*pLong = (unsigned long*)p;
+    return (int)pLong[0];
+}
+
+unsigned long * UnmarshalUnsignedLongListGetList (char *p) {
+    unsigned long*pLong = (unsigned long*)p;
+    return &pLong[1];
+}
+
+
+void MarshalUnsignedLongList(const unsigned long *numList, int size, char **p) {
+    *p = malloc(sizeof(unsigned long) * (size+1) +1);
+    unsigned long* pInt = (unsigned long*)*p;
+    pInt[0] = size;
+    for(int i = 0; i < size; i++) {
+        pInt[i+1] = numList[i];
+    }
+    p[sizeof(unsigned long) * (size+1)] = 0;
+}
+
+
+// Here the numList should be a Dynamic space
+// Pay attention, here is kvList, the first elem is ListLen
+int AddLargestElem2OrderedKVList(unsigned long **kvList, unsigned long newEle) {
+    unsigned long listSize = (*kvList)[0];
+    if((*kvList)[listSize] >= newEle) {
+        // insert failed, since it's not bigger than last elem.
+        return 1;
+    }
+    // expand the space, add one unsigned long elem space
+    *kvList = realloc(*kvList, sizeof(unsigned long) * (listSize+2));
+    (*kvList)[0] = listSize+1;
+    (*kvList)[listSize+1] = newEle;
+    return 0;
+}
+
+// if all list elements are bigger than target, return -1
+int FindLowerBound_UnsignedLong(const unsigned long *list, int listSize, unsigned long target) {
+    if (listSize == 0) {
+        return  -1;
+    }
+
+    int theEnd = listSize-1;
+    int theStart = 0;
+
+    int theMid;
+
+    while (theStart < theEnd) {
+        theMid = (theEnd+theStart+1) /2;
+        if (list[theMid] == target)
+            return theMid;
+        else if (list[theMid] < target)
+            theStart = theMid;
+        else
+            theEnd = theMid-1;
+    }
+
+    if(list[theStart] > target) {
+        return -1;
+    }
+
+    return theStart;
+}
+
 
 // if the key doesn't exist, return 1
 // else return 0

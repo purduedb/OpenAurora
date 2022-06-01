@@ -1205,6 +1205,7 @@ ResetDecoder(XLogReaderState *state)
 bool
 DecodeXLogRecord(XLogReaderState *state, XLogRecord *record, char **errormsg)
 {
+    printf("[DecodeXLogRecord] Start\n");
 	/*
 	 * read next _size bytes from record buffer, but check for overrun first.
 	 */
@@ -1291,6 +1292,8 @@ DecodeXLogRecord(XLogReaderState *state, XLogRecord *record, char **errormsg)
 			blk->flags = fork_flags;
 			blk->has_image = ((fork_flags & BKPBLOCK_HAS_IMAGE) != 0);
 			blk->has_data = ((fork_flags & BKPBLOCK_HAS_DATA) != 0);
+
+            printf("[DecodeXLogRecord] blk->has_data = %d, blk_has_image = %d, block_id = %d\n", blk->has_data, blk->has_data, block_id);
 
 			COPY_HEADER_FIELD(&blk->data_len, sizeof(uint16));
 			/* cross-check that the HAS_DATA flag is set iff data_length > 0 */

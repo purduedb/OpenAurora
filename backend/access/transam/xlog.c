@@ -37,6 +37,7 @@
 #include "access/xloginsert.h"
 #include "access/xlogreader.h"
 #include "access/xlogutils.h"
+#include "access/heapam_xlog.h"
 #include "catalog/catversion.h"
 #include "catalog/pg_control.h"
 #include "catalog/pg_database.h"
@@ -71,6 +72,8 @@
 #include "storage/smgr.h"
 #include "storage/spin.h"
 #include "storage/sync.h"
+#include "storage/kvstore.h"
+#include "storage/storage_kv.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/memutils.h"
@@ -79,7 +82,7 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
-#include "access/heapam_xlog.h"
+extern unsigned long CurrentRedoLsn;
 
 extern uint32 bootstrap_data_checksum_version;
 
@@ -133,6 +136,8 @@ int			CheckPointSegments;
 /* Estimated distance between checkpoints, in bytes */
 static double CheckPointDistanceEstimate = 0;
 static double PrevCheckPointDistance = 0;
+
+#define DEBUG_INFO
 
 /*
  * GUC support
@@ -456,11 +461,7 @@ typedef struct XLogwrtRqst
 	XLogRecPtr	Flush;			/* last byte + 1 to flush */
 } XLogwrtRqst;
 
-typedef struct XLogwrtResult
-{
-	XLogRecPtr	Write;			/* last byte + 1 written out */
-	XLogRecPtr	Flush;			/* last byte + 1 flushed */
-} XLogwrtResult;
+
 
 /*
  * Inserting to WAL is protected by a small fixed number of WAL insertion
@@ -785,7 +786,7 @@ static int	UsableBytesInSegment;
  * Private, possibly out-of-date copy of shared LogwrtResult.
  * See discussion above.
  */
-static XLogwrtResult LogwrtResult = {0, 0};
+XLogwrtResult LogwrtResult = {0, 0};
 
 /*
  * Codes indicating where we got a WAL file from during recovery, or where
@@ -7717,6 +7718,30 @@ StartupXLOG_Comp(void)
 		RequestCheckpoint(CHECKPOINT_FORCE);
 }
 
+static bool
+_asyncRedoXlog(XLogReaderState *xlogreader, XLogRecord *record) {
+    bool need_async_redo = false;
+    printf("[_asyncRedoXlog] max_block_id = %d\n", xlogreader->max_block_id);
+    if (xlogreader->max_block_id >= 0) {
+        for (int i = 0; i <= xlogreader->max_block_id; i++) {
+            printf("[_asyncRedoXlog] block_id = %d, has_data = %d, has_image = %d\n", i, xlogreader->blocks[i].has_data, xlogreader->blocks[i].has_image);
+            if(xlogreader->blocks[i].has_data == true || xlogreader->blocks[i].has_image == true) {
+                need_async_redo = true;
+                printf("[_asyncRedoXlog] 111\n");
+                smgrsavexlog(xlogreader->EndRecPtr, record);
+                printf("[_asyncRedoXlog] 222\n");
+                smgrasync_pagexlog(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum,
+                                   xlogreader->blocks[i].blkno, xlogreader->EndRecPtr);
+                printf("[_asyncRedoXlog] 333\n");
+                smgrasync_relxlog(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum,
+                                  xlogreader->EndRecPtr);
+                printf("[_asyncRedoXlog] 444\n");
+            }
+        }
+    }
+    return need_async_redo;
+}
+
 void
 StartupXLOG(void)
 {
@@ -8291,6 +8316,7 @@ StartupXLOG(void)
     lastFullPageWrites = checkPoint.fullPageWrites;
 
     RedoRecPtr = XLogCtl->RedoRecPtr = XLogCtl->Insert.RedoRecPtr = checkPoint.redo;
+    //CurrentRedoLsn = RedoRecPtr;
     doPageWrites = lastFullPageWrites;
 
     if (RecPtr < checkPoint.redo)
@@ -8618,6 +8644,7 @@ StartupXLOG(void)
 
         if (record != NULL)
         {
+
             ErrorContextCallback errcallback;
             TimestampTz xtime;
 
@@ -8633,11 +8660,15 @@ StartupXLOG(void)
             do
             {
                 printf("[StartupXLog] parse record success.\n");
-
                 printf("[StartupXLog] rmid = %d, totalLen = %d\n", xlogreader->decoded_record->xl_rmid, xlogreader->decoded_record->xl_tot_len);
-
-
                 fflush(stdout);
+
+                // Here process the xlog to async redo
+                bool need_asyn_redo = false;
+                //CurrentRedoLsn = xlogreader->EndRecPtr;
+                need_asyn_redo = _asyncRedoXlog(xlogreader, record);
+                printf("[StartupXLog] this log need wait to do asyn redo? %d\n", need_asyn_redo);
+
 
                 bool		switchedTLI = false;
 
@@ -8778,7 +8809,10 @@ StartupXLOG(void)
                     RecordKnownAssignedTransactionIds(record->xl_xid);
 
                 /* Now apply the WAL record itself */
-                RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                if(need_asyn_redo == false) {
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                }
+
 
                 /*
                  * After redo, check whether the backup pages associated with
@@ -8786,7 +8820,8 @@ StartupXLOG(void)
                  * check is done only if consistency check is enabled for this
                  * record.
                  */
-                if ((record->xl_info & XLR_CHECK_CONSISTENCY) != 0)
+                if ( (need_asyn_redo==false) &&
+                        ((record->xl_info & XLR_CHECK_CONSISTENCY) != 0))
                     checkXLogConsistency(xlogreader);
 
                 /* Pop the error context stack */
@@ -14231,6 +14266,177 @@ void XLogReplayModuleInit(void)
 
     return;
 }
+
+
+void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long targetLsn) {
+
+#ifdef DEBUG_INFO
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("RedoRelXlogForAsync start\n")));
+    printf("[RedoRelXlogForAsync] dbNum = %d, relNum = %d, forkNum = %d\n", rnode.dbNode, rnode.relNode, forknum);
+#endif
+
+    printf("[RedoRelXlogForAsync] 222\n");
+
+    unsigned long * xlogListForRedo = NULL;
+
+    smgrget_rel_asynxlog(rnode, forknum, &xlogListForRedo);
+    //printf("[RedoRelXlogForAsync] 1\n");
+    if(xlogListForRedo == NULL) {
+        printf("[RedoRelXlogForAsync] do nothing\n");
+        // no xlog needs to redo
+        return;
+    }
+    printf("[RedoRelXlogForAsync] 1111\n");
+    unsigned long listSize = UnmarshalUnsignedLongListGetSize((char *) xlogListForRedo);
+
+    int listIndex = FindLowerBound_UnsignedLong(
+            UnmarshalUnsignedLongListGetList((char*)xlogListForRedo),
+            (int)listSize,
+            targetLsn
+    );
+
+    // if all xlog for redo is bigger than targetLSN, do nothing
+    if (listIndex == -1) {
+        return;
+    }
+    char *record = malloc(4096);
+    char *err_msg = malloc(512);
+    printf("[RedoRelXlogForAsync] 2222\n");
+
+    // redo xlog for this page from 0 to listIndex
+    for (int i = 0; i <= listIndex; i++) {
+        char * backupPointer = record;
+        unsigned long redoLsn = UnmarshalUnsignedLongListGetList((char *) xlogListForRedo) [i];
+
+        // backupPointer maybe set as NULL
+        smgrgetxlog(redoLsn, &backupPointer);
+        if (backupPointer == NULL) {
+            // This log doesn't exist, because it was redo-ed by RedoPageXlogForAsync
+            continue;
+        }
+
+        DecodeXLogRecord(replayReader, (XLogRecord *)backupPointer, &err_msg);
+        replayReader->EndRecPtr = redoLsn;
+
+        for (int j=0; j<replayReader->max_block_id; j++) {
+            if (replayReader->blocks[j].has_image == false
+                && replayReader->blocks[j].has_data == false) {
+                continue;
+            }
+
+            // no need to call itself
+            if (replayReader->blocks[j].rnode.spcNode == rnode.spcNode
+                && replayReader->blocks[j].rnode.dbNode == rnode.dbNode
+                && replayReader->blocks[j].rnode.relNode == rnode.relNode
+                && replayReader->blocks[j].forknum == forknum) {
+                continue;
+            }
+            RedoRelXlogForAsync(replayReader->blocks[j].rnode,
+                                 replayReader->blocks[j].forknum,
+                                 redoLsn-1);
+
+        }
+
+        // Do redo for lsn: redoLSN
+        CurrentRedoLsn = redoLsn;
+        smgrdeletexlog(redoLsn);
+        RmgrTable[ ((XLogRecord*)record) ->xl_rmid].rm_redo(replayReader);
+        smgrdelete_from_rel_xlog_list(rnode, forknum, redoLsn);
+    }
+    printf("[RedoRelXlogForAsync] 3333\n");
+
+
+    free(record);
+    free(xlogListForRedo);
+
+#ifdef DEBUG_INFO
+    ereport(NOTICE,
+            (errcode(ERRCODE_INTERNAL_ERROR),
+                    errmsg("RedoRelXlogForAsync End\n")));
+    printf("[RedoRelXlogForAsync] END\n");
+#endif
+}
+
+
+
+
+
+void RedoPageXlogForAsync(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long targetLsn) {
+
+    unsigned long * xlogListForRedo;
+    smgrget_page_asynxlog(rnode, forknum, blocknum, &xlogListForRedo);
+    if(xlogListForRedo == NULL) {
+        // no xlog needs to redo
+        return;
+    }
+
+    unsigned long listSize = UnmarshalUnsignedLongListGetSize((char *) xlogListForRedo);
+
+    int listIndex = FindLowerBound_UnsignedLong(
+            UnmarshalUnsignedLongListGetList((char*)xlogListForRedo),
+            listSize,
+            targetLsn
+            );
+
+    // if all xlog for redo is bigger than targetLSN, do nothing
+    if (listIndex == -1) {
+        return;
+    }
+
+    char *record = malloc(4096);
+    char *err_msg = malloc(512);
+    // redo xlog for this page from 0 to listIndex
+    for (int i = 0; i <= listIndex; i++) {
+        char * backupPointer = record;
+        unsigned long redoLsn = UnmarshalUnsignedLongListGetList((char *) xlogListForRedo) [i];
+
+        // backupPointer maybe set as NULL
+        smgrgetxlog(redoLsn, &backupPointer);
+        if (backupPointer == NULL) {
+            // this xlog maybe redo-ed by RedoRelXlogForAsync
+            continue;
+        }
+
+        DecodeXLogRecord(replayReader, (XLogRecord *)backupPointer, &err_msg);
+        replayReader->EndRecPtr = redoLsn;
+
+        for (int j=0; j<replayReader->max_block_id; j++) {
+            if (replayReader->blocks[j].has_image == false
+                && replayReader->blocks[j].has_data == false) {
+                continue;
+            }
+
+            // no need to call itself
+            if (replayReader->blocks[j].rnode.spcNode == rnode.spcNode
+                && replayReader->blocks[j].rnode.dbNode == rnode.dbNode
+                && replayReader->blocks[j].rnode.relNode == rnode.relNode
+                && replayReader->blocks[j].forknum == forknum
+                && replayReader->blocks[j].blkno == blocknum) {
+                continue;
+            }
+            RedoPageXlogForAsync(replayReader->blocks[j].rnode,
+                             replayReader->blocks[j].forknum,
+                             replayReader->blocks[j].blkno,
+                             redoLsn-1);
+
+        }
+
+        // Do redo for lsn: redoLSN
+        CurrentRedoLsn = redoLsn;
+        smgrdeletexlog(redoLsn);
+        RmgrTable[ ((XLogRecord*)record) ->xl_rmid].rm_redo(replayReader);
+        smgrdelete_from_page_xlog_list(rnode, forknum, blocknum, redoLsn);
+    }
+
+
+    free(record);
+    free(xlogListForRedo);
+
+
+}
+
 
 void XLogReplay(XLogRecPtr reqFrom, XLogRecPtr reqTo, char* data, int dataLen) {
 

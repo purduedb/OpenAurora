@@ -357,6 +357,8 @@ extern void CreateXlogReplayMemoryContext(void);
 extern void XLogReplayModuleInit(void);
 extern void XLogReplayBufferInit(void);
 
+extern void RedoRelXlogForAsync(RelFileNode rnode, ForkNumber forknum, unsigned long targetLsn);
+extern void RedoPageXlogForAsync(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long targetLsn);
 /*
  * Routines to start, stop, and get status of a base backup.
  */
@@ -400,5 +402,12 @@ extern SessionBackupState get_backup_status(void);
 /* files to signal promotion to primary */
 #define PROMOTE_SIGNAL_FILE		"promote"
 #define FALLBACK_PROMOTE_SIGNAL_FILE  "fallback_promote"
+
+typedef struct XLogwrtResult
+{
+    XLogRecPtr	Write;			/* last byte + 1 written out */
+    XLogRecPtr	Flush;			/* last byte + 1 flushed */
+} XLogwrtResult;
+
 
 #endif							/* XLOG_H */
