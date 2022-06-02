@@ -113,6 +113,7 @@ extern void smgrtruncate(SMgrRelation reln, ForkNumber *forknum,
 extern void smgrimmedsync(SMgrRelation reln, ForkNumber forknum);
 extern void AtEOXact_SMgr(void);
 extern void smgrcopydir(char* srcPath, char* dstPath);
+extern void smgrdelete(RelFileNode reln, ForkNumber forknum, BlockNumber blknum);
 
 extern void smgrasync_pagexlog(RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
 extern void smgrasync_relxlog(RelFileNode rnode, ForkNumber forknum, unsigned long lsn);

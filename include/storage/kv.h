@@ -29,6 +29,7 @@ extern void kvtruncate(SMgrRelation reln, ForkNumber forknum,
                        BlockNumber nblocks);
 extern void kvimmedsync(SMgrRelation reln, ForkNumber forknum);
 extern void kvcopydb(char *srcPath, char*dstPath);
+extern void kvdelete(RelFileNode reln, ForkNumber forknum, BlockNumber blknum);
 
 
 /* md sync callbacks */

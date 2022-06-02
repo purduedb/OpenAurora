@@ -77,6 +77,7 @@ typedef struct f_smgr
 
     void        (*smgr_delete_from_page_xlog_list) (RelFileNode rnode, ForkNumber forknum, BlockNumber blocknum, unsigned long lsn);
     void        (*smgr_delete_from_rel_xlog_list) (RelFileNode rnode, ForkNumber forknum, unsigned long lsn);
+    void        (*smgr_delete) (RelFileNode reln, ForkNumber forknum, BlockNumber blknum);
 } f_smgr;
 
 static const f_smgr smgrsw[] = {
@@ -135,7 +136,8 @@ static const f_smgr smgrsw[] = {
         .smgr_nblocks = kvnblocks,
         .smgr_truncate = kvtruncate,
         .smgr_immedsync = kvimmedsync,
-        .smgr_copydir = kvcopydb
+        .smgr_copydir = kvcopydb,
+        .smgr_delete = kvdelete
     },
     {
             .smgr_init = storage_kvinit,
@@ -806,4 +808,9 @@ AtEOXact_SMgr(void)
 
 		smgrclose(rel);
 	}
+}
+void
+smgrdelete(RelFileNode reln, ForkNumber forknum, BlockNumber blknum)
+{
+    smgrsw[1].smgr_delete(reln, forknum, blknum);
 }

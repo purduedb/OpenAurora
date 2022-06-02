@@ -60,7 +60,7 @@
  */
 #define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
 
-#define PRIMARY_NODE_IP ("10.186.51.194")
+#define PRIMARY_NODE_IP ("10.186.82.223")
 
 using namespace std;
 using namespace apache::thrift;

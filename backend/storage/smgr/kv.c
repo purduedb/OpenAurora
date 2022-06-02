@@ -446,6 +446,21 @@ kvprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum) {
     return true;
 }
 
+// Delete key from disk
+void kvdelete(RelFileNode reln, ForkNumber forknum, BlockNumber blknum) {
+    char *path;
+    char kvPageKey[MAXPGPATH];
+    char kvNumKey[MAXPGPATH];
+
+    path = relpathperm(reln, forknum);
+    snprintf(kvPageKey, sizeof(kvPageKey), KV_GET_FILE_PAGE, path, blknum);
+    snprintf(kvNumKey, sizeof(kvNumKey), KV_FILE_PAGE_NUM, path);
+
+    KvDelete(kvPageKey);
+    KvDelete(kvNumKey);
+    pfree(path);
+}
+
 void
 kvread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer) {

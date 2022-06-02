@@ -81,6 +81,9 @@
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "access/heapam_xlog.h"
+#include "storage/buf_internals.h"
+#include "catalog/pg_tablespace.h"
 
 extern unsigned long CurrentRedoLsn;
 
@@ -7344,8 +7347,59 @@ StartupXLOG_Comp(void)
                     TransactionIdIsValid(record->xl_xid))
                     RecordKnownAssignedTransactionIds(record->xl_xid);
 
+                BufferTag	bufBlkTag;			/* identity of requested block */
+                uint32		bufBlkHash;		/* hash value for newTag */
+                LWLock	   *newPartitionLock;	/* buffer partition lock for it */
+                bool needReplay = false;
+                if (xlogreader->max_block_id >= 0) {
+                    for (int i = 0; i <= xlogreader->max_block_id; i++) {
+                        printf("[StartupXLOG_Comp] block_id = %d, has_data = %d, has_image = %d\n", i, xlogreader->blocks[i].has_data, xlogreader->blocks[i].has_image);
+
+                        // First atmosphere: meta-data
+                        if(xlogreader->blocks[i].has_data == false && xlogreader->blocks[i].has_image == false) {
+                            needReplay = true;
+                            break;
+                        } else if(xlogreader->blocks[i].rnode.spcNode == GLOBALTABLESPACE_OID) {
+                            // Second atmosphere: related with catalog
+                            needReplay = true;
+                            break;
+                        } else { // Third atmosphere: this page exists in buffer
+                            INIT_BUFFERTAG(bufBlkTag, xlogreader->blocks[i].rnode,
+                                           xlogreader->blocks[i].forknum, xlogreader->blocks[i].blkno);
+
+                            /* determine its hash code and partition lock ID */
+                            bufBlkHash = BufTableHashCode(&bufBlkTag);
+                            newPartitionLock = BufMappingPartitionLock(bufBlkHash);
+
+                            /* see if the block is in the buffer pool already */
+                            LWLockAcquire(newPartitionLock, LW_SHARED);
+                            if ( BufTableLookup(&bufBlkTag, bufBlkHash) != -1 ) {
+                                needReplay = true;
+                                LWLockRelease(newPartitionLock);
+                                break;
+                            }
+                            LWLockRelease(newPartitionLock);
+                        }
+                    }
+                } else {
+                    needReplay = true;
+                }
+
+
                 /* Now apply the WAL record itself */
-                RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                if(needReplay) {
+                    printf("[StartupXLOG_Comp] Replay Xlog because block found in buffer, or meta-data\n");
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                } else {
+                    if (xlogreader->max_block_id >= 0) {
+                        for (int i = 0; i <= xlogreader->max_block_id; i++) {
+                            if(xlogreader->blocks[i].has_image || xlogreader->blocks[i].has_data) {
+                                smgrdelete(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->blocks[i].blkno);
+                            }
+                        }
+                    }
+                    printf("[StartupXLOG_Comp] Skip replaying xlog\n");
+                }
 
                 /*
                  * After redo, check whether the backup pages associated with
