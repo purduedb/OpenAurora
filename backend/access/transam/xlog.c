@@ -78,6 +78,39 @@
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "storage/rpcclient.h"
+
+#ifndef FRONTEND
+#define RPC_REMOTE_DISK
+#endif
+
+#ifdef RPC_REMOTE_DISK
+
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
+#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
+#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+#define FileClose(_File) RpcFileClose(_File)
+#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _offset)
+#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
+//#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
+//#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags)
+#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
+#define FileSize(_file) RpcFileSize(_file)
+#define FilePathName(_file) RpcFilePathName(_file)
+#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+#define unlink(_path) RpcUnlink(_path)
+#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+
+#define pg_fdatasync(_fd) RpcPgFdatasync(_fd)
+#define pg_fsync_no_writethrough(_fd) RpcPgFsyncNoWritethrough(_fd)
+#endif
+
+
 
 extern uint32 bootstrap_data_checksum_version;
 
@@ -2535,7 +2568,11 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 			{
 				errno = 0;
 				pgstat_report_wait_start(WAIT_EVENT_WAL_WRITE);
-				written = pg_pwrite(openLogFile, from, nleft, startoffset);
+#ifdef RPC_REMOTE_DISK
+                written = RpcPgPWrite(openLogFile, from, nleft, startoffset);
+#else
+                written = pg_pwrite(openLogFile, from, nleft, startoffset);
+#endif
 				pgstat_report_wait_end();
 				if (written <= 0)
 				{
@@ -3332,7 +3369,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		 * enough.
 		 */
 		errno = 0;
-		if (pg_pwrite(fd, zbuffer.data, 1, wal_segment_size - 1) != 1)
+#ifdef RPC_REMOTE_DISK
+        if (RpcPgPWrite(fd, zbuffer.data, 1, wal_segment_size - 1) != 1)
+#else
+        if (pg_pwrite(fd, zbuffer.data, 1, wal_segment_size - 1) != 1)
+#endif
 		{
 			/* if write didn't set errno, assume no disk space */
 			save_errno = errno ? errno : ENOSPC;
@@ -3347,7 +3388,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		 */
 		unlink(tmppath);
 
-		close(fd);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(fd);
+#else
+        close(fd);
+#endif
 
 		errno = save_errno;
 
@@ -3361,7 +3406,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 	{
 		int			save_errno = errno;
 
-		close(fd);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(fd);
+#else
+        close(fd);
+#endif
 		errno = save_errno;
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -3369,7 +3418,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 	}
 	pgstat_report_wait_end();
 
-	if (close(fd) != 0)
+#ifdef RPC_REMOTE_DISK
+    if (RpcClose(fd) != 0)
+#else
+    if (close(fd) != 0)
+#endif
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m", tmppath)));
@@ -3494,8 +3547,13 @@ XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 			if (nread > sizeof(buffer))
 				nread = sizeof(buffer);
 			pgstat_report_wait_start(WAIT_EVENT_WAL_COPY_READ);
-			r = read(srcfd, buffer.data, nread);
-			if (r != nread)
+
+#ifdef RPC_REMOTE_DISK
+            r = RpcPgPRead(srcfd, buffer.data, nread, 0);
+#elif
+            r = read(srcfd, buffer.data, nread);
+#endif
+            if (r != nread)
 			{
 				if (r < 0)
 					ereport(ERROR,
@@ -3864,7 +3922,11 @@ XLogFileClose(void)
 		(void) posix_fadvise(openLogFile, 0, 0, POSIX_FADV_DONTNEED);
 #endif
 
-	if (close(openLogFile) != 0)
+#ifdef RPC_REMOTE_DISK
+    if (RpcClose(openLogFile) != 0)
+#else
+    if (close(openLogFile) != 0)
+#endif
 	{
 		char		xlogfname[MAXFNAMELEN];
 		int			save_errno = errno;
@@ -3905,7 +3967,11 @@ PreallocXlogFiles(XLogRecPtr endptr)
 		_logSegNo++;
 		use_existent = true;
 		lf = XLogFileInit(_logSegNo, &use_existent, true);
-		close(lf);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(lf);
+#else
+        close(lf);
+#endif
 		if (!use_existent)
 			CheckpointStats.ckpt_segs_added++;
 	}
@@ -4350,7 +4416,11 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 		{
 			if (readFile >= 0)
 			{
-				close(readFile);
+#ifdef RPC_REMOTE_DISK
+                RpcClose(readFile);
+#else
+                close(readFile);
+#endif
 				readFile = -1;
 			}
 
@@ -4692,7 +4762,11 @@ WriteControlFile(void)
 						XLOG_CONTROL_FILE)));
 	pgstat_report_wait_end();
 
-	if (close(fd) != 0)
+#ifdef RPC_REMOTE_DISK
+    if (RpcClose(fd) != 0)
+#else
+    if (close(fd) != 0)
+#endif
 		ereport(PANIC,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m",
@@ -4719,8 +4793,14 @@ ReadControlFile(void)
 						XLOG_CONTROL_FILE)));
 
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_READ);
+
+#ifdef RPC_REMOTE_DISK
+    r = RpcPgPRead(fd, ControlFile, sizeof(ControlFileData), 0);
+#elif
 	r = read(fd, ControlFile, sizeof(ControlFileData));
-	if (r != sizeof(ControlFileData))
+#endif
+
+    if (r != sizeof(ControlFileData))
 	{
 		if (r < 0)
 			ereport(PANIC,
@@ -4735,7 +4815,11 @@ ReadControlFile(void)
 	}
 	pgstat_report_wait_end();
 
-	close(fd);
+#ifdef RPC_REMOTE_DISK
+    RpcClose(fd);
+#else
+    close(fd);
+#endif
 
 	/*
 	 * Check for expected pg_control format version.  If this is wrong, the
@@ -5326,7 +5410,11 @@ BootStrapXLOG(void)
 				 errmsg("could not fsync bootstrap write-ahead log file: %m")));
 	pgstat_report_wait_end();
 
-	if (close(openLogFile) != 0)
+#ifdef RPC_REMOTE_DISK
+    if (RpcClose(openLogFile) != 0)
+#else
+    if (close(openLogFile) != 0)
+#endif
 		ereport(PANIC,
 				(errcode_for_file_access(),
 				 errmsg("could not close bootstrap write-ahead log file: %m")));
@@ -5415,7 +5503,11 @@ readRecoverySignalFile(void)
 		if (fd >= 0)
 		{
 			(void) pg_fsync(fd);
-			close(fd);
+#ifdef RPC_REMOTE_DISK
+            RpcClose(fd);
+#else
+            close(fd);
+#endif
 		}
 		standby_signal_file_found = true;
 	}
@@ -5428,7 +5520,11 @@ readRecoverySignalFile(void)
 		if (fd >= 0)
 		{
 			(void) pg_fsync(fd);
-			close(fd);
+#ifdef RPC_REMOTE_DISK
+            RpcClose(fd);
+#else
+            close(fd);
+#endif
 		}
 		recovery_signal_file_found = true;
 	}
@@ -5567,7 +5663,11 @@ exitArchiveRecovery(TimeLineID endTLI, XLogRecPtr endOfLog)
 	 */
 	if (readFile >= 0)
 	{
-		close(readFile);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(readFile);
+#else
+        close(readFile);
+#endif
 		readFile = -1;
 	}
 
@@ -5609,7 +5709,11 @@ exitArchiveRecovery(TimeLineID endTLI, XLogRecPtr endOfLog)
 
 		fd = XLogFileInit(startLogSegNo, &use_existent, true);
 
-		if (close(fd) != 0)
+#ifdef RPC_REMOTE_DISK
+        if (RpcClose(fd) != 0)
+#else
+        if (close(fd) != 0)
+#endif
 		{
 			char		xlogfname[MAXFNAMELEN];
 			int			save_errno = errno;
@@ -7900,7 +8004,11 @@ StartupXLOG(void)
 	/* Shut down xlogreader */
 	if (readFile >= 0)
 	{
-		close(readFile);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(readFile);
+#else
+        close(readFile);
+#endif
 		readFile = -1;
 	}
 	XLogReaderFree(xlogreader);
@@ -11122,7 +11230,6 @@ do_pg_stop_backup(char *labelfile, bool waitforarchive, TimeLineID *stoptli_p)
 								BACKUP_LABEL_FILE)));
 			}
 			labelfile = palloc(statbuf.st_size + 1);
-			r = fread(labelfile, statbuf.st_size, 1, lfp);
 			labelfile[statbuf.st_size] = '\0';
 
 			/*
@@ -11912,7 +12019,11 @@ XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr, int reqLen,
 			}
 		}
 
-		close(readFile);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(readFile);
+#else
+        close(readFile);
+#endif
 		readFile = -1;
 		readSource = XLOG_FROM_ANY;
 	}
@@ -11931,7 +12042,11 @@ retry:
 										 targetRecPtr))
 		{
 			if (readFile >= 0)
-				close(readFile);
+#ifdef RPC_REMOTE_DISK
+            RpcClose(readFile);
+#else
+            close(readFile);
+#endif
 			readFile = -1;
 			readLen = 0;
 			readSource = XLOG_FROM_ANY;
@@ -11967,7 +12082,11 @@ retry:
 	readOff = targetPageOff;
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
-	r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+#ifdef RPC_REMOTE_DISK
+    r = RpcPgPRead(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+#else
+    r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+#endif
 	if (r != XLOG_BLCKSZ)
 	{
 		char		fname[MAXFNAMELEN];
@@ -12037,7 +12156,11 @@ next_record_is_invalid:
 	lastSourceFailed = true;
 
 	if (readFile >= 0)
-		close(readFile);
+#ifdef RPC_REMOTE_DISK
+        RpcClose(readFile);
+#else
+        close(readFile);
+#endif
 	readFile = -1;
 	readLen = 0;
 	readSource = XLOG_FROM_ANY;
@@ -12279,7 +12402,11 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				/* Close any old file we might have open. */
 				if (readFile >= 0)
 				{
-					close(readFile);
+#ifdef RPC_REMOTE_DISK
+                    RpcClose(readFile);
+#else
+                    close(readFile);
+#endif
 					readFile = -1;
 				}
 				/* Reset curFileTLI if random fetch. */

@@ -14,6 +14,7 @@ top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 
 SUBDIRS = \
+	pg_rpcserver \
 	initdb \
 	pg_archivecleanup \
 	pg_basebackup \

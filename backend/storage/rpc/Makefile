@@ -1,24 +1,21 @@
 #-------------------------------------------------------------------------
 #
 # Makefile--
-#    Makefile for tcop
+#    Makefile for storage/rpc
 #
 # IDENTIFICATION
-#    src/backend/tcop/Makefile
+#    src/backend/storage/rpc/Makefile
 #
 #-------------------------------------------------------------------------
 
-subdir = src/backend/tcop
-top_builddir = ../../..
+subdir = src/backend/storage/rpc
+top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = \
-	cmdtag.o \
-	dest.o \
-	fastpath.o \
-	postgres.o \
-	pquery.o \
-	utility.o \
-	storage_server.o
+	DataPageAccess.o \
+	rpcclient.o \
+	rpcserver.o
+	
 
 include $(top_srcdir)/src/backend/common.mk

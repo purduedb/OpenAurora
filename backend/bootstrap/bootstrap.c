@@ -49,6 +49,7 @@
 #include "utils/ps_status.h"
 #include "utils/rel.h"
 #include "utils/relmapper.h"
+#include "storage/rpcserver.h"
 
 uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
@@ -63,7 +64,7 @@ static void ShutdownAuxiliaryProcess(int code, Datum arg);
 static Form_pg_attribute AllocateAttribute(void);
 static Oid	gettype(char *type);
 static void cleanup(void);
-
+//static void RpcServerMain(void);
 /* ----------------
  *		global variables
  * ----------------
@@ -331,6 +332,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case WalReceiverProcess:
 			MyBackendType = B_WAL_RECEIVER;
 			break;
+        case RpcServerProcess:
+            MyBackendType = B_RPC_SERVER;
+            break;
 		default:
 			MyBackendType = B_INVALID;
 	}
@@ -463,6 +467,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			/* don't set signals, walreceiver has its own agenda */
 			WalReceiverMain();
 			proc_exit(1);		/* should never return */
+
+        case RpcServerProcess:
+//            RpcServerMain();
+            proc_exit(1);
 
 		default:
 			elog(PANIC, "unrecognized process type: %d", (int) MyAuxProcType);

@@ -40,6 +40,32 @@
 #include "storage/sync.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
+#include "storage/rpcclient.h"
+
+#define RPC_REMOTE_DISK
+
+#ifdef RPC_REMOTE_DISK
+
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
+#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
+#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+#define FileClose(_File) RpcFileClose(_File)
+#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _amount, _offset, _flag)
+#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
+//#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
+#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
+#define FileSize(_file) RpcFileSize(_file)
+#define FilePathName(_file) RpcFilePathName(_file)
+#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+#define unlink(_path) RpcUnlink(_path)
+#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+
+#endif
 
 /*
  *	The magnetic disk storage manager keeps track of open file
@@ -150,6 +176,11 @@ mdinit(void)
 	MdCxt = AllocSetContextCreate(TopMemoryContext,
 								  "MdSmgr",
 								  ALLOCSET_DEFAULT_SIZES);
+
+#ifdef RPC_REMOTE_DISK
+    RpcInit();
+//    RpcFileClose(-1);
+#endif
 }
 
 /*
@@ -1313,7 +1344,10 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 	if (ftag->segno < reln->md_num_open_segs[ftag->forknum])
 	{
 		file = reln->md_seg_fds[ftag->forknum][ftag->segno].mdfd_vfd;
-		strlcpy(path, FilePathName(file), MAXPGPATH);
+        char *name = FilePathName(file);
+        strlcpy(path, name, MAXPGPATH);
+        free(name);
+//		strlcpy(path, FilePathName(file), MAXPGPATH);
 		need_to_close = false;
 	}
 	else
@@ -1338,6 +1372,7 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 		FileClose(file);
 
 	errno = save_errno;
+    printf("[%s] function end\n", __func__ );
 	return result;
 }
 

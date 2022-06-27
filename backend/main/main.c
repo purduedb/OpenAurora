@@ -19,6 +19,7 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
+#include "tcop/storage_server.h"
 
 #include <unistd.h>
 
@@ -206,6 +207,10 @@ main(int argc, char *argv[])
 		PostgresMain(argc, argv,
 					 NULL,		/* no dbname */
 					 strdup(get_user_name_or_exit(progname)));	/* does not return */
+    else if (argc > 1 && strcmp(argv[1], "--rpc-server") == 0)
+        RpcServerMain(argc, argv,
+                     NULL,		/* no dbname */
+                     strdup(get_user_name_or_exit(progname)));	/* does not return */
 	else
 		PostmasterMain(argc, argv); /* does not return */
 	abort();					/* should not get here */

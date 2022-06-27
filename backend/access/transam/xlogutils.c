@@ -29,7 +29,36 @@
 #include "utils/guc.h"
 #include "utils/hsearch.h"
 #include "utils/rel.h"
+#include "storage/rpcclient.h"
 
+#ifndef FRONTEND
+#define RPC_REMOTE_DISK
+#endif
+
+#ifdef RPC_REMOTE_DISK
+
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
+#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
+#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+#define FileClose(_File) RpcFileClose(_File)
+#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _offset)
+#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
+//#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
+//#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags)
+#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
+#define FileSize(_file) RpcFileSize(_file)
+#define FilePathName(_file) RpcFilePathName(_file)
+#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+#define unlink(_path) RpcUnlink(_path)
+#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+#define close(_fd) RpcClose(_fd)
+
+#endif
 
 /* GUC variable */
 bool		ignore_invalid_pages = false;
