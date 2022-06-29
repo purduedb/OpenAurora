@@ -3308,10 +3308,10 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		fd = BasicOpenFile(path, O_RDWR | PG_BINARY | get_sync_bit(sync_method));
 		if (fd < 0)
 		{
-			if (errno != ENOENT)
-				ereport(ERROR,
-						(errcode_for_file_access(),
-						 errmsg("could not open file \"%s\": %m", path)));
+//			if (errno != ENOENT)
+//				ereport(ERROR,
+//						(errcode_for_file_access(),
+//						 errmsg("could not open file \"%s\": %m", path)));
 		}
 		else
 			return fd;
@@ -3793,7 +3793,8 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 
 		return fd;
 	}
-	if (errno != ENOENT || !notfoundOk) /* unexpected failure? */
+//	if (errno != ENOENT || !notfoundOk) /* unexpected failure? */
+    if (fd != -1 || !notfoundOk) /* unexpected failure? */
 		ereport(PANIC,
 				(errcode_for_file_access(),
 				 errmsg("could not open file \"%s\": %m", path)));
