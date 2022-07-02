@@ -4555,3 +4555,117 @@ TestForOldSnapshot_impl(Snapshot snapshot, Relation relation)
 				(errcode(ERRCODE_SNAPSHOT_TOO_OLD),
 				 errmsg("snapshot too old")));
 }
+
+/*
+ *  This function designed for remote disk architecture's FileWrite interface.
+ *  Under the given scenario, the FileRead only write normal relation page,
+ *  and each time write $BLCKSZ bytes.
+ *  1. If we found this page in the cache, then update it without marking
+ *      buffer dirty. And use FileWrite to write page into disk.
+ *  2. If we can't found this page's cache, insert it into cache and use
+ *      FileWrite to write page into disk.
+ */
+int RpcFileWriteWithCache(int vfd, char *buff, RpcRelation relation, off_t seekPos) {
+    Buffer      targetBuffer;
+    BufferDesc *bufHdr;
+    Block		bufBlock;
+    bool		found;
+
+    BufferAccessStrategy strategy = GetAccessStrategy(BAS_NORMAL);
+
+    RelFileNode relNode = {relation.spcNode, relation.dbNode, relation.relNode};
+    SMgrRelationData smgrRel;
+    smgrRel.smgr_rnode.node = relNode;
+
+    // try to find this page in bufferTable, if not found, reserve and pin a buffer
+    bufHdr = BufferAlloc(&smgrRel, RELPERSISTENCE_PERMANENT, relation.forkNum, relation.blockNum,
+                         strategy, &found);
+
+    targetBuffer = BufferDescriptorGetBuffer(bufHdr);
+    LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
+    if (found) { // Found it in the buffer, update the buffer
+        printf("[%s] found this page in the cache \n", __func__ );
+        Block page = BufferGetBlock(targetBuffer);
+
+        memcpy(page, buff, BLCKSZ);
+    } else { // Not in the cache: insert it into cache
+        printf("[%s] miss this page in the cache \n", __func__ );
+        // Put it into cache
+        Block page = BufferGetBlock(targetBuffer);
+        memcpy(page, buff, BLCKSZ);
+
+        TerminateBufferIO(bufHdr, false, BM_VALID);
+    }
+
+    int fileWriteResult = FileWrite(vfd, buff, BLCKSZ, seekPos, WAIT_EVENT_DATA_FILE_WRITE);
+    if (fileWriteResult != BLCKSZ) {
+        UnlockReleaseBuffer(targetBuffer);
+        return fileWriteResult;
+    }
+
+    if(BufferIsValid(targetBuffer))
+        UnlockReleaseBuffer(targetBuffer);
+
+    return fileWriteResult;
+}
+
+/*
+ *  This function designed for remote disk architecture's FileRead interface.
+ *  Under the given scenario, the FileRead only read normal relation page,
+ *  and each time read $BLCKSZ bytes.
+ *  1. If we found this page has been already inserted into cache, then
+ *      directly return it to rpc client.
+ *  2. If this page hasn't been cached, then read it by FileRead, and insert
+ *      this page to cache.
+ */
+int RpcFileReadWithCache(int vfd, char *buff, RpcRelation relation, off_t seekPos) {
+    printf("[%s] Start \n", __func__ );
+    Buffer      targetBuffer;
+    BufferDesc *bufHdr;
+    bool		found;
+
+    BufferAccessStrategy strategy = GetAccessStrategy(BAS_NORMAL);
+
+    RelFileNode relNode = {relation.spcNode, relation.dbNode, relation.relNode};
+    SMgrRelationData smgrRel;
+    smgrRel.smgr_rnode.node = relNode;
+
+    /* Make sure we will have room to remember the buffer pin */
+    ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
+    // try to find this page in bufferTable, if not found, reserve and pin a buffer
+    bufHdr = BufferAlloc(&smgrRel, RELPERSISTENCE_PERMANENT, relation.forkNum, relation.blockNum,
+                         strategy, &found);
+
+    if (found) { // Found it in the buffer, directly return the cache
+        printf("[%s] found this page in the cache \n", __func__ );
+        targetBuffer = BufferDescriptorGetBuffer(bufHdr);
+        Block page = BufferGetBlock(targetBuffer);
+
+        LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_SHARED);
+        memcpy(buff, page, BLCKSZ);
+        if(BufferIsValid(targetBuffer))
+            UnlockReleaseBuffer(targetBuffer);
+
+        return BLCKSZ;
+    } else { // Get from FileRead, and catch it
+        printf("[%s] miss this page in the cache\n", __func__ );
+        targetBuffer = BufferDescriptorGetBuffer(bufHdr);
+        int fileReadResult = FileRead(vfd, buff, BLCKSZ, seekPos, WAIT_EVENT_DATA_FILE_READ);
+        if (fileReadResult != BLCKSZ) {
+            UnlockReleaseBuffer(targetBuffer);
+            return fileReadResult;
+        }
+
+        LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
+        // Put it into cache
+        Block page = BufferGetBlock(targetBuffer);
+        memcpy(page, buff, BLCKSZ);
+
+        TerminateBufferIO(bufHdr, false, BM_VALID);
+
+        if(BufferIsValid(targetBuffer))
+            UnlockReleaseBuffer(targetBuffer);
+
+        return fileReadResult;
+    }
+}

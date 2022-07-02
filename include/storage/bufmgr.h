@@ -18,6 +18,7 @@
 #include "storage/buf.h"
 #include "storage/bufpage.h"
 #include "storage/relfilenode.h"
+#include "storage/fd.h"
 #include "utils/relcache.h"
 #include "utils/snapmgr.h"
 
@@ -167,7 +168,9 @@ extern PGDLLIMPORT int32 *LocalRefCount;
  * call to TestForOldSnapshot().  See the definition of that for details.
  */
 #define BufferGetPage(buffer) ((Page)BufferGetBlock(buffer))
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * prototypes for functions in bufmgr.c
  */
@@ -244,6 +247,13 @@ extern void TestForOldSnapshot_impl(Snapshot snapshot, Relation relation);
 extern BufferAccessStrategy GetAccessStrategy(BufferAccessStrategyType btype);
 extern void FreeAccessStrategy(BufferAccessStrategy strategy);
 
+
+/* Rpc Server */
+extern int RpcFileWriteWithCache(int vfd, char *buff, RpcRelation relation, off_t seekPos);
+extern int RpcFileReadWithCache(int vfd, char *buff, RpcRelation relation, off_t seekPos);
+#ifdef __cplusplus
+}
+#endif
 
 /* inline functions */
 

@@ -30,7 +30,7 @@ extern "C" {
     int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset);
     int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset);
     int32_t RpcClose(const int _fd);
-    int32_t RpcBasicOpenFile(char *path, int32_t _flags, char* file, char* func, int line);
+    int32_t RpcBasicOpenFile(char *path, int32_t _flags);
     int32_t RpcPgFdatasync(const int32_t _fd);
     int32_t RpcPgFsyncNoWritethrough(const int32_t _fd);
 

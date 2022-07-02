@@ -96,6 +96,8 @@
 #include "storage/ipc.h"
 #include "utils/guc.h"
 #include "utils/resowner_private.h"
+#include "storage/md.h"
+#include "storage/rpcclient.h"
 
 /* Define PG_FLUSH_DATA_WORKS if we have an implementation for pg_flush_data */
 #if defined(HAVE_SYNC_FILE_RANGE)
@@ -337,6 +339,62 @@ static void unlink_if_exists_fname(const char *fname, bool isdir, int elevel);
 
 static int	fsync_parent_path(const char *fname, int elevel);
 
+extern int IsRpcClient;
+
+int
+OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
+   if (IsRpcClient)
+       return RpcOpenTransientFile(fileName, fileFlags);
+   else
+       return OpenTransientFile(fileName, fileFlags);
+}
+
+int
+CloseTransientFile_Rpc_Local(int fd) {
+    if (IsRpcClient)
+        return RpcCloseTransientFile(fd);
+    else
+        return CloseTransientFile(fd);
+}
+
+int
+BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags) {
+    if (IsRpcClient)
+        return RpcBasicOpenFile(fileName, fileFlags);
+    else
+        return BasicOpenFile(fileName, fileFlags);
+}
+
+int
+Unlink_Rpc_Local(char *path) {
+    if (IsRpcClient)
+        return RpcUnlink(path);
+    else
+        return unlink(path);
+}
+
+int
+pg_fdatasync_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcPgFdatasync(fd);
+    else
+        return pg_fdatasync(fd);
+}
+
+int close_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcClose(fd);
+    else
+        return close(fd);
+}
+
+int
+pg_fsync_no_writethrough_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcPgFsyncNoWritethrough(fd);
+    else
+        return pg_fsync_no_writethrough(fd);
+}
 
 /*
  * pg_fsync --- do fsync with or without writethrough
@@ -824,7 +882,15 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 void
 InitFileAccess(void)
 {
-	Assert(SizeVfdCache == 0);	/* call me only once */
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+    printf("[%s], IsRpcClient = %d\n", __func__ , IsRpcClient);
+
+
+    Assert(SizeVfdCache == 0);	/* call me only once */
 
 	/* initialize cache header entry */
 	VfdCache = (Vfd *) malloc(sizeof(Vfd));
@@ -1435,7 +1501,10 @@ FileInvalidate(File file)
 File
 PathNameOpenFile(const char *fileName, int fileFlags)
 {
-	return PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
+    File result = PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
+//    printf("[%s] filename = %s, flag = %d, result = %d\n", __func__ , fileName, fileFlags, result);
+    return result;
+//	return PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
 }
 
 /*
@@ -1973,6 +2042,7 @@ int
 FileRead(File file, char *buffer, int amount, off_t offset,
 		 uint32 wait_event_info)
 {
+    printf("[%s] function start\n", __func__ );
 	int			returnCode;
 	Vfd		   *vfdP;
 
@@ -2029,6 +2099,7 @@ int
 FileWrite(File file, char *buffer, int amount, off_t offset,
 		  uint32 wait_event_info)
 {
+    printf("[%s] function start\n", __func__ );
 	int			returnCode;
 	Vfd		   *vfdP;
 
@@ -3605,4 +3676,181 @@ int
 data_sync_elevel(int elevel)
 {
 	return data_sync_retry ? elevel : PANIC;
+}
+
+int parseNumEndWith0(const char* path) {
+	int res = 0;
+	int count = 0;
+	for(; path[count]>='0'&&path[count]<='9'; count++) {
+		res *= 10;
+		res += path[count]-'0';
+	}
+
+	// Not end with '\0'
+	if (path[count] != 0) {
+		return -1;
+	}
+	return res;
+}
+
+RpcRelation ParseRpcRequestPath(char *path, int blockNum) {
+	printf("[%s] start \n", path);
+	RpcRelation rel = {1, 0, 0, 0, 0, blockNum};
+	RpcRelation errResult = {0, 0, 0, 0, 0, 0};
+	int parsedCount = 0;
+	int segNo;
+	if(strncmp(path, "global\0", 6) == 0) {
+		rel.spcNode = 1664;
+		parsedCount += 6;
+
+		// target: global/
+		if(path[parsedCount] == '/') {
+			parsedCount += 1;
+		} else {
+			return errResult;
+		}
+
+		// target: global/1234_
+		//          global/1234\0
+		//          global/1234.$segNo
+		for( ;path[parsedCount]>='0' && path[parsedCount]<='9'; parsedCount++) {
+			rel.relNode *= 10;
+			rel.relNode += path[parsedCount]-'0';
+		}
+
+		switch (path[parsedCount]){
+			case 0:
+				return rel;
+			case '.':
+				parsedCount++;
+				segNo = parseNumEndWith0(path+parsedCount);
+				if (segNo == -1) { //parse segNo failed
+					return errResult;
+				}
+				rel.blockNum += segNo * RELSEG_SIZE;
+				return rel;
+		}
+		// parse failed
+		if (path[parsedCount] != '_') {
+			return errResult;
+		}
+
+		// parsed global/1234_
+		parsedCount++;
+
+		// parse: global/1234_$forkNames + '.'OR'\0'
+		if (strncmp(path+parsedCount, "fsm", 3) == 0) {
+			parsedCount+=3;
+			rel.forkNum = 1;
+		} else if (strncmp(path+parsedCount, "vm", 2) == 0) {
+			parsedCount+=2;
+			rel.forkNum = 2;
+		} else if (strncmp(path+parsedCount, "init", 4) == 0) {
+			parsedCount+=4;
+			rel.forkNum = 3;
+		} else {
+			// parse forkNum failed
+			return errResult;
+		}
+
+		if(path[parsedCount] == 0) {
+			return rel;
+		}
+		if(path[parsedCount] != '.') {
+			// parse failed
+			return errResult;
+		}
+		parsedCount++;
+
+		segNo = parseNumEndWith0(path+parsedCount);
+		if (segNo == -1) {
+			return errResult;
+		}
+		rel.blockNum += segNo * RELSEG_SIZE;
+		return rel;
+
+	} else if(strncmp(path, "base\0", 4) == 0) {
+		rel.spcNode = 1663;
+		parsedCount += 4;
+
+		// target: base/
+		if(path[parsedCount] == '/') {
+			parsedCount += 1;
+		} else {
+			return errResult;
+		}
+
+		// target: base/$db
+		for( ;path[parsedCount]>='0' && path[parsedCount]<='9'; parsedCount++) {
+			rel.dbNode *= 10;
+			rel.dbNode += path[parsedCount]-'0';
+		}
+
+		// target: base/$db/
+		if(path[parsedCount] == '/') {
+			parsedCount += 1;
+		} else {
+			return errResult;
+		}
+
+		// target: base/$db/$rel
+		for( ;path[parsedCount]>='0' && path[parsedCount]<='9'; parsedCount++) {
+			rel.relNode *= 10;
+			rel.relNode += path[parsedCount]-'0';
+		}
+
+		switch (path[parsedCount]){
+			case 0: // target: base/$db/$rel \0
+				return rel;
+			case '.': // target: base/$db/$rel.segNo
+				parsedCount++;
+				segNo = parseNumEndWith0(path+parsedCount);
+				if (segNo == -1) { //parse segNo failed
+					return errResult;
+				}
+				rel.blockNum += segNo * RELSEG_SIZE;
+				return rel;
+		}
+		// parse failed
+		if (path[parsedCount] != '_') {
+			return errResult;
+		}
+
+		// parsed base/$db/$rel_
+		parsedCount++;
+
+		// target: base/$db/$rel_$forkNames + '.'OR'\0'
+		if (strncmp(path+parsedCount, "fsm", 3) == 0) {
+			parsedCount+=3;
+			rel.forkNum = 1;
+		} else if (strncmp(path+parsedCount, "vm", 2) == 0) {
+			parsedCount+=2;
+			rel.forkNum = 2;
+		} else if (strncmp(path+parsedCount, "init", 4) == 0) {
+			parsedCount+=4;
+			rel.forkNum = 3;
+		} else {
+			// parse forkNum failed
+			return errResult;
+		}
+
+		if(path[parsedCount] == 0) {
+			return rel;
+		}
+		if(path[parsedCount] != '.') {
+			// parse failed
+			return errResult;
+		}
+		// parsed base/$db/$rel_$forkNames.
+		parsedCount++;
+
+		segNo = parseNumEndWith0(path+parsedCount);
+		if (segNo == -1) {
+			return errResult;
+		}
+		rel.blockNum += segNo * RELSEG_SIZE;
+		return rel;
+	} else {
+		return errResult;
+	}
 }

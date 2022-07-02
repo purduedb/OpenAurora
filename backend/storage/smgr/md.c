@@ -42,31 +42,32 @@
 #include "utils/memutils.h"
 #include "storage/rpcclient.h"
 
-#define RPC_REMOTE_DISK
+//#define RPC_REMOTE_DISK
 
-#ifdef RPC_REMOTE_DISK
+//#ifdef RPC_REMOTE_DISK
 
-#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
-#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
-#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
-#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
-#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
-#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
-#define FileClose(_File) RpcFileClose(_File)
-#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _amount, _offset, _flag)
-#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
-#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+//#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
+//#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
+//#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+//#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+//#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+//#define FileClose(_File) RpcFileClose(_File)
+//#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _amount, _offset, _flag)
+//#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+//#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
 //#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
 //#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
-#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
-#define FileSize(_file) RpcFileSize(_file)
-#define FilePathName(_file) RpcFilePathName(_file)
-#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
-#define unlink(_path) RpcUnlink(_path)
-#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+//#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
+//#define FileSize(_file) RpcFileSize(_file)
+//#define FilePathName(_file) RpcFilePathName(_file)
+//#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+//#define unlink(_path) RpcUnlink(_path)
+//#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
 
-#endif
+//#endif
 
+int IsRpcClient = 0;
 /*
  *	The magnetic disk storage manager keeps track of open file
  *	descriptors in its own descriptor pool.  This is done to make it
@@ -177,10 +178,19 @@ mdinit(void)
 								  "MdSmgr",
 								  ALLOCSET_DEFAULT_SIZES);
 
-#ifdef RPC_REMOTE_DISK
-    RpcInit();
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+	printf("[%s], IsRpcClient = %d\n", __func__ , IsRpcClient);
+
+	if(IsRpcClient)
+		RpcInit();
+//#ifdef RPC_REMOTE_DISK
+//    RpcInit();
 //    RpcFileClose(-1);
-#endif
+//#endif
 }
 
 /*
@@ -226,20 +236,37 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	 * should be here and not in commands/tablespace.c?  But that would imply
 	 * importing a lot of stuff that smgr.c oughtn't know, either.
 	 */
-	TablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
+//	TablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
+//							reln->smgr_rnode.node.dbNode,
+//							isRedo);
+	if(IsRpcClient)
+		RpcTablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
+							reln->smgr_rnode.node.dbNode,
+							isRedo);
+	else
+		TablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
 							reln->smgr_rnode.node.dbNode,
 							isRedo);
 
 	path = relpath(reln->smgr_rnode, forkNum);
 
-	fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
+//	fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
+
+	if (IsRpcClient)
+		fd = RpcPathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
+	else
+		fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
 
 	if (fd < 0)
 	{
 		int			save_errno = errno;
 
-		if (isRedo)
-			fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
+		if (isRedo) {
+			if(IsRpcClient)
+				fd = RpcPathNameOpenFile(path, O_RDWR | PG_BINARY);
+			else
+				fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
+		}
 		if (fd < 0)
 		{
 			/* be sure to report the error reported by create, not open */
@@ -335,7 +362,11 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 			register_forget_request(rnode, forkNum, 0 /* first seg */ );
 
 		/* Next unlink the file */
-		ret = unlink(path);
+		if(IsRpcClient)
+			ret = RpcUnlink(path);
+		else
+			ret = unlink(path);
+//		ret = unlink(path);
 		if (ret < 0 && errno != ENOENT)
 			ereport(WARNING,
 					(errcode_for_file_access(),
@@ -346,14 +377,26 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 		/* truncate(2) would be easier here, but Windows hasn't got it */
 		int			fd;
 
-		fd = OpenTransientFile(path, O_RDWR | PG_BINARY);
+//		fd = OpenTransientFile(path, O_RDWR | PG_BINARY);
+		if(IsRpcClient)
+			fd = RpcOpenTransientFile(path, O_RDWR | PG_BINARY);
+		else
+			fd = OpenTransientFile(path, O_RDWR | PG_BINARY);
 		if (fd >= 0)
 		{
 			int			save_errno;
 
-			ret = ftruncate(fd, 0);
+//			ret = ftruncate(fd, 0);
+			if(IsRpcClient)
+				ret = RpcFtruncate(fd, 0);
+			else
+				ret = ftruncate(fd, 0);
 			save_errno = errno;
-			CloseTransientFile(fd);
+			if(IsRpcClient)
+				RpcCloseTransientFile(fd);
+			else
+				CloseTransientFile(fd);
+//			CloseTransientFile(fd);
 			errno = save_errno;
 		}
 		else
@@ -389,7 +432,8 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 				register_forget_request(rnode, forkNum, segno);
 
 			sprintf(segpath, "%s.%u", path, segno);
-			if (unlink(segpath) < 0)
+//			if (unlink(segpath) < 0)
+			if (((IsRpcClient)? RpcUnlink(segpath): unlink(segpath) ) < 0)
 			{
 				/* ENOENT is expected after the last segment... */
 				if (errno != ENOENT)
@@ -445,19 +489,26 @@ mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	if ((nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND)) != BLCKSZ)
+	if(IsRpcClient)
+		nbytes = RpcFileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND);
+	else
+		nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND);
+//	if ((nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND)) != BLCKSZ)
+	if (nbytes != BLCKSZ)
 	{
 		if (nbytes < 0)
 			ereport(ERROR,
 					(errcode_for_file_access(),
 					 errmsg("could not extend file \"%s\": %m",
-							FilePathName(v->mdfd_vfd)),
+							(IsRpcClient ? RpcFilePathName(v->mdfd_vfd):FilePathName(v->mdfd_vfd))),
+//							FilePathName(v->mdfd_vfd)),
 					 errhint("Check free disk space.")));
 		/* short write: complain appropriately */
 		ereport(ERROR,
 				(errcode(ERRCODE_DISK_FULL),
 				 errmsg("could not extend file \"%s\": wrote only %d of %d bytes at block %u",
-						FilePathName(v->mdfd_vfd),
+						(IsRpcClient ? RpcFilePathName(v->mdfd_vfd):FilePathName(v->mdfd_vfd)),
+//						FilePathName(v->mdfd_vfd),
 						nbytes, BLCKSZ, blocknum),
 				 errhint("Check free disk space.")));
 	}
@@ -491,7 +542,10 @@ mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
 	path = relpath(reln->smgr_rnode, forknum);
 
-	fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
+	if(IsRpcClient)
+		fd = RpcPathNameOpenFile(path, O_RDWR | PG_BINARY);
+	else
+		fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
 
 	if (fd < 0)
 	{
@@ -546,7 +600,11 @@ mdclose(SMgrRelation reln, ForkNumber forknum)
 	{
 		MdfdVec    *v = &reln->md_seg_fds[forknum][nopensegs - 1];
 
-		FileClose(v->mdfd_vfd);
+//		FileClose(v->mdfd_vfd);
+		if (IsRpcClient)
+			RpcFileClose(v->mdfd_vfd);
+		else
+			FileClose(v->mdfd_vfd);
 		_fdvec_resize(reln, forknum, nopensegs - 1);
 		nopensegs--;
 	}
@@ -571,7 +629,11 @@ mdprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	(void) FilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
+//	(void) FilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
+	if(IsRpcClient)
+		(void) RpcFilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
+	else
+		(void) FilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
 #endif							/* USE_PREFETCH */
 
 	return true;
@@ -622,7 +684,12 @@ mdwriteback(SMgrRelation reln, ForkNumber forknum,
 
 		seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
 
-		FileWriteback(v->mdfd_vfd, seekpos, (off_t) BLCKSZ * nflush, WAIT_EVENT_DATA_FILE_FLUSH);
+//		FileWriteback(v->mdfd_vfd, seekpos, (off_t) BLCKSZ * nflush, WAIT_EVENT_DATA_FILE_FLUSH);
+
+		if(IsRpcClient)
+			RpcFileWriteback(v->mdfd_vfd, seekpos, (off_t) BLCKSZ * nflush, WAIT_EVENT_DATA_FILE_FLUSH);
+		else
+			FileWriteback(v->mdfd_vfd, seekpos, (off_t) BLCKSZ * nflush, WAIT_EVENT_DATA_FILE_FLUSH);
 
 		nblocks -= nflush;
 		blocknum += nflush;
@@ -653,7 +720,11 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
+//	nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
+	if(IsRpcClient)
+		nbytes = RpcFileRead(buffer, v->mdfd_vfd, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
+	else
+		nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
 
 	TRACE_POSTGRESQL_SMGR_MD_READ_DONE(forknum, blocknum,
 									   reln->smgr_rnode.node.spcNode,
@@ -665,12 +736,24 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	if (nbytes != BLCKSZ)
 	{
-		if (nbytes < 0)
-			ereport(ERROR,
-					(errcode_for_file_access(),
-					 errmsg("could not read block %u in file \"%s\": %m",
-							blocknum, FilePathName(v->mdfd_vfd))));
+//		if (nbytes < 0)
+//			ereport(ERROR,
+//					(errcode_for_file_access(),
+//					 errmsg("could not read block %u in file \"%s\": %m",
+//							blocknum, FilePathName(v->mdfd_vfd))));
 
+		if(IsRpcClient)
+			if (nbytes < 0)
+				ereport(ERROR,
+						(errcode_for_file_access(),
+								errmsg("could not read block %u in file \"%s\": %m",
+									   blocknum, RpcFilePathName(v->mdfd_vfd))));
+		else
+			if (nbytes < 0)
+				ereport(ERROR,
+						(errcode_for_file_access(),
+								errmsg("could not read block %u in file \"%s\": %m",
+									   blocknum, FilePathName(v->mdfd_vfd))));
 		/*
 		 * Short read: we are at or past EOF, or we read a partial block at
 		 * EOF.  Normally this is an error; upper levels should never try to
@@ -685,7 +768,8 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg("could not read block %u in file \"%s\": read only %d of %d bytes",
-							blocknum, FilePathName(v->mdfd_vfd),
+//							blocknum, FilePathName(v->mdfd_vfd),
+							blocknum, (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)),
 							nbytes, BLCKSZ)));
 	}
 }
@@ -723,7 +807,11 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-	nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_WRITE);
+//	nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_WRITE);
+	if(IsRpcClient)
+		nbytes = RpcFileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_WRITE);
+	else
+		nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_WRITE);
 
 	TRACE_POSTGRESQL_SMGR_MD_WRITE_DONE(forknum, blocknum,
 										reln->smgr_rnode.node.spcNode,
@@ -739,13 +827,15 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 			ereport(ERROR,
 					(errcode_for_file_access(),
 					 errmsg("could not write block %u in file \"%s\": %m",
-							blocknum, FilePathName(v->mdfd_vfd))));
+//							blocknum, FilePathName(v->mdfd_vfd))));
+							blocknum, (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)))));
 		/* short write: complain appropriately */
 		ereport(ERROR,
 				(errcode(ERRCODE_DISK_FULL),
 				 errmsg("could not write block %u in file \"%s\": wrote only %d of %d bytes",
 						blocknum,
-						FilePathName(v->mdfd_vfd),
+//						FilePathName(v->mdfd_vfd),
+						(IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)),
 						nbytes, BLCKSZ),
 				 errhint("Check free disk space.")));
 	}
@@ -861,11 +951,27 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			 * This segment is no longer active. We truncate the file, but do
 			 * not delete it, for reasons explained in the header comments.
 			 */
-			if (FileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
-				ereport(ERROR,
-						(errcode_for_file_access(),
-						 errmsg("could not truncate file \"%s\": %m",
-								FilePathName(v->mdfd_vfd))));
+//			if (FileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+//				ereport(ERROR,
+//						(errcode_for_file_access(),
+//						 errmsg("could not truncate file \"%s\": %m",
+//								FilePathName(v->mdfd_vfd))));
+			if(IsRpcClient)
+				if (RpcFileTruncate(v->mdfd_vfd, 0) < 0)
+					ereport(ERROR,
+							(errcode_for_file_access(),
+									errmsg("could not truncate file \"%s\": %m",
+										   RpcFilePathName(v->mdfd_vfd))));
+//										   (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)))));
+			else
+				if (FileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+					ereport(ERROR,
+							(errcode_for_file_access(),
+									errmsg("could not truncate file \"%s\": %m",
+										   FilePathName(v->mdfd_vfd))));
+//										   (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)))));
+
+
 
 			if (!SmgrIsTemp(reln))
 				register_dirty_segment(reln, forknum, v);
@@ -873,7 +979,11 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			/* we never drop the 1st segment */
 			Assert(v != &reln->md_seg_fds[forknum][0]);
 
-			FileClose(v->mdfd_vfd);
+			if(IsRpcClient)
+				RpcFileClose(v->mdfd_vfd);
+			else
+				FileClose(v->mdfd_vfd);
+//			FileClose(v->mdfd_vfd);
 			_fdvec_resize(reln, forknum, curopensegs - 1);
 		}
 		else if (priorblocks + ((BlockNumber) RELSEG_SIZE) > nblocks)
@@ -887,12 +997,27 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 			 */
 			BlockNumber lastsegblocks = nblocks - priorblocks;
 
-			if (FileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
-				ereport(ERROR,
-						(errcode_for_file_access(),
-						 errmsg("could not truncate file \"%s\" to %u blocks: %m",
-								FilePathName(v->mdfd_vfd),
-								nblocks)));
+//			if (FileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+//				ereport(ERROR,
+//						(errcode_for_file_access(),
+//						 errmsg("could not truncate file \"%s\" to %u blocks: %m",
+//								FilePathName(v->mdfd_vfd),
+//								nblocks)));
+			if(IsRpcClient)
+				if (RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
+					ereport(ERROR,
+							(errcode_for_file_access(),
+									errmsg("could not truncate file \"%s\" to %u blocks: %m",
+										   RpcFilePathName(v->mdfd_vfd),
+										   nblocks)));
+			else
+				if (FileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+					ereport(ERROR,
+							(errcode_for_file_access(),
+									errmsg("could not truncate file \"%s\" to %u blocks: %m",
+											FilePathName(v->mdfd_vfd),
+										   nblocks)));
+
 			if (!SmgrIsTemp(reln))
 				register_dirty_segment(reln, forknum, v);
 		}
@@ -946,16 +1071,33 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 	{
 		MdfdVec    *v = &reln->md_seg_fds[forknum][segno - 1];
 
-		if (FileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
-			ereport(data_sync_elevel(ERROR),
-					(errcode_for_file_access(),
-					 errmsg("could not fsync file \"%s\": %m",
-							FilePathName(v->mdfd_vfd))));
+//		if (FileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
+//			ereport(data_sync_elevel(ERROR),
+//					(errcode_for_file_access(),
+//					 errmsg("could not fsync file \"%s\": %m",
+//							FilePathName(v->mdfd_vfd))));
+
+		if(IsRpcClient)
+			if (RpcFileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
+				ereport(data_sync_elevel(ERROR),
+						(errcode_for_file_access(),
+								errmsg("could not fsync file \"%s\": %m",
+										RpcFilePathName(v->mdfd_vfd))));
+		else
+			if (FileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
+				ereport(data_sync_elevel(ERROR),
+						(errcode_for_file_access(),
+								errmsg("could not fsync file \"%s\": %m",
+										FilePathName(v->mdfd_vfd))));
 
 		/* Close inactive segments immediately */
 		if (segno > min_inactive_seg)
 		{
-			FileClose(v->mdfd_vfd);
+//			FileClose(v->mdfd_vfd);
+			if(IsRpcClient)
+				RpcFileClose(v->mdfd_vfd);
+			else
+				FileClose(v->mdfd_vfd);
 			_fdvec_resize(reln, forknum, segno - 1);
 		}
 
@@ -987,11 +1129,23 @@ register_dirty_segment(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 		ereport(DEBUG1,
 				(errmsg("could not forward fsync request because request queue is full")));
 
-		if (FileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
-			ereport(data_sync_elevel(ERROR),
-					(errcode_for_file_access(),
-					 errmsg("could not fsync file \"%s\": %m",
-							FilePathName(seg->mdfd_vfd))));
+//		if (FileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
+//			ereport(data_sync_elevel(ERROR),
+//					(errcode_for_file_access(),
+//					 errmsg("could not fsync file \"%s\": %m",
+//							FilePathName(seg->mdfd_vfd))));
+		if(IsRpcClient)
+			if (RpcFileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
+				ereport(data_sync_elevel(ERROR),
+						(errcode_for_file_access(),
+								errmsg("could not fsync file \"%s\": %m",
+										RpcFilePathName(seg->mdfd_vfd))));
+		else
+			if (FileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
+				ereport(data_sync_elevel(ERROR),
+						(errcode_for_file_access(),
+								errmsg("could not fsync file \"%s\": %m",
+										FilePathName(seg->mdfd_vfd))));
 	}
 }
 
@@ -1151,7 +1305,11 @@ _mdfd_openseg(SMgrRelation reln, ForkNumber forknum, BlockNumber segno,
 	fullpath = _mdfd_segpath(reln, forknum, segno);
 
 	/* open the file */
-	fd = PathNameOpenFile(fullpath, O_RDWR | PG_BINARY | oflags);
+//	fd = PathNameOpenFile(fullpath, O_RDWR | PG_BINARY | oflags);
+	if(IsRpcClient)
+		fd = RpcPathNameOpenFile(fullpath, O_RDWR | PG_BINARY | oflags);
+	else
+		fd = PathNameOpenFile(fullpath, O_RDWR | PG_BINARY | oflags);
 
 	pfree(fullpath);
 
@@ -1315,12 +1473,17 @@ _mdnblocks(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 {
 	off_t		len;
 
-	len = FileSize(seg->mdfd_vfd);
+//	len = FileSize(seg->mdfd_vfd);
+	if(IsRpcClient)
+		len = RpcFileSize(seg->mdfd_vfd);
+	else
+		len = FileSize(seg->mdfd_vfd);
 	if (len < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not seek to end of file \"%s\": %m",
-						FilePathName(seg->mdfd_vfd))));
+//						FilePathName(seg->mdfd_vfd))));
+						(IsRpcClient? RpcFilePathName(seg->mdfd_vfd): FilePathName(seg->mdfd_vfd)))));
 	/* note that this calculation will ignore any partial block at EOF */
 	return (BlockNumber) (len / BLCKSZ);
 }
@@ -1344,8 +1507,9 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 	if (ftag->segno < reln->md_num_open_segs[ftag->forknum])
 	{
 		file = reln->md_seg_fds[ftag->forknum][ftag->segno].mdfd_vfd;
-        char *name = FilePathName(file);
-        strlcpy(path, name, MAXPGPATH);
+//        char *name = FilePathName(file);
+		char *name = (IsRpcClient? RpcFilePathName(file): FilePathName(file));
+		strlcpy(path, name, MAXPGPATH);
         free(name);
 //		strlcpy(path, FilePathName(file), MAXPGPATH);
 		need_to_close = false;
@@ -1358,19 +1522,34 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 		strlcpy(path, p, MAXPGPATH);
 		pfree(p);
 
-		file = PathNameOpenFile(path, O_RDWR | PG_BINARY);
+//		file = PathNameOpenFile(path, O_RDWR | PG_BINARY);
+		if(IsRpcClient)
+			file = RpcPathNameOpenFile(path, O_RDWR | PG_BINARY);
+		else
+			file = PathNameOpenFile(path, O_RDWR | PG_BINARY);
 		if (file < 0)
 			return -1;
 		need_to_close = true;
 	}
 
 	/* Sync the file. */
-	result = FileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
+//	result = FileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
+	if(IsRpcClient)
+		result = RpcFileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
+	else
+		result = FileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
+
 	save_errno = errno;
 
-	if (need_to_close)
-		FileClose(file);
+//	if (need_to_close)
+//		FileClose(file);
 
+	if (need_to_close) {
+		if(IsRpcClient)
+			RpcFileClose(file);
+		else
+			FileClose(file);
+	}
 	errno = save_errno;
     printf("[%s] function end\n", __func__ );
 	return result;
@@ -1393,7 +1572,11 @@ mdunlinkfiletag(const FileTag *ftag, char *path)
 	pfree(p);
 
 	/* Try to unlink the file. */
-	return unlink(path);
+//	return unlink(path);
+	if(IsRpcClient)
+		return RpcUnlink(path);
+	else
+		return unlink(path);
 }
 
 /*

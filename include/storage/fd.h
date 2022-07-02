@@ -79,6 +79,18 @@ extern "C" {
 /*
  * prototypes for functions in fd.c
  */
+struct RpcRelation {
+    int parseSucc;
+    int spcNode;
+    int dbNode;
+    int relNode;
+    int forkNum;
+    int blockNum;
+};
+
+typedef struct RpcRelation RpcRelation;
+
+extern RpcRelation ParseRpcRequestPath(char *path, int blockNum);
 
 /* Operations on virtual Files --- equivalent to Unix kernel file ops */
 extern File PathNameOpenFile(const char *fileName, int fileFlags);
@@ -216,6 +228,25 @@ extern int durable_rename_excl(const char *oldfile, const char *newfile, int log
 extern void SyncDataDirectory(void);
 
 extern int data_sync_elevel(int elevel);
+
+
+/* functions to determine whether redirect to rpc server */
+
+extern int OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags);
+
+extern int CloseTransientFile_Rpc_Local(int fd);
+
+extern int BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags);
+
+extern int Unlink_Rpc_Local(char *path);
+
+extern int pg_fdatasync_rpc_local(int fd);
+
+extern int close_rpc_local(int fd);
+
+extern int pg_fsync_no_writethrough_rpc_local(int fd);
+
+
 
 #ifdef __cplusplus
 }

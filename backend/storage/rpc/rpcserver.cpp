@@ -15,6 +15,7 @@
 #include "commands/tablespace.h"
 #include "pgstat.h"
 #include "storage/rpcserver.h"
+#include "storage/bufmgr.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -61,9 +62,24 @@ public:
     int32_t RpcFileWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
         // Your implementation goes here
         printf("RpcFileWrite\n");
-        char buff[BLCKSZ+8];
-        _page.copy(buff, BLCKSZ);
-        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+//        char buff[BLCKSZ+8];
+//        _page.copy(buff, BLCKSZ);
+//        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+
+        int writeLen = 0;
+        char * page = (char *) malloc(BLCKSZ);
+        _page.copy(page, BLCKSZ);
+
+        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+        if (relNode.parseSucc) {
+            writeLen = RpcFileWriteWithCache(_fd, page, relNode, _seekpos);
+        } else {
+            // We arrived here only when some rare cases occur, for example, have backendID etc.
+            writeLen = FileWrite(_fd, page, _amount, _seekpos, _wait_event_info);
+        }
+
+        free(page);
+        return writeLen;
     }
 
     void RpcFilePathName(_Path& _return, const _File _fd) {
@@ -77,10 +93,25 @@ public:
     // todo
     void RpcFileRead(_Page& _return, const _File _fd, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
         // Your implementation goes here
-        printf("RpcFileRead\n");
-        char buff[BLCKSZ+8];
-        FileRead(_fd, buff, _amount, _seekpos, _wait_event_info);
-        _return.assign(buff, BLCKSZ);
+        printf("RpcFileRead, fd = %d, amount = %d, seekpos = %d\n", _fd, _amount, _seekpos);
+        printf("path = %s\n", FilePathName(_fd));
+        fflush(stdout);
+        char *page = (char *)malloc(BLCKSZ);
+        int readLen = 0;
+
+        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+        printf("[%s]parse succ=%d, spc = %d, db = %d, rel = %d, fork = %d, block = %d\n",
+               __func__, relNode.parseSucc, relNode.spcNode, relNode.dbNode, relNode.relNode, relNode.forkNum, relNode.blockNum);
+        if (relNode.parseSucc) {
+//        if (0) {
+            readLen = RpcFileReadWithCache(_fd, page, relNode, _seekpos);
+        } else {
+            // We arrived here only when some rare cases occur, for example, have backendID etc.
+            readLen = FileRead(_fd, page, _amount, _seekpos, _wait_event_info);
+        }
+
+        _return.assign(page, readLen);
+        free(page);
         return;
     }
 
@@ -210,7 +241,6 @@ public:
 void
 RpcServerLoop(void){
     int port = 9090;
-
 
     TThreadedServer server(
             std::make_shared<DataPageAccessProcessor>(std::make_shared<DataPageAccessHandler>()),

@@ -26,12 +26,25 @@
 #include "catalog/pg_control.h"
 #include "common/pg_lzcompress.h"
 #include "replication/origin.h"
+#include "storage/rpcclient.h"
+#include "storage/md.h"
 
 #ifndef FRONTEND
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "utils/memutils.h"
+
+extern int IsRpcClient;
+
+#define RPC_REMOTE_DISK
+int pg_pread_rpc_local2(int fd, char *p, int amount, int offset) {
+	if(IsRpcClient)
+		return RpcPgPRead(fd, p, amount, offset);
+	else
+		return pg_pread(fd, p, amount, offset);
+}
 #endif
+
 
 static void report_invalid_record(XLogReaderState *state, const char *fmt,...)
 			pg_attribute_printf(2, 3);
@@ -49,6 +62,7 @@ static void WALOpenSegmentInit(WALOpenSegment *seg, WALSegmentContext *segcxt,
 
 /* size of the buffer allocated for error message. */
 #define MAX_ERRORMSG_LEN 1000
+
 
 /*
  * Construct a string in state->errormsg_buf explaining what's wrong with
@@ -1116,7 +1130,12 @@ WALRead(XLogReaderState *state,
 
 		/* Reset errno first; eases reporting non-errno-affecting errors */
 		errno = 0;
+//		readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#ifdef RPC_REMOTE_DISK
+		readbytes = pg_pread_rpc_local2(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#else
 		readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#endif
 
 #ifndef FRONTEND
 		pgstat_report_wait_end();

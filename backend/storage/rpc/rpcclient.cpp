@@ -126,7 +126,8 @@ char* RpcFilePathName(const int _fd) {
 
 int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info) {
     RpcInit();
-    printf("[%s] function start \n", __func__ );
+    printf("[%s] function start, and fd = %d \n", __func__ , _fd);
+    fflush(stdout);
     _Page _return;
     rpctransport->open();
     client->RpcFileRead(_return, _fd, _amount, _seekpos, _wait_event_info);
@@ -242,7 +243,7 @@ int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
 
 int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
     RpcInit();
-    printf("[%s] function start \n", __func__ );
+    printf("[%s] function start, fd = %d \n", __func__ , _fd);
 
     int32_t result;
     _Page _return;
@@ -250,6 +251,7 @@ int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t 
     client->RpcPgPRead(_return, _fd, _amount, _offset);
     rpctransport->close();
     _return.copy(p, _return.length());
+    printf("[%s] return value = %d\n", __func__ , (int32_t)_return.length());
     return (int32_t)_return.length();
 }
 
@@ -277,11 +279,10 @@ int32_t RpcClose(const int _fd) {
     return result;
 }
 
-int32_t RpcBasicOpenFile(char *path, int32_t _flags, char * file, char* func, int line) {
+int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
     RpcInit();
     printf("[%s] function start \n", __func__ );
 
-    printf("[%s] calling file: %s, func: %s, line: %d\n", __func__ , file, func, line);
     int32_t result;
     _Path _path;
     _path.assign(path);

@@ -6,6 +6,7 @@
 #include "storage/fd.h"
 #include "storage/lwlock.h"
 #include "storage/ipc.h"
+#include "storage/md.h"
 #include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "access/xlogutils.h"
@@ -22,11 +23,14 @@
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 
+extern int IsRpcClient;
+
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
               const char *username) {
 /* Initialize startup process environment if necessary. */
+
     InitStandaloneProcess(argv[0]);
 
     SetProcessingMode(InitProcessing);
@@ -58,12 +62,22 @@ RpcServerMain(int argc, char *argv[],
     /* Initialize MaxBackends (if under postmaster, was done already) */
     InitializeMaxBackends();
 
-    CreateSharedMemoryAndSemaphores();
-    DebugFileOpen();
+    BaseInit();
+//    CreateSharedMemoryAndSemaphores();
+//    DebugFileOpen();
 
     /* Do local initialization of file, storage and buffer managers */
-    InitFileAccess();
-//    CreateSharedMemoryAndSemaphores();
+//    InitFileAccess();
+
+//    char *pgDataPath = getenv("PGDATA");
+//    if(strlen(pgDataPath) != 0) {
+//        IsRpcServer = 1;
+//    }
+
+    // BuffAlloc() need the resource owner. If don't create, crush
+    CreateAuxProcessResourceOwner();
+
+    IsRpcClient = 0;
 
 //    CreateLWLocks();
     RpcServerLoop();
