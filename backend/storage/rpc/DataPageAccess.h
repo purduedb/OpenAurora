@@ -59,6 +59,10 @@ class DataPageAccessIf {
   virtual int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) = 0;
   virtual int32_t RpcPgFdatasync(const _File _fd) = 0;
   virtual int32_t RpcPgFsyncNoWritethrough(const _File _fd) = 0;
+  virtual int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) = 0;
+  virtual void RpcStat(_Stat_Resp& _return, const _Path& _path) = 0;
+  virtual int32_t RpcDirectoryIsEmpty(const _Path& _path) = 0;
+  virtual int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -180,6 +184,21 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     return _return;
   }
   int32_t RpcPgFsyncNoWritethrough(const _File /* _fd */) {
+    int32_t _return = 0;
+    return _return;
+  }
+  int32_t RpcLseek(const int32_t /* _fd */, const _Off_t /* _offset */, const int32_t /* _flag */) {
+    int32_t _return = 0;
+    return _return;
+  }
+  void RpcStat(_Stat_Resp& /* _return */, const _Path& /* _path */) {
+    return;
+  }
+  int32_t RpcDirectoryIsEmpty(const _Path& /* _path */) {
+    int32_t _return = 0;
+    return _return;
+  }
+  int32_t RpcCopyDir(const _Path& /* _src */, const _Path& /* _dst */) {
     int32_t _return = 0;
     return _return;
   }
@@ -2833,6 +2852,443 @@ class DataPageAccess_RpcPgFsyncNoWritethrough_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcLseek_args__isset {
+  _DataPageAccess_RpcLseek_args__isset() : _fd(false), _offset(false), _flag(false) {}
+  bool _fd :1;
+  bool _offset :1;
+  bool _flag :1;
+} _DataPageAccess_RpcLseek_args__isset;
+
+class DataPageAccess_RpcLseek_args {
+ public:
+
+  DataPageAccess_RpcLseek_args(const DataPageAccess_RpcLseek_args&);
+  DataPageAccess_RpcLseek_args& operator=(const DataPageAccess_RpcLseek_args&);
+  DataPageAccess_RpcLseek_args() : _fd(0), _offset(0), _flag(0) {
+  }
+
+  virtual ~DataPageAccess_RpcLseek_args() noexcept;
+  int32_t _fd;
+  _Off_t _offset;
+  int32_t _flag;
+
+  _DataPageAccess_RpcLseek_args__isset __isset;
+
+  void __set__fd(const int32_t val);
+
+  void __set__offset(const _Off_t val);
+
+  void __set__flag(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcLseek_args & rhs) const
+  {
+    if (!(_fd == rhs._fd))
+      return false;
+    if (!(_offset == rhs._offset))
+      return false;
+    if (!(_flag == rhs._flag))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcLseek_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcLseek_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcLseek_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcLseek_pargs() noexcept;
+  const int32_t* _fd;
+  const _Off_t* _offset;
+  const int32_t* _flag;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcLseek_result__isset {
+  _DataPageAccess_RpcLseek_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcLseek_result__isset;
+
+class DataPageAccess_RpcLseek_result {
+ public:
+
+  DataPageAccess_RpcLseek_result(const DataPageAccess_RpcLseek_result&);
+  DataPageAccess_RpcLseek_result& operator=(const DataPageAccess_RpcLseek_result&);
+  DataPageAccess_RpcLseek_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcLseek_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_RpcLseek_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcLseek_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcLseek_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcLseek_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcLseek_presult__isset {
+  _DataPageAccess_RpcLseek_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcLseek_presult__isset;
+
+class DataPageAccess_RpcLseek_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcLseek_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcLseek_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcStat_args__isset {
+  _DataPageAccess_RpcStat_args__isset() : _path(false) {}
+  bool _path :1;
+} _DataPageAccess_RpcStat_args__isset;
+
+class DataPageAccess_RpcStat_args {
+ public:
+
+  DataPageAccess_RpcStat_args(const DataPageAccess_RpcStat_args&);
+  DataPageAccess_RpcStat_args& operator=(const DataPageAccess_RpcStat_args&);
+  DataPageAccess_RpcStat_args() : _path() {
+  }
+
+  virtual ~DataPageAccess_RpcStat_args() noexcept;
+  _Path _path;
+
+  _DataPageAccess_RpcStat_args__isset __isset;
+
+  void __set__path(const _Path& val);
+
+  bool operator == (const DataPageAccess_RpcStat_args & rhs) const
+  {
+    if (!(_path == rhs._path))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcStat_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcStat_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcStat_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcStat_pargs() noexcept;
+  const _Path* _path;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcStat_result__isset {
+  _DataPageAccess_RpcStat_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcStat_result__isset;
+
+class DataPageAccess_RpcStat_result {
+ public:
+
+  DataPageAccess_RpcStat_result(const DataPageAccess_RpcStat_result&);
+  DataPageAccess_RpcStat_result& operator=(const DataPageAccess_RpcStat_result&);
+  DataPageAccess_RpcStat_result() {
+  }
+
+  virtual ~DataPageAccess_RpcStat_result() noexcept;
+  _Stat_Resp success;
+
+  _DataPageAccess_RpcStat_result__isset __isset;
+
+  void __set_success(const _Stat_Resp& val);
+
+  bool operator == (const DataPageAccess_RpcStat_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcStat_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcStat_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcStat_presult__isset {
+  _DataPageAccess_RpcStat_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcStat_presult__isset;
+
+class DataPageAccess_RpcStat_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcStat_presult() noexcept;
+  _Stat_Resp* success;
+
+  _DataPageAccess_RpcStat_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcDirectoryIsEmpty_args__isset {
+  _DataPageAccess_RpcDirectoryIsEmpty_args__isset() : _path(false) {}
+  bool _path :1;
+} _DataPageAccess_RpcDirectoryIsEmpty_args__isset;
+
+class DataPageAccess_RpcDirectoryIsEmpty_args {
+ public:
+
+  DataPageAccess_RpcDirectoryIsEmpty_args(const DataPageAccess_RpcDirectoryIsEmpty_args&);
+  DataPageAccess_RpcDirectoryIsEmpty_args& operator=(const DataPageAccess_RpcDirectoryIsEmpty_args&);
+  DataPageAccess_RpcDirectoryIsEmpty_args() : _path() {
+  }
+
+  virtual ~DataPageAccess_RpcDirectoryIsEmpty_args() noexcept;
+  _Path _path;
+
+  _DataPageAccess_RpcDirectoryIsEmpty_args__isset __isset;
+
+  void __set__path(const _Path& val);
+
+  bool operator == (const DataPageAccess_RpcDirectoryIsEmpty_args & rhs) const
+  {
+    if (!(_path == rhs._path))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcDirectoryIsEmpty_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcDirectoryIsEmpty_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcDirectoryIsEmpty_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcDirectoryIsEmpty_pargs() noexcept;
+  const _Path* _path;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcDirectoryIsEmpty_result__isset {
+  _DataPageAccess_RpcDirectoryIsEmpty_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcDirectoryIsEmpty_result__isset;
+
+class DataPageAccess_RpcDirectoryIsEmpty_result {
+ public:
+
+  DataPageAccess_RpcDirectoryIsEmpty_result(const DataPageAccess_RpcDirectoryIsEmpty_result&);
+  DataPageAccess_RpcDirectoryIsEmpty_result& operator=(const DataPageAccess_RpcDirectoryIsEmpty_result&);
+  DataPageAccess_RpcDirectoryIsEmpty_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcDirectoryIsEmpty_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_RpcDirectoryIsEmpty_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcDirectoryIsEmpty_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcDirectoryIsEmpty_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcDirectoryIsEmpty_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcDirectoryIsEmpty_presult__isset {
+  _DataPageAccess_RpcDirectoryIsEmpty_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcDirectoryIsEmpty_presult__isset;
+
+class DataPageAccess_RpcDirectoryIsEmpty_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcDirectoryIsEmpty_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcDirectoryIsEmpty_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcCopyDir_args__isset {
+  _DataPageAccess_RpcCopyDir_args__isset() : _src(false), _dst(false) {}
+  bool _src :1;
+  bool _dst :1;
+} _DataPageAccess_RpcCopyDir_args__isset;
+
+class DataPageAccess_RpcCopyDir_args {
+ public:
+
+  DataPageAccess_RpcCopyDir_args(const DataPageAccess_RpcCopyDir_args&);
+  DataPageAccess_RpcCopyDir_args& operator=(const DataPageAccess_RpcCopyDir_args&);
+  DataPageAccess_RpcCopyDir_args() : _src(), _dst() {
+  }
+
+  virtual ~DataPageAccess_RpcCopyDir_args() noexcept;
+  _Path _src;
+  _Path _dst;
+
+  _DataPageAccess_RpcCopyDir_args__isset __isset;
+
+  void __set__src(const _Path& val);
+
+  void __set__dst(const _Path& val);
+
+  bool operator == (const DataPageAccess_RpcCopyDir_args & rhs) const
+  {
+    if (!(_src == rhs._src))
+      return false;
+    if (!(_dst == rhs._dst))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcCopyDir_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcCopyDir_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcCopyDir_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcCopyDir_pargs() noexcept;
+  const _Path* _src;
+  const _Path* _dst;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcCopyDir_result__isset {
+  _DataPageAccess_RpcCopyDir_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcCopyDir_result__isset;
+
+class DataPageAccess_RpcCopyDir_result {
+ public:
+
+  DataPageAccess_RpcCopyDir_result(const DataPageAccess_RpcCopyDir_result&);
+  DataPageAccess_RpcCopyDir_result& operator=(const DataPageAccess_RpcCopyDir_result&);
+  DataPageAccess_RpcCopyDir_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcCopyDir_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_RpcCopyDir_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcCopyDir_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcCopyDir_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcCopyDir_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcCopyDir_presult__isset {
+  _DataPageAccess_RpcCopyDir_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcCopyDir_presult__isset;
+
+class DataPageAccess_RpcCopyDir_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcCopyDir_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcCopyDir_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 
 class DataPageAccess_zip_args {
  public:
@@ -2975,6 +3431,18 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   int32_t RpcPgFsyncNoWritethrough(const _File _fd);
   void send_RpcPgFsyncNoWritethrough(const _File _fd);
   int32_t recv_RpcPgFsyncNoWritethrough();
+  int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag);
+  void send_RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag);
+  int32_t recv_RpcLseek();
+  void RpcStat(_Stat_Resp& _return, const _Path& _path);
+  void send_RpcStat(const _Path& _path);
+  void recv_RpcStat(_Stat_Resp& _return);
+  int32_t RpcDirectoryIsEmpty(const _Path& _path);
+  void send_RpcDirectoryIsEmpty(const _Path& _path);
+  int32_t recv_RpcDirectoryIsEmpty();
+  int32_t RpcCopyDir(const _Path& _src, const _Path& _dst);
+  void send_RpcCopyDir(const _Path& _src, const _Path& _dst);
+  int32_t recv_RpcCopyDir();
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -3021,6 +3489,10 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcBasicOpenFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcPgFdatasync(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcPgFsyncNoWritethrough(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcLseek(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcStat(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcDirectoryIsEmpty(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcCopyDir(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_zip(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
@@ -3049,6 +3521,10 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcBasicOpenFile"] = &DataPageAccessProcessor::process_RpcBasicOpenFile;
     processMap_["RpcPgFdatasync"] = &DataPageAccessProcessor::process_RpcPgFdatasync;
     processMap_["RpcPgFsyncNoWritethrough"] = &DataPageAccessProcessor::process_RpcPgFsyncNoWritethrough;
+    processMap_["RpcLseek"] = &DataPageAccessProcessor::process_RpcLseek;
+    processMap_["RpcStat"] = &DataPageAccessProcessor::process_RpcStat;
+    processMap_["RpcDirectoryIsEmpty"] = &DataPageAccessProcessor::process_RpcDirectoryIsEmpty;
+    processMap_["RpcCopyDir"] = &DataPageAccessProcessor::process_RpcCopyDir;
     processMap_["zip"] = &DataPageAccessProcessor::process_zip;
   }
 
@@ -3307,6 +3783,43 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return ifaces_[i]->RpcPgFsyncNoWritethrough(_fd);
   }
 
+  int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcLseek(_fd, _offset, _flag);
+    }
+    return ifaces_[i]->RpcLseek(_fd, _offset, _flag);
+  }
+
+  void RpcStat(_Stat_Resp& _return, const _Path& _path) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcStat(_return, _path);
+    }
+    ifaces_[i]->RpcStat(_return, _path);
+    return;
+  }
+
+  int32_t RpcDirectoryIsEmpty(const _Path& _path) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcDirectoryIsEmpty(_path);
+    }
+    return ifaces_[i]->RpcDirectoryIsEmpty(_path);
+  }
+
+  int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcCopyDir(_src, _dst);
+    }
+    return ifaces_[i]->RpcCopyDir(_src, _dst);
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -3433,6 +3946,18 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   int32_t RpcPgFsyncNoWritethrough(const _File _fd);
   int32_t send_RpcPgFsyncNoWritethrough(const _File _fd);
   int32_t recv_RpcPgFsyncNoWritethrough(const int32_t seqid);
+  int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag);
+  int32_t send_RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag);
+  int32_t recv_RpcLseek(const int32_t seqid);
+  void RpcStat(_Stat_Resp& _return, const _Path& _path);
+  int32_t send_RpcStat(const _Path& _path);
+  void recv_RpcStat(_Stat_Resp& _return, const int32_t seqid);
+  int32_t RpcDirectoryIsEmpty(const _Path& _path);
+  int32_t send_RpcDirectoryIsEmpty(const _Path& _path);
+  int32_t recv_RpcDirectoryIsEmpty(const int32_t seqid);
+  int32_t RpcCopyDir(const _Path& _src, const _Path& _dst);
+  int32_t send_RpcCopyDir(const _Path& _src, const _Path& _dst);
+  int32_t recv_RpcCopyDir(const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

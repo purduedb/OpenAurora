@@ -15,6 +15,9 @@
 #include "commands/tablespace.h"
 #include "pgstat.h"
 #include "storage/rpcserver.h"
+#include <sys/stat.h>
+#include <commands/tablespace.h>
+#include "storage/copydir.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -194,6 +197,45 @@ public:
         printf("RpcPgFsyncNoWritethrough\n");
         return pg_fsync_no_writethrough(_fd);
     }
+
+    int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
+        // Your implementation goes here
+        printf("RpcLseek\n");
+        return lseek(_fd, _offset, _flag);
+    }
+
+    void RpcStat(_Stat_Resp& _return, const _Path& _path) {
+        // Your implementation goes here
+        printf("RpcStat\n");
+        struct stat result;
+        _return._result = stat(_path.c_str(), &result);
+        _return._stat_mode = result.st_mode;
+        return;
+    }
+
+    int32_t RpcDirectoryIsEmpty(const _Path& _path) {
+        // Your implementation goes here
+        printf("RpcDirectoryIsEmpty\n");
+        return directory_is_empty(_path.c_str());
+    }
+
+    int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
+        // Your implementation goes here
+        printf("RpcCopyDir\n");
+        char* src = (char*) malloc(1024);
+        char* dst = (char*) malloc(1024);
+//        printf("_src = %s, dst = %s\n", _src.c_str(), _dst.c_str());
+        _src.copy(src, _src.length());
+        _dst.copy(dst, _dst.length());
+        src[_src.length()] = 0;
+        dst[_dst.length()] = 0;
+//        printf("src = %s, dst = %s\n", src, dst);
+        copydir(src, dst, false);
+        free(src);
+        free(dst);
+        return 0;
+    }
+
     /**
      * This method has a oneway modifier. That means the client only makes
      * a request and does not listen for any response at all. Oneway methods

@@ -15,7 +15,8 @@ include $(top_builddir)/src/Makefile.global
 OBJS = \
 	DataPageAccess.o \
 	rpcclient.o \
-	rpcserver.o
+	rpcserver.o \
+	tutorial_types.o
 	
 
 include $(top_srcdir)/src/backend/common.mk

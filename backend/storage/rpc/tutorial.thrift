@@ -80,6 +80,10 @@ typedef binary _Path
 
 typedef binary _Page
 
+struct _Stat_Resp {
+	1: required i32 _result,
+	2: required i32 _stat_mode,
+}
 /**
  * Ahh, now onto the cool part, defining a service. Services just need a name
  * and can optionally inherit from another service using the extends keyword.
@@ -142,7 +146,13 @@ service DataPageAccess {
 
    i32 RpcPgFsyncNoWritethrough(1: _File _fd),
 
+   i32 RpcLseek(1:i32 _fd, 2:_Off_t _offset, 3:i32 _flag),
 
+   _Stat_Resp RpcStat(1:_Path _path),
+
+   i32 RpcDirectoryIsEmpty(1:_Path _path),
+
+   i32 RpcCopyDir(1:_Path _src, 2:_Path _dst),
 
 
 
