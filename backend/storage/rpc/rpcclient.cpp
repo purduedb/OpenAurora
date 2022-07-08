@@ -22,6 +22,8 @@
 
 #include "storage/rpcclient.h"
 #include "DataPageAccess.h"
+#include "storage/copydir.h"
+#include <string.h>
 
 /*** behavior for mdopen & _mdfd_getseg ***/
 /* ereport if segment not present */
@@ -312,6 +314,57 @@ int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
     int32_t result;
     rpctransport->open();
     result = client->RpcPgFsyncNoWritethrough(_fd);
+    rpctransport->close();
+    return result;
+}
+
+int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) {
+    int32_t result;
+    rpctransport->open();
+    result = client->RpcLseek(_fd, _offset, _flag);
+    rpctransport->close();
+
+    return result;
+}
+
+int RpcStat(const char* path, struct stat* _stat) {
+    _Path _path;
+    _path.assign(path);
+    _Stat_Resp response;
+    response._stat_mode = 0;
+    response._result = 0;
+    rpctransport->open();
+    client->RpcStat(response, _path);
+    rpctransport->close();
+    _stat->st_mode = response._stat_mode;
+    return response._result;
+}
+
+int32_t RpcDirectoryIsEmpty(const char* path) {
+    _Path _path;
+    _path.assign(path);
+    int32_t result;
+    rpctransport->open();
+    result = client->RpcDirectoryIsEmpty(_path);
+    rpctransport->close();
+    return result;
+}
+
+int32_t RpcCopyDir(const char* _src, const char* _dst) {
+    // create another copy of initialized-db in compute node
+    char temp_src[1024];
+    char temp_dst[1024];
+    strcpy(temp_src, _src);
+    strcpy(temp_dst, _dst);
+    copydir(temp_src, temp_dst, false);
+
+//    printf("[%s] src=%s, dst=%s \n", __func__, _src, _dst);
+    _Path _path_src, _path_dst;
+    _path_src.assign(_src);
+    _path_dst.assign(_dst);
+    int32_t result;
+    rpctransport->open();
+    result = client->RpcCopyDir(_path_src, _path_dst);
     rpctransport->close();
     return result;
 }

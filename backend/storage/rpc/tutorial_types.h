@@ -37,6 +37,56 @@ typedef std::string _Path;
 
 typedef std::string _Page;
 
+class _Stat_Resp;
+
+typedef struct __Stat_Resp__isset {
+  __Stat_Resp__isset() : _result(false), _stat_mode(false) {}
+  bool _result :1;
+  bool _stat_mode :1;
+} __Stat_Resp__isset;
+
+class _Stat_Resp : public virtual ::apache::thrift::TBase {
+ public:
+
+  _Stat_Resp(const _Stat_Resp&);
+  _Stat_Resp& operator=(const _Stat_Resp&);
+  _Stat_Resp() : _result(0), _stat_mode(0) {
+  }
+
+  virtual ~_Stat_Resp() noexcept;
+  int32_t _result;
+  int32_t _stat_mode;
+
+  __Stat_Resp__isset __isset;
+
+  void __set__result(const int32_t val);
+
+  void __set__stat_mode(const int32_t val);
+
+  bool operator == (const _Stat_Resp & rhs) const
+  {
+    if (!(_result == rhs._result))
+      return false;
+    if (!(_stat_mode == rhs._stat_mode))
+      return false;
+    return true;
+  }
+  bool operator != (const _Stat_Resp &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const _Stat_Resp & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  virtual void printTo(std::ostream& out) const;
+};
+
+void swap(_Stat_Resp &a, _Stat_Resp &b);
+
+std::ostream& operator<<(std::ostream& out, const _Stat_Resp& obj);
+
 } // namespace
 
 #endif

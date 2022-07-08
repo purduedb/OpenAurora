@@ -64,6 +64,9 @@
 #include "utils/pg_locale.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "storage/rpcclient.h"
+
+extern int IsRpcClient;
 
 typedef struct
 {
@@ -91,6 +94,17 @@ static bool have_createdb_privilege(void);
 static void remove_dbtablespaces(Oid db_id);
 static bool check_db_file_conflict(Oid db_id);
 static int	errdetail_busy_db(int notherbackends, int npreparedxacts);
+
+#define RPC_REMOTE_DISK
+
+#ifdef RPC_REMOTE_DISK
+
+#define copydir(_src, _dst, _flag) copy_dir_rpc_or_local(_src, _dst)
+#define stat(_path, _stat) stat_rpc_or_local(_path, _stat)
+#define directory_is_empty(_path) directory_is_empty_rpc_or_local(_path)
+
+#endif
+
 
 
 /*

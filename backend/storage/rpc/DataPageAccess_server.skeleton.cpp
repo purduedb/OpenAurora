@@ -148,6 +148,26 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcPgFsyncNoWritethrough\n");
   }
 
+  int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
+    // Your implementation goes here
+    printf("RpcLseek\n");
+  }
+
+  void RpcStat(_Stat_Resp& _return, const _Path& _path) {
+    // Your implementation goes here
+    printf("RpcStat\n");
+  }
+
+  int32_t RpcDirectoryIsEmpty(const _Path& _path) {
+    // Your implementation goes here
+    printf("RpcDirectoryIsEmpty\n");
+  }
+
+  int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
+    // Your implementation goes here
+    printf("RpcCopyDir\n");
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

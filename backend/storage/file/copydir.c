@@ -26,7 +26,10 @@
 #include "pgstat.h"
 #include "storage/copydir.h"
 #include "storage/fd.h"
+#include "storage/rpcclient.h"
+#include "commands/tablespace.h"
 
+extern int IsRpcClient;
 /*
  * copydir: copy a directory
  *
@@ -223,4 +226,25 @@ copy_file(char *fromfile, char *tofile)
 				 errmsg("could not close file \"%s\": %m", fromfile)));
 
 	pfree(buffer);
+}
+
+void copy_dir_rpc_or_local(char *_src, char* _dst) {
+    if (IsRpcClient)
+        RpcCopyDir(_src, _dst);
+    else
+        copydir(_src, _dst, false);
+}
+
+int stat_rpc_or_local(char* _path, struct stat * _stat) {
+    if (IsRpcClient)
+        return RpcStat(_path, _stat);
+    else
+        return stat(_path, _stat);
+}
+
+int directory_is_empty_rpc_or_local(char* _path) {
+    if (IsRpcClient)
+        return RpcDirectoryIsEmpty(_path);
+    else
+        return directory_is_empty(_path);
 }
