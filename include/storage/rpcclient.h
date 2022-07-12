@@ -13,12 +13,12 @@ extern "C" {
     void RpcInit(void);
     void RpcFileClose(const int _fd);
     void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo);
-    int RpcPathNameOpenFile(const char* _path, const int32_t _flag);
+    int RpcPathNameOpenFile(const char* _path, const int32_t _flag, char *_func, char* _file, int _line);
     int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, const int64_t _seekpos, const int32_t _wait_event_info);
     char* RpcFilePathName(const int _fd);
     int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info);
     int32_t RpcFileTruncate(const int _fd, const int64_t _offset);
-    int64_t RpcFileSize(const int _fd);
+    int64_t RpcFileSize(const int _fd, char *_func, char* _file, int _line);
     int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amount, const int32_t wait_event_info);
     void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes, const int32_t wait_event_info);
     int32_t RpcUnlink(const char* _path);
@@ -37,6 +37,9 @@ extern "C" {
     int RpcStat(const char* path,struct stat* _stat);
     int32_t RpcDirectoryIsEmpty(const char* path);
     int32_t RpcCopyDir(const char* _src, const char* _dst);
+    int32_t RpcPgFsync(const int32_t _fd);
+    int32_t RpcDurableUnlink(const char * filename, const int32_t _flag);
+    int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel);
 #ifdef __cplusplus
 }
 #endif

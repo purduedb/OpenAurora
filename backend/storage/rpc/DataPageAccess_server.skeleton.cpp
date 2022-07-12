@@ -168,6 +168,36 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcCopyDir\n");
   }
 
+  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+    // Your implementation goes here
+    printf("RpcMdRead\n");
+  }
+
+  int32_t RpcMdExist(const _Smgr_Relation& _reln, const int32_t _forknum) {
+    // Your implementation goes here
+    printf("RpcMdExist\n");
+  }
+
+  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
+    // Your implementation goes here
+    printf("RpcMdNblocks\n");
+  }
+
+  int32_t RpcPgFsync(const int32_t _fd) {
+    // Your implementation goes here
+    printf("RpcPgFsync\n");
+  }
+
+  int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) {
+    // Your implementation goes here
+    printf("RpcDurableUnlink\n");
+  }
+
+  int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) {
+    // Your implementation goes here
+    printf("RpcDurableRenameExcl\n");
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

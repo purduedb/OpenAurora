@@ -46,7 +46,7 @@
 
 #ifdef RPC_REMOTE_DISK
 
-#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag, __func__, __FILE__, __LINE__)
 #define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
 #define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
 #define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
@@ -59,7 +59,7 @@
 //#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
 //#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
 #define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
-#define FileSize(_file) RpcFileSize(_file)
+#define FileSize(_file) RpcFileSize(_file, __func__, __FILE__, __LINE__)
 #define FilePathName(_file) RpcFilePathName(_file)
 #define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
 #define unlink(_path) RpcUnlink(_path)

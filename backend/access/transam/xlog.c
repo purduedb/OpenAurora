@@ -86,7 +86,7 @@
 
 #ifdef RPC_REMOTE_DISK
 
-#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag, __func__, __FILE__, __LINE__)
 #define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
 #define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
 #define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
@@ -100,7 +100,7 @@
 //#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
 //#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags)
 #define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
-#define FileSize(_file) RpcFileSize(_file)
+#define FileSize(_file) RpcFileSize(_file, __func__, __FILE__, __LINE__)
 #define FilePathName(_file) RpcFilePathName(_file)
 #define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
 #define unlink(_path) RpcUnlink(_path)
@@ -108,6 +108,11 @@
 
 #define pg_fdatasync(_fd) RpcPgFdatasync(_fd)
 #define pg_fsync_no_writethrough(_fd) RpcPgFsyncNoWritethrough(_fd)
+#define write(_fd, _buff, _size) RpcPgPWrite(_fd, _buff, _size, 0)
+#define pg_fsync(_fd) RpcPgFsync(_fd)
+#define stat(_path, _stat) RpcStat(_path, _stat)
+#define durable_unlink(_fname, _flag) RpcDurableUnlink(_fname, _flag)
+#define durable_rename_excl(_old, _new, _elevel) RpcDurableRenameExcl(_old, _new, _elevel)
 #endif
 
 
@@ -3340,7 +3345,7 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_INIT_WRITE);
 	save_errno = 0;
-	if (wal_init_zero)
+    if (wal_init_zero)
 	{
 		/*
 		 * Zero-fill the file.  With this setting, we do this the hard way to
@@ -3354,7 +3359,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		for (nbytes = 0; nbytes < wal_segment_size; nbytes += XLOG_BLCKSZ)
 		{
 			errno = 0;
-			if (write(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#ifdef RPC_REMOTE_DISK
+			if (RpcPgPWrite(fd, zbuffer.data, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+#else
+            if (write(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#endif
 			{
 				/* if write didn't set errno, assume no disk space */
 				save_errno = errno ? errno : ENOSPC;
@@ -3570,7 +3579,11 @@ XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 		}
 		errno = 0;
 		pgstat_report_wait_start(WAIT_EVENT_WAL_COPY_WRITE);
-		if ((int) write(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
+#ifdef RPC_REMOTE_DISK
+		if ((int) RpcPgPWrite(fd, buffer.data, sizeof(buffer), 0) != (int) sizeof(buffer))
+#else
+        if ((int) write(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
+#endif
 		{
 			int			save_errno = errno;
 
@@ -4743,7 +4756,11 @@ WriteControlFile(void)
 
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_WRITE);
-	if (write(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
+#ifdef RPC_REMOTE_DISK
+	if (RpcPgPWrite(fd, buffer, PG_CONTROL_FILE_SIZE, 0) != PG_CONTROL_FILE_SIZE)
+#else
+    if (write(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
+#endif
 	{
 		/* if write didn't set errno, assume problem is no disk space */
 		if (errno == 0)
@@ -5393,7 +5410,11 @@ BootStrapXLOG(void)
 	/* Write the first page with the initial record */
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_WAL_BOOTSTRAP_WRITE);
+#ifdef RPC_REMOTE_DISK
+	if (RpcPgPWrite(openLogFile, page, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+#else
 	if (write(openLogFile, page, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#endif
 	{
 		/* if write didn't set errno, assume problem is no disk space */
 		if (errno == 0)

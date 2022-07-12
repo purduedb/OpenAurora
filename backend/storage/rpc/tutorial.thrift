@@ -81,8 +81,15 @@ typedef binary _Path
 typedef binary _Page
 
 struct _Stat_Resp {
-	1: required i32 _result,
-	2: required i32 _stat_mode,
+	1: i32 _result,
+	2: i32 _stat_mode,
+}
+
+struct _Smgr_Relation {
+	1: _Oid _spc_node,
+	2: _Oid _db_node,
+	3: _Oid _rel_node,
+	4: i32 _backend_id,
 }
 /**
  * Ahh, now onto the cool part, defining a service. Services just need a name
@@ -154,7 +161,17 @@ service DataPageAccess {
 
    i32 RpcCopyDir(1:_Path _src, 2:_Path _dst),
 
+   _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum),
 
+   i32 RpcMdExist(1:_Smgr_Relation _reln, 2:i32 _forknum),
+
+   i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum),
+
+   i32 RpcPgFsync(1:i32 _fd),
+
+   i32 RpcDurableUnlink(1:_Path _fname, 2:i32 _flag)
+
+   i32 RpcDurableRenameExcl(1:_Path _oldFname, 2:_Path _newFname, 3:i32 _elevel)
 
    /**
     * This method has a oneway modifier. That means the client only makes

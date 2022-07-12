@@ -1116,7 +1116,11 @@ WALRead(XLogReaderState *state,
 
 		/* Reset errno first; eases reporting non-errno-affecting errors */
 		errno = 0;
-		readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#ifdef RPC_REMOTE_DISK
+        readbytes = RpcPgPRead(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#else
+        readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#endif
 
 #ifndef FRONTEND
 		pgstat_report_wait_end();

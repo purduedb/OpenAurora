@@ -42,28 +42,28 @@ public:
      */
     void RpcFileClose(const _File _fd) {
         // Your implementation goes here
-        printf("RpcFileClose\n");
+//        printf("RpcFileClose\n");
         FileClose(_fd);
     }
 
     void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
         // Your implementation goes here
-        printf("RpcTablespaceCreateDbspace\n");
+//        printf("RpcTablespaceCreateDbspace\n");
         TablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
     }
 
     _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
         // Your implementation goes here
-        printf("RpcPathNameOpenFile, path = %s, flag = %d, with_create = %d\n", _path.c_str(), _flag, _flag&O_CREAT);
+//        printf("RpcPathNameOpenFile, path = %s, flag = %d, with_create = %d\n", _path.c_str(), _flag, _flag&O_CREAT);
         _File result =  PathNameOpenFile(_path.c_str(), _flag);
-        printf("[%s] result = %d\n", __func__ , result);
+//        printf("[%s] result = %d\n", __func__ , result);
         return result;
     }
 
     // todo
     int32_t RpcFileWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
         // Your implementation goes here
-        printf("RpcFileWrite\n");
+//        printf("RpcFileWrite\n");
         char buff[BLCKSZ+8];
         _page.copy(buff, BLCKSZ);
         return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
@@ -71,7 +71,7 @@ public:
 
     void RpcFilePathName(_Path& _return, const _File _fd) {
         // Your implementation goes here
-        printf("RpcFilePathName\n");
+//        printf("RpcFilePathName\n");
         char * filename = FilePathName(_fd);
         _return.assign(filename);
         return;
@@ -80,7 +80,7 @@ public:
     // todo
     void RpcFileRead(_Page& _return, const _File _fd, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
         // Your implementation goes here
-        printf("RpcFileRead\n");
+//        printf("RpcFileRead\n");
         char buff[BLCKSZ+8];
         FileRead(_fd, buff, _amount, _seekpos, _wait_event_info);
         _return.assign(buff, BLCKSZ);
@@ -90,77 +90,77 @@ public:
     // todo
     int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
         // Your implementation goes here
-        printf("RpcFileTruncate\n");
+//        printf("RpcFileTruncate\n");
         return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
     }
 
     _Off_t RpcFileSize(const _File _fd) {
         // Your implementation goes here
-        printf("RpcFileSize\n");
+//        printf("RpcFileSize\n");
         return FileSize(_fd);
     }
 
     int32_t RpcFilePrefetch(const _File _fd, const _Off_t _offset, const int32_t _amount, const int32_t wait_event_info) {
         // Your implementation goes here
-        printf("RpcFilePrefetch\n");
+//        printf("RpcFilePrefetch\n");
         return FilePrefetch(_fd, _offset, _amount, wait_event_info);
     }
 
     void RpcFileWriteback(const _File _fd, const _Off_t _offset, const _Off_t nbytes, const int32_t wait_event_info) {
         // Your implementation goes here
-        printf("RpcFileWriteback\n");
+//        printf("RpcFileWriteback\n");
         FileWriteback(_fd, _offset, nbytes, wait_event_info);
         return;
     }
 
     int32_t RpcUnlink(const _Path& _path) {
         // Your implementation goes here
-        printf("RpcUnlink\n");
+//        printf("RpcUnlink\n");
         return unlink(_path.c_str());
     }
 
     int32_t RpcFtruncate(const _File _fd, const _Off_t _offset) {
         // Your implementation goes here
-        printf("RpcFtruncate\n");
+//        printf("RpcFtruncate\n");
         return ftruncate(_fd, _offset);
     }
 
     void RpcInitFile(_Page& _return, const _Path& _path) {
         // Your implementation goes here
-        printf("RpcInitFile\n");
+//        printf("RpcInitFile\n");
     }
 
     _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
         // Your implementation goes here
-        printf("RpcOpenTransientFile\n");
+//        printf("RpcOpenTransientFile\n");
         return OpenTransientFile(_filename.c_str(), _fileflags);
     }
 
     int32_t RpcCloseTransientFile(const _File _fd) {
         // Your implementation goes here
-        printf("RpcCloseTransientFile\n");
+//        printf("RpcCloseTransientFile\n");
         return CloseTransientFile(_fd);
     }
 
     void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
         // Your implementation goes here
-        printf("Rpcread\n");
+//        printf("Rpcread\n");
     }
 
     int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
         // Your implementation goes here
-        printf("Rpcwrite\n");
+//        printf("Rpcwrite\n");
     }
 
     int32_t RpcFileSync(const _File _fd, const int32_t _wait_event_info) {
         // Your implementation goes here
-        printf("RpcFileSync\n");
+//        printf("RpcFileSync\n");
         return FileSync(_fd, _wait_event_info);
     }
 
     void RpcPgPRead(_Page& _return, const _File _fd, const int32_t _seg_bytes, const _Off_t _start_off) {
         // Your implementation goes here
-        printf("RpcPgPRead\n");
+//        printf("RpcPgPRead\n");
         char *p = (char*)malloc(_seg_bytes+64);
         pg_pread(_fd, p, _seg_bytes, _start_off);
         _return.assign(p, _seg_bytes);
@@ -170,43 +170,44 @@ public:
 
     int32_t RpcPgPWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset) {
         // Your implementation goes here
-        printf("RpcPgPWrite\n");
-        return pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+        int32_t result =  pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+//        printf("RpcPgPWrite, result = %d\n", result);
+        return result;
     }
 
     int32_t RpcClose(const _File _fd) {
         // Your implementation goes here
-        printf("RpcClose\n");
+//        printf("RpcClose\n");
         return close(_fd);
     }
 
     int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
         // Your implementation goes here
-        printf("RpcBasicOpenFile\n");
+//        printf("RpcBasicOpenFile\n");
         return BasicOpenFile(_path.c_str(), _flags);
     }
 
     int32_t RpcPgFdatasync(const _File _fd) {
         // Your implementation goes here
-        printf("RpcPgFdatasync\n");
+//        printf("RpcPgFdatasync\n");
         return pg_fdatasync(_fd);
     }
 
     int32_t RpcPgFsyncNoWritethrough(const _File _fd) {
         // Your implementation goes here
-        printf("RpcPgFsyncNoWritethrough\n");
+//        printf("RpcPgFsyncNoWritethrough\n");
         return pg_fsync_no_writethrough(_fd);
     }
 
     int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
         // Your implementation goes here
-        printf("RpcLseek\n");
+//        printf("RpcLseek\n");
         return lseek(_fd, _offset, _flag);
     }
 
     void RpcStat(_Stat_Resp& _return, const _Path& _path) {
         // Your implementation goes here
-        printf("RpcStat\n");
+//        printf("RpcStat\n");
         struct stat result;
         _return._result = stat(_path.c_str(), &result);
         _return._stat_mode = result.st_mode;
@@ -215,13 +216,13 @@ public:
 
     int32_t RpcDirectoryIsEmpty(const _Path& _path) {
         // Your implementation goes here
-        printf("RpcDirectoryIsEmpty\n");
+//        printf("RpcDirectoryIsEmpty\n");
         return directory_is_empty(_path.c_str());
     }
 
     int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
         // Your implementation goes here
-        printf("RpcCopyDir\n");
+//        printf("RpcCopyDir\n");
         char* src = (char*) malloc(1024);
         char* dst = (char*) malloc(1024);
 //        printf("_src = %s, dst = %s\n", _src.c_str(), _dst.c_str());
@@ -236,6 +237,40 @@ public:
         return 0;
     }
 
+
+    void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+        // Your implementation goes here
+//        printf("RpcMdRead\n");
+    }
+
+    int32_t RpcMdExist(const _Smgr_Relation& _reln, const int32_t _forknum) {
+        // Your implementation goes here
+//        printf("RpcMdExist\n");
+    }
+
+    int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
+        // Your implementation goes here
+//        printf("RpcMdNblocks\n");
+    }
+
+    int32_t RpcPgFsync(const int32_t _fd) {
+        // Your implementation goes here
+        int32_t result = pg_fsync(_fd);
+//        printf("RpcPgFsync, result = %d\n", result);
+        return result;
+    }
+
+    int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) {
+        // Your implementation goes here
+//        printf("RpcDurableUnlink\n");
+        return durable_unlink(_fname.c_str(), _flag);
+    }
+
+    int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) {
+        // Your implementation goes here
+//        printf("RpcDurableRenameExcl\n");
+        return durable_rename_excl(_oldFname.c_str(), _newFname.c_str(), _elevel);
+    }
     /**
      * This method has a oneway modifier. That means the client only makes
      * a request and does not listen for any response at all. Oneway methods
