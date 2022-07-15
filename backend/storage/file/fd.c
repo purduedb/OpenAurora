@@ -96,6 +96,7 @@
 #include "storage/ipc.h"
 #include "utils/guc.h"
 #include "utils/resowner_private.h"
+#include <pthread.h>
 
 /* Define PG_FLUSH_DATA_WORKS if we have an implementation for pg_flush_data */
 #if defined(HAVE_SYNC_FILE_RANGE)
@@ -138,7 +139,7 @@
  * This GUC parameter lets the DBA limit max_safe_fds to something less than
  * what the postmaster's initial probe suggests will work.
  */
-int			max_files_per_process = 1000;
+int			max_files_per_process = 8000;
 
 /*
  * Maximum number of file descriptors to open for operations that fd.c knows
@@ -273,6 +274,7 @@ static Oid *tempTableSpaces = NULL;
 static int	numTempTableSpaces = -1;
 static int	nextTempTableSpace = 0;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*--------------------
  *
@@ -310,8 +312,8 @@ static void Delete(File file);
 static void LruDelete(File file);
 static void Insert(File file);
 static int	LruInsert(File file);
-static bool ReleaseLruFile(void);
-static void ReleaseLruFiles(void);
+static bool ReleaseLruFile(int alreadyLocked);
+static void ReleaseLruFiles(int alreadyLocked);
 static File AllocateVfd(void);
 static void FreeVfd(File file);
 
@@ -336,6 +338,16 @@ static void datadir_fsync_fname(const char *fname, bool isdir, int elevel);
 static void unlink_if_exists_fname(const char *fname, bool isdir, int elevel);
 
 static int	fsync_parent_path(const char *fname, int elevel);
+
+void VfdLruLock() {
+    pthread_mutex_lock(&mutex);
+    fflush(stdout);
+}
+
+void VfdLruUnlock() {
+    pthread_mutex_unlock(&mutex);
+    fflush(stdout);
+}
 
 
 /*
@@ -838,6 +850,7 @@ InitFileAccess(void)
 
 	SizeVfdCache = 1;
 
+
 	/* register proc-exit hook to ensure temp files are dropped at exit */
 	on_proc_exit(AtProcExit_Files, 0);
 }
@@ -1022,7 +1035,7 @@ tryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto tryAgain;
 		errno = save_errno;
 	}
@@ -1086,7 +1099,7 @@ ReserveExternalFD(void)
 	 * incrementing numExternalFDs, the final state will be as desired, i.e.,
 	 * nfile + numAllocatedDescs + numExternalFDs <= max_safe_fds.
 	 */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 	numExternalFDs++;
 }
@@ -1161,8 +1174,9 @@ LruDelete(File file)
 	 * to leak the FD than to mess up our internal state.
 	 */
 	if (close(vfdP->fd) != 0)
-		elog(vfdP->fdstate & FD_TEMP_FILE_LIMIT ? LOG : data_sync_elevel(LOG),
+        elog(vfdP->fdstate & FD_TEMP_FILE_LIMIT ? LOG : data_sync_elevel(LOG),
 			 "could not close file \"%s\": %m", vfdP->fileName);
+
 	vfdP->fd = VFD_CLOSED;
 	--nfile;
 
@@ -1207,7 +1221,8 @@ LruInsert(File file)
 	if (FileIsNotOpen(file))
 	{
 		/* Close excess kernel FDs. */
-		ReleaseLruFiles();
+
+		ReleaseLruFiles(1);
 
 		/*
 		 * The open could still fail for lack of file descriptors, eg due to
@@ -1240,7 +1255,7 @@ LruInsert(File file)
  * Release one kernel FD by closing the least-recently-used VFD.
  */
 static bool
-ReleaseLruFile(void)
+ReleaseLruFile(int alreadyLocked)
 {
 	DO_DB(elog(LOG, "ReleaseLruFile. Opened %d", nfile));
 
@@ -1250,8 +1265,12 @@ ReleaseLruFile(void)
 		 * There are opened files and so there should be at least one used vfd
 		 * in the ring.
 		 */
+        if(!alreadyLocked)
+            VfdLruLock();
 		Assert(VfdCache[0].lruMoreRecently != 0);
 		LruDelete(VfdCache[0].lruMoreRecently);
+        if(!alreadyLocked)
+            VfdLruUnlock();
 		return true;			/* freed a file */
 	}
 	return false;				/* no files available to free */
@@ -1262,11 +1281,11 @@ ReleaseLruFile(void)
  * After calling this, it's OK to try to open another file.
  */
 static void
-ReleaseLruFiles(void)
+ReleaseLruFiles(int alreadyLocked)
 {
 	while (nfile + numAllocatedDescs + numExternalFDs >= max_safe_fds)
 	{
-		if (!ReleaseLruFile())
+		if (!ReleaseLruFile(alreadyLocked))
 			break;
 	}
 }
@@ -1322,9 +1341,11 @@ AllocateVfd(void)
 		SizeVfdCache = newCacheSize;
 	}
 
+    VfdLruLock();
 	file = VfdCache[0].nextFree;
 
 	VfdCache[0].nextFree = VfdCache[file].nextFree;
+    VfdLruUnlock();
 
 	return file;
 }
@@ -1344,8 +1365,10 @@ FreeVfd(File file)
 	}
 	vfdP->fdstate = 0x0;
 
+    VfdLruLock();
 	vfdP->nextFree = VfdCache[0].nextFree;
 	VfdCache[0].nextFree = file;
+    VfdLruUnlock();
 }
 
 /* returns 0 on success, -1 on re-open failure (with errno set) */
@@ -1362,11 +1385,14 @@ FileAccess(File file)
 	 * ring (possibly closing the least recently used file to get an FD).
 	 */
 
+    VfdLruLock();
 	if (FileIsNotOpen(file))
 	{
 		returnValue = LruInsert(file);
-		if (returnValue != 0)
-			return returnValue;
+		if (returnValue != 0){
+            VfdLruUnlock();
+            return returnValue;
+        }
 	}
 	else if (VfdCache[0].lruLessRecently != file)
 	{
@@ -1378,6 +1404,7 @@ FileAccess(File file)
 		Delete(file);
 		Insert(file);
 	}
+    VfdLruUnlock();
 
 	return 0;
 }
@@ -1468,7 +1495,7 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	vfdP = &VfdCache[file];
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 	vfdP->fd = BasicOpenFilePerm(fileName, fileFlags, fileMode);
 
@@ -1485,7 +1512,9 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	DO_DB(elog(LOG, "PathNameOpenFile: success %d",
 			   vfdP->fd));
 
+    VfdLruLock();
 	Insert(file);
+    VfdLruUnlock();
 
 	vfdP->fileName = fnamecopy;
 	/* Saved flags are adjusted to be OK for re-opening file */
@@ -1850,8 +1879,10 @@ FileClose(File file)
 		--nfile;
 		vfdP->fd = VFD_CLOSED;
 
+        VfdLruLock();
 		/* remove the file from the lru ring */
 		Delete(file);
+        VfdLruUnlock();
 	}
 
 	if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
@@ -2334,7 +2365,7 @@ AllocateFile(const char *name, const char *mode)
 						maxAllocatedDescs, name)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	if ((file = fopen(name, mode)) != NULL)
@@ -2356,7 +2387,7 @@ TryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2393,7 +2424,7 @@ OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 						maxAllocatedDescs, fileName)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 	fd = BasicOpenFilePerm(fileName, fileFlags, fileMode);
 
@@ -2438,7 +2469,7 @@ OpenPipeStream(const char *command, const char *mode)
 						maxAllocatedDescs, command)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	fflush(stdout);
@@ -2465,7 +2496,7 @@ TryAgain:
 		ereport(LOG,
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2595,7 +2626,7 @@ AllocateDir(const char *dirname)
 						maxAllocatedDescs, dirname)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	if ((dir = opendir(dirname)) != NULL)
@@ -2617,7 +2648,7 @@ TryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2764,11 +2795,13 @@ closeAllVfds(void)
 	if (SizeVfdCache > 0)
 	{
 		Assert(FileIsNotOpen(0));	/* Make sure ring not corrupted */
+        VfdLruLock();
 		for (i = 1; i < SizeVfdCache; i++)
 		{
 			if (!FileIsNotOpen(i))
 				LruDelete(i);
 		}
+        VfdLruUnlock();
 	}
 }
 
@@ -3419,10 +3452,11 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 	 */
 	pg_flush_data(fd, 0, 0);
 
-	if (CloseTransientFile(fd) != 0)
-		ereport(elevel,
-				(errcode_for_file_access(),
-				 errmsg("could not close file \"%s\": %m", fname)));
+	if (CloseTransientFile(fd) != 0) {
+        ereport(elevel,
+                (errcode_for_file_access(),
+                        errmsg("could not close file \"%s\": %m", fname)));
+    }
 }
 
 #endif							/* PG_FLUSH_DATA_WORKS */

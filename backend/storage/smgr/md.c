@@ -336,10 +336,10 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 
 		/* Next unlink the file */
 		ret = unlink(path);
-		if (ret < 0 && errno != ENOENT)
-			ereport(WARNING,
-					(errcode_for_file_access(),
-					 errmsg("could not remove file \"%s\": %m", path)));
+//		if (ret < 0 && errno != ENOENT)
+//			ereport(WARNING,
+//					(errcode_for_file_access(),
+//					 errmsg("could not remove file \"%s\": %m", path)));
 	}
 	else
 	{
@@ -392,10 +392,10 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 			if (unlink(segpath) < 0)
 			{
 				/* ENOENT is expected after the last segment... */
-				if (errno != ENOENT)
-					ereport(WARNING,
-							(errcode_for_file_access(),
-							 errmsg("could not remove file \"%s\": %m", segpath)));
+//				if (errno != ENOENT)
+//					ereport(WARNING,
+//							(errcode_for_file_access(),
+//							 errmsg("could not remove file \"%s\": %m", segpath)));
 				break;
 			}
 		}
