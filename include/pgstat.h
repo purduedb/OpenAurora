@@ -11,6 +11,10 @@
 #ifndef PGSTAT_H
 #define PGSTAT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "datatype/timestamp.h"
 #include "libpq/pqcomm.h"
 #include "miscadmin.h"
@@ -1483,5 +1487,9 @@ extern void pgstat_count_slru_flush(int slru_idx);
 extern void pgstat_count_slru_truncate(int slru_idx);
 extern const char *pgstat_slru_name(int slru_idx);
 extern int	pgstat_slru_index(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif							/* PGSTAT_H */
