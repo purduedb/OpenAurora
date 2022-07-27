@@ -70,6 +70,7 @@
 #include "storage/proc.h"
 #include "storage/procsignal.h"
 #include "storage/sinval.h"
+#include "storage/rpcclient.h"
 #include "tcop/fastpath.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -3795,6 +3796,9 @@ PostgresMain(int argc, char *argv[],
 	 */
 	if (!IsUnderPostmaster)
 		InitializeGUCOptions();
+
+    //! Here init the RPC Client
+    RpcInit();
 
 	/*
 	 * Parse command-line options.

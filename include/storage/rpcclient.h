@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
     void RpcInit(void);
+    void RpcShutdown(void);
     void RpcFileClose(const int _fd);
     void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo);
     int RpcPathNameOpenFile(const char* _path, const int32_t _flag, char *_func, char* _file, int _line);

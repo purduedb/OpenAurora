@@ -684,13 +684,13 @@ durable_rename(const char *oldfile, const char *newfile, int elevel)
 	fd = OpenTransientFile(newfile, PG_BINARY | O_RDWR);
 	if (fd < 0)
 	{
-		if (errno != ENOENT)
-		{
-			ereport(elevel,
-					(errcode_for_file_access(),
-					 errmsg("could not open file \"%s\": %m", newfile)));
-			return -1;
-		}
+//		if (errno != ENOENT)
+//		{
+//			ereport(elevel,
+//					(errcode_for_file_access(),
+//					 errmsg("could not open file \"%s\": %m", newfile)));
+//			return -1;
+//		}
 	}
 	else
 	{
@@ -3438,11 +3438,11 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 
 	if (fd < 0)
 	{
-		if (errno == EACCES)
-			return;
-		ereport(elevel,
-				(errcode_for_file_access(),
-				 errmsg("could not open file \"%s\": %m", fname)));
+//		if (errno == EACCES)
+//			return;
+//		ereport(elevel,
+//				(errcode_for_file_access(),
+//				 errmsg("could not open file \"%s\": %m", fname)));
 		return;
 	}
 

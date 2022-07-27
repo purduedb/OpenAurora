@@ -24,6 +24,7 @@
 #include "storage/smgr.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
+#include "storage/rpcclient.h"
 
 
 /*
@@ -109,6 +110,8 @@ static void smgrshutdown(int code, Datum arg);
 void
 smgrinit(void)
 {
+//    printf("[%s] start init\n", __func__ );
+//    RpcInit();
 	int			i;
 
 	for (i = 0; i < NSmgr; i++)
@@ -127,6 +130,7 @@ smgrinit(void)
 static void
 smgrshutdown(int code, Datum arg)
 {
+    RpcShutdown();
 	int			i;
 
 	for (i = 0; i < NSmgr; i++)

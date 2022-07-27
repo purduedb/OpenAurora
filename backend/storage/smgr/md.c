@@ -176,11 +176,10 @@ mdinit(void)
 	MdCxt = AllocSetContextCreate(TopMemoryContext,
 								  "MdSmgr",
 								  ALLOCSET_DEFAULT_SIZES);
-
 #ifdef RPC_REMOTE_DISK
-    RpcInit();
-//    RpcFileClose(-1);
+//    RpcInit();
 #endif
+
 }
 
 /*

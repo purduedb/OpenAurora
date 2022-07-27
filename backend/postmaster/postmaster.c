@@ -132,6 +132,7 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+#include "storage/rpcclient.h"
 
 #ifdef EXEC_BACKEND
 #include "storage/spin.h"
@@ -585,6 +586,7 @@ PostmasterMain(int argc, char *argv[])
 	int			i;
 	char	   *output_config_variable = NULL;
 
+    RpcInit();
 	InitProcessGlobals();
 
 	PostmasterPid = MyProcPid;
@@ -5499,6 +5501,8 @@ StartChildProcess(AuxProcType type)
 
 	if (pid == 0)				/* child */
 	{
+        // Here Init RPC Client
+        RpcInit();
 		InitPostmasterChild();
 
 		/* Close the postmaster's sockets */
