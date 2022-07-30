@@ -63,7 +63,6 @@ fork_process(void)
 	result = fork();
 	if (result == 0)
 	{
-        RpcInit();
 		/* fork succeeded, in child */
 #ifdef LINUX_PROFILE
 		setitimer(ITIMER_PROF, &prof_itimer, NULL);

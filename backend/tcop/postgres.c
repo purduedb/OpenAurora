@@ -3797,9 +3797,6 @@ PostgresMain(int argc, char *argv[],
 	if (!IsUnderPostmaster)
 		InitializeGUCOptions();
 
-    //! Here init the RPC Client
-    RpcInit();
-
 	/*
 	 * Parse command-line options.
 	 */

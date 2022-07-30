@@ -58,10 +58,15 @@ std::shared_ptr<TTransport> rpctransport;
 std::shared_ptr<TProtocol> rpcprotocol;
 DataPageAccessClient *client=NULL;
 
+pid_t MyPid = 0;
 
 void RpcInit()
 {
-//    printf("%s start\n\n", __func__ );
+    int myPid = getpid();
+    if(myPid == MyPid)
+        return;
+    
+//    printf("%s start %d\n", __func__ , getpid());
 //    if(client != NULL)
 //        return;
     rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, 9090);
@@ -69,18 +74,19 @@ void RpcInit()
     rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
     client = new DataPageAccessClient(rpcprotocol);
     rpctransport->open();
+    MyPid = myPid;
 }
 
 void RpcShutdown()
 {
     if(client == NULL)
         return;
-//    printf("%s really closed\n", __func__ );
-    rpctransport->close();
+//    printf("%s really closed, %d\n", __func__ , getpid());
+//    rpctransport->close();
 }
 
 void RpcFileClose(const int fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     //rpctransport->open();
     client->RpcFileClose((_File)fd);
@@ -89,7 +95,7 @@ void RpcFileClose(const int fd) {
 }
 
 void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 //    printf("[%s] spcNode = %ld, dbNode = %ld, isRedo = %d\n", __func__ , _spcnode, _dbnode, isRedo);
     //rpctransport->open();
@@ -99,7 +105,7 @@ void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, c
 }
 
 int RpcPathNameOpenFile(const char* path, const int32_t _flag, char *_func, char* _file, int _line) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 //    printf("[%s] %s %s %d \n", __func__ , _func, _file, _line);
     _File result = 0;
@@ -112,7 +118,7 @@ int RpcPathNameOpenFile(const char* path, const int32_t _flag, char *_func, char
 }
 
 int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, const int64_t _seekpos, const int32_t _wait_event_info) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     int32_t result = 0;
     _Page _page;
@@ -124,7 +130,7 @@ int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, con
 }
 
 char* RpcFilePathName(const int _fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     _Path _return;
 
@@ -138,7 +144,7 @@ char* RpcFilePathName(const int _fd) {
 }
 
 int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     _Page _return;
     //rpctransport->open();
@@ -149,7 +155,7 @@ int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t
 }
 
 int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     int32_t result;
 
@@ -160,18 +166,19 @@ int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
 }
 
 int64_t RpcFileSize(const int _fd , char *_func, char* _file, int _line) {
-    //RpcInit();
-//    printf("[%s] function start \n", __func__ );
+    RpcInit();
+//    printf("[%s] function start %d , fd = %d\n", __func__ , getpid(), _fd);
 //    printf("[%s] %s %s %d\n", __func__, _func, _file, _line);
     int64_t result;
     //rpctransport->open();
     result = client->RpcFileSize(_fd);
     //rpctransport->close();
+//    printf("[%s] function end %d , result = %d , fd = %d\n", __func__ , getpid(), result, _fd);
     return result;
 }
 
 int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amount, const int32_t wait_event_info) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     int32_t result;
     //rpctransport->open();
@@ -181,7 +188,7 @@ int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amo
 }
 
 void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes, const int32_t wait_event_info) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     //rpctransport->open();
     client->RpcFileWriteback(_fd, _offset, nbytes, wait_event_info);
@@ -190,7 +197,7 @@ void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes
 }
 
 int32_t RpcUnlink(const char* filepath) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     _Path _path;
     int32_t result = 0;
@@ -204,7 +211,7 @@ int32_t RpcUnlink(const char* filepath) {
 }
 
 int32_t RpcFtruncate(const int _fd, const int64_t _offset) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     int32_t result = 0;
 
@@ -219,7 +226,7 @@ void RpcInitFile(char* _return, const char* _path) {
 }
 
 int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
     _File result = 0;
     _Path _filename;
@@ -233,7 +240,7 @@ int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
 }
 
 int32_t RpcCloseTransientFile(const int _fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -244,7 +251,7 @@ int32_t RpcCloseTransientFile(const int _fd) {
 }
 
 int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -255,7 +262,7 @@ int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
 }
 
 int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -268,7 +275,7 @@ int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t 
 }
 
 int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -282,7 +289,7 @@ int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t
 }
 
 int32_t RpcClose(const int _fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -293,7 +300,7 @@ int32_t RpcClose(const int _fd) {
 }
 
 int32_t RpcBasicOpenFile(char *path, int32_t _flags, char * file, char* func, int line) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start , path = %s\n", __func__ , path);
 
 //    printf("[%s] calling file: %s, func: %s, line: %d\n", __func__ , file, func, line);
@@ -308,7 +315,7 @@ int32_t RpcBasicOpenFile(char *path, int32_t _flags, char * file, char* func, in
 }
 
 int32_t RpcPgFdatasync(const int32_t _fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -320,7 +327,7 @@ int32_t RpcPgFdatasync(const int32_t _fd) {
 
 
 int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
-    //RpcInit();
+    RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
     int32_t result;
@@ -331,6 +338,7 @@ int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
 }
 
 int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) {
+    RpcInit();
     int32_t result;
     //rpctransport->open();
     result = client->RpcLseek(_fd, _offset, _flag);
@@ -340,6 +348,7 @@ int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) 
 }
 
 int RpcStat(const char* path, struct stat* _stat) {
+    RpcInit();
     _Path _path;
     _path.assign(path);
     _Stat_Resp response;
@@ -353,6 +362,7 @@ int RpcStat(const char* path, struct stat* _stat) {
 }
 
 int32_t RpcDirectoryIsEmpty(const char* path) {
+    RpcInit();
     _Path _path;
     _path.assign(path);
     int32_t result;
@@ -363,6 +373,7 @@ int32_t RpcDirectoryIsEmpty(const char* path) {
 }
 
 int32_t RpcCopyDir(const char* _src, const char* _dst) {
+    RpcInit();
     // create another copy of initialized-db in compute node
     char temp_src[1024];
     char temp_dst[1024];
@@ -382,6 +393,7 @@ int32_t RpcCopyDir(const char* _src, const char* _dst) {
 }
 
 int32_t RpcPgFsync(const int32_t _fd) {
+    RpcInit();
     int32_t result;
     //rpctransport->open();
     result = client->RpcPgFsync(_fd);
@@ -390,6 +402,7 @@ int32_t RpcPgFsync(const int32_t _fd) {
 }
 
 int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
+    RpcInit();
     _Path _fname;
     _fname.assign(filename);
 
@@ -402,6 +415,7 @@ int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
 }
 
 int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel) {
+    RpcInit();
 
     _Path _oldFname, _newFname;
     _oldFname.assign(oldFname);
@@ -439,7 +453,7 @@ int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const i
 //};
 
 //int main() {
-//    //RpcInit();
+//    RpcInit();
 //    RpcFileClose(0);
 //    return 0;
 //}

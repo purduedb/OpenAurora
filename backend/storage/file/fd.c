@@ -341,12 +341,15 @@ static int	fsync_parent_path(const char *fname, int elevel);
 
 void VfdLruLock() {
     pthread_mutex_lock(&mutex);
-    fflush(stdout);
+//    printf("%s, tid = %d\n", __func__ , gettid());
+//    fflush(stdout);
 }
 
 void VfdLruUnlock() {
-    pthread_mutex_unlock(&mutex);
     fflush(stdout);
+    pthread_mutex_unlock(&mutex);
+//    printf("%s, tid = %d\n", __func__ , gettid());
+//    fflush(stdout);
 }
 
 
@@ -1019,6 +1022,8 @@ BasicOpenFile(const char *fileName, int fileFlags)
 int
 BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
+//    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
+//    fflush(stdout);
 	int			fd;
 
 tryAgain:
@@ -1150,10 +1155,15 @@ Delete(File file)
 	DO_DB(_dump_lru());
 
 	vfdP = &VfdCache[file];
-
+//    printf("%s vfdP is NULL? %d\n", __func__ , vfdP==NULL);
+//    fflush(stdout);
+//    printf("%s lessRec = %d, moreRec = %d\n", __func__ , vfdP->lruLessRecently, vfdP->lruMoreRecently);
+//    fflush(stdout);
 	VfdCache[vfdP->lruLessRecently].lruMoreRecently = vfdP->lruMoreRecently;
 	VfdCache[vfdP->lruMoreRecently].lruLessRecently = vfdP->lruLessRecently;
 
+//    printf("%s here  \n",__func__ );
+//    fflush(stdout);
 	DO_DB(_dump_lru());
 }
 
@@ -1162,6 +1172,8 @@ LruDelete(File file)
 {
 	Vfd		   *vfdP;
 
+//    printf("%s start, file = %d, tid = %d\n", __func__, file, gettid());
+//    fflush(stdout);
 	Assert(file != 0);
 
 	DO_DB(elog(LOG, "LruDelete %d (%s)",
@@ -1169,6 +1181,11 @@ LruDelete(File file)
 
 	vfdP = &VfdCache[file];
 
+//    if(vfdP->fileName)
+//        printf("%s try to close vfd %d, rfd %d, %s, fileName address is %p\n", __func__ , file, vfdP->fd, vfdP->fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s try to close vfd %d, rfd %d, fileName is NULL!, &vfd address is %p\n", __func__ , file, vfdP->fd, &(VfdCache[file].fileName));
+//    fflush(stdout);
 	/*
 	 * Close the file.  We aren't expecting this to fail; if it does, better
 	 * to leak the FD than to mess up our internal state.
@@ -1177,6 +1194,8 @@ LruDelete(File file)
         elog(vfdP->fdstate & FD_TEMP_FILE_LIMIT ? LOG : data_sync_elevel(LOG),
 			 "could not close file \"%s\": %m", vfdP->fileName);
 
+//    printf("%s set vfd %d to VFD_CLOSED\n", __func__ , file);
+//    fflush(stdout);
 	vfdP->fd = VFD_CLOSED;
 	--nfile;
 
@@ -1209,6 +1228,8 @@ Insert(File file)
 static int
 LruInsert(File file)
 {
+//    printf("%s start file = %d \n", __func__ , file);
+//    fflush(stdout);
 	Vfd		   *vfdP;
 
 	Assert(file != 0);
@@ -1242,6 +1263,10 @@ LruInsert(File file)
 		}
 	}
 
+//    if (vfdP->fileName)
+//        printf("%s try to insert %d %s, &vfp address is %p\n", __func__ , file, vfdP->fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s try to insert %d filename is NULL!, &vfd address is %p\n", __func__ , file, &(VfdCache[file].fileName));
 	/*
 	 * put it at the head of the Lru ring
 	 */
@@ -1293,6 +1318,7 @@ ReleaseLruFiles(int alreadyLocked)
 static File
 AllocateVfd(void)
 {
+//    printf("%s start , tid = %d\n", __func__ , gettid());
 	Index		i;
 	File		file;
 
@@ -1300,8 +1326,10 @@ AllocateVfd(void)
 
 	Assert(SizeVfdCache > 0);	/* InitFileAccess not called? */
 
+    VfdLruLock();
 	if (VfdCache[0].nextFree == 0)
 	{
+//        printf("%s start expand the VfdCache, current size = %d, tid = %d\n", __func__ , SizeVfdCache, gettid());
 		/*
 		 * The free list is empty so it is time to increase the size of the
 		 * array.  We choose to double it each time this happens. However,
@@ -1341,18 +1369,19 @@ AllocateVfd(void)
 		SizeVfdCache = newCacheSize;
 	}
 
-    VfdLruLock();
 	file = VfdCache[0].nextFree;
 
 	VfdCache[0].nextFree = VfdCache[file].nextFree;
     VfdLruUnlock();
 
+//    printf("%s end, tid = %d\n", __func__ , gettid());
 	return file;
 }
 
 static void
 FreeVfd(File file)
 {
+//    printf("%s start, vfd = %d\n", __func__ , file);
 	Vfd		   *vfdP = &VfdCache[file];
 
 	DO_DB(elog(LOG, "FreeVfd: %d (%s)",
@@ -1375,6 +1404,7 @@ FreeVfd(File file)
 static int
 FileAccess(File file)
 {
+//    printf("%s start , file = %d, tid = %d, filename is NULL? %d\n", __func__, file, gettid(), VfdCache[file].fileName==NULL);
 	int			returnValue;
 
 	DO_DB(elog(LOG, "FileAccess %d (%s)",
@@ -1388,6 +1418,8 @@ FileAccess(File file)
     VfdLruLock();
 	if (FileIsNotOpen(file))
 	{
+//        printf("%s here1 , vfd = %d, tid = %d\n", __func__, file , gettid());
+//        fflush(stdout);
 		returnValue = LruInsert(file);
 		if (returnValue != 0){
             VfdLruUnlock();
@@ -1396,6 +1428,8 @@ FileAccess(File file)
 	}
 	else if (VfdCache[0].lruLessRecently != file)
 	{
+//        printf("%s here2 , tid = %d\n", __func__ , gettid());
+//        fflush(stdout);
 		/*
 		 * We now know that the file is open and that it is not the last one
 		 * accessed, so we need to move it to the head of the Lru ring.
@@ -1492,15 +1526,17 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 				 errmsg("out of memory")));
 
 	file = AllocateVfd();
+    VfdLruLock();
 	vfdP = &VfdCache[file];
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles(0);
+	ReleaseLruFiles(1);
 
 	vfdP->fd = BasicOpenFilePerm(fileName, fileFlags, fileMode);
 
 	if (vfdP->fd < 0)
 	{
+        VfdLruUnlock();
 		int			save_errno = errno;
 
 		FreeVfd(file);
@@ -1512,11 +1548,13 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	DO_DB(elog(LOG, "PathNameOpenFile: success %d",
 			   vfdP->fd));
 
-    VfdLruLock();
+
+//    printf("%s try to insert %d, name = %s, tid = %d\n", __func__ , file, fnamecopy, gettid());
 	Insert(file);
-    VfdLruUnlock();
 
 	vfdP->fileName = fnamecopy;
+//    printf("%s vfd = %d compare two name = %s, %s, &vfdP address is %p, string copy address is %p\n",
+//           __func__ , file, vfdP->fileName, fnamecopy, &(VfdCache[file].fileName), fnamecopy);
 	/* Saved flags are adjusted to be OK for re-opening file */
 	vfdP->fileFlags = fileFlags & ~(O_CREAT | O_TRUNC | O_EXCL);
 	vfdP->fileMode = fileMode;
@@ -1524,6 +1562,7 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	vfdP->fdstate = 0x0;
 	vfdP->resowner = NULL;
 
+    VfdLruUnlock();
 	return file;
 }
 
@@ -1854,6 +1893,7 @@ PathNameDeleteTemporaryFile(const char *path, bool error_on_failure)
 void
 FileClose(File file)
 {
+//    printf("%s close file %d\n", __func__ , file);
 	Vfd		   *vfdP;
 
 	Assert(FileIsValid(file));
@@ -1861,6 +1901,7 @@ FileClose(File file)
 	DO_DB(elog(LOG, "FileClose: %d (%s)",
 			   file, VfdCache[file].fileName));
 
+    VfdLruLock();
 	vfdP = &VfdCache[file];
 
 	if (!FileIsNotOpen(file))
@@ -1879,13 +1920,12 @@ FileClose(File file)
 		--nfile;
 		vfdP->fd = VFD_CLOSED;
 
-        VfdLruLock();
 		/* remove the file from the lru ring */
 		Delete(file);
-        VfdLruUnlock();
 	}
+    VfdLruUnlock();
 
-	if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
+    if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
 	{
 		/* Subtract its size from current usage (do first in case of error) */
 		temporary_files_size -= vfdP->fileSize;
@@ -2183,13 +2223,40 @@ FileSize(File file)
 	DO_DB(elog(LOG, "FileSize %d (%s)",
 			   file, VfdCache[file].fileName));
 
+//    if(VfdCache[file].fileName)
+//        printf("%s start, tid = %d, vfd = %d, filename = %s, &vfd address is %p\n", __func__ , file, gettid(), VfdCache[file].fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s start, tid = %d, vfd = %d, filename is NULL!, &fileName is %p\n", __func__ , file, gettid(), &(VfdCache[file].fileName));
+
+    VfdLruLock();
 	if (FileIsNotOpen(file))
 	{
-		if (FileAccess(file) < 0)
-			return (off_t) -1;
+        VfdLruUnlock();
+		if (FileAccess(file) < 0) {
+//            printf("%s FileAccess failed \n", __func__ );
+            return (off_t) -1;
+        }
+
+        off_t result = lseek(VfdCache[file].fd, 0, SEEK_END);
+        if(result < 0) {
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not lseek file in 1 \"%s\": %m",
+                                   VfdCache[file].fileName)));
+        }
+        return result;
 	}
 
-	return lseek(VfdCache[file].fd, 0, SEEK_END);
+    off_t result = lseek(VfdCache[file].fd, 0, SEEK_END);
+    VfdLruUnlock();
+    if(result < 0) {
+        ereport(ERROR,
+                (errcode_for_file_access(),
+                        errmsg("could not lseek file in 2 \"%s\": %m",
+                               VfdCache[file].fileName)));
+    }
+    return result;
+
 }
 
 int
@@ -2790,6 +2857,7 @@ ClosePipeStream(FILE *file)
 void
 closeAllVfds(void)
 {
+//    printf("%s start \n", __func__ );
 	Index		i;
 
 	if (SizeVfdCache > 0)
