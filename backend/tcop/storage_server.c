@@ -1,3 +1,7 @@
+//
+// Created by pang65 on 6/21/22.
+//
+
 #include "storage/rpcserver.h"
 #include "storage/fd.h"
 #include "storage/lwlock.h"
@@ -18,17 +22,26 @@
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "signal.h"
+#include <pthread.h>
 
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
     proc_exit(0);
 }
 
+int IsRpcServer = 0;
+
+pthread_t XlogStartupTid = 0;
+pthread_t WalRcvTid = 0;
+
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
               const char *username) {
-/* Initialize startup process environment if necessary. */
+
+    IsRpcServer = 1;
+
+    /* Initialize startup process environment if necessary. */
     InitStandaloneProcess(argv[0]);
 
     SetProcessingMode(InitProcessing);
@@ -58,6 +71,7 @@ RpcServerMain(int argc, char *argv[],
     checkDataDir();
     ChangeToDataDir();
 
+    LocalProcessControlFile(false);
     /*
      * Create lockfile for data directory.
      */
@@ -68,13 +82,22 @@ RpcServerMain(int argc, char *argv[],
     /* Initialize MaxBackends (if under postmaster, was done already) */
     InitializeMaxBackends();
 
-    CreateSharedMemoryAndSemaphores();
-    DebugFileOpen();
+    BaseInit();
+    InitProcess();
+//    CreateSharedMemoryAndSemaphores();
+//    DebugFileOpen();
 
     /* Do local initialization of file, storage and buffer managers */
-    InitFileAccess();
+//    InitFileAccess();
 //    CreateSharedMemoryAndSemaphores();
 
 //    CreateLWLocks();
+    // Prepare resource owner for BufAlloc()
+    CreateAuxProcessResourceOwner();
+
+
+    pthread_create(&XlogStartupTid, NULL, (void*)StartupXLOG, NULL);
+
     RpcServerLoop();
+    proc_exit(0);
 }

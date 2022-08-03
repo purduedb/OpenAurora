@@ -296,6 +296,7 @@ void
 RpcServerLoop(void){
     int port = 9090;
 
+    printf("%s start\n", __func__ );
     TThreadedServer server(
             std::make_shared<DataPageAccessProcessor>(std::make_shared<DataPageAccessHandler>()),
             std::make_shared<TServerSocket>(port), //port

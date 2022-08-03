@@ -18,6 +18,7 @@ OBJS = \
 	fastpath.o \
 	postgres.o \
 	pquery.o \
-	utility.o
+	utility.o \
+	storage_server.o
 
 include $(top_srcdir)/src/backend/common.mk

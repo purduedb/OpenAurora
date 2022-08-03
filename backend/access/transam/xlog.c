@@ -78,8 +78,11 @@
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "tcop/storage_server.h"
 
 extern uint32 bootstrap_data_checksum_version;
+
+extern int IsRpcServer;
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
@@ -5451,8 +5454,11 @@ readRecoverySignalFile(void)
 	/*
 	 * We don't support standby mode in standalone backends; that requires
 	 * other processes such as the WAL receiver to be alive.
+	 *
+	 * Update: RpcServer only has one process, which should also enable
+	 *         standby mode
 	 */
-	if (StandbyModeRequested && !IsUnderPostmaster)
+	if (!IsRpcServer && StandbyModeRequested && !IsUnderPostmaster)
 		ereport(FATAL,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("standby mode is not supported by single-user servers")));
@@ -6303,6 +6309,8 @@ CheckRequiredParameterValues(void)
 void
 StartupXLOG(void)
 {
+    fflush(stdout);
+
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
 	bool		wasShutdown;

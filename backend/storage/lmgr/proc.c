@@ -303,6 +303,7 @@ InitProcGlobal(void)
 void
 InitProcess(void)
 {
+    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	PGPROC	   *volatile *procgloballist;
 
 	/*

@@ -28,6 +28,10 @@
 #include "storage/pmsignal.h"
 #include "storage/shmem.h"
 #include "utils/timestamp.h"
+#include "tcop/storage_server.h"
+#include "replication/walreceiver.h"
+
+extern int IsRpcServer;
 
 WalRcvData *WalRcv = NULL;
 
@@ -297,8 +301,12 @@ RequestXLogStreaming(TimeLineID tli, XLogRecPtr recptr, const char *conninfo,
 
 	SpinLockRelease(&walrcv->mutex);
 
-	if (launch)
-		SendPostmasterSignal(PMSIGNAL_START_WALRECEIVER);
+	if (launch) {
+        if (IsRpcServer)
+            StartWalRcvThread();
+        else
+            SendPostmasterSignal(PMSIGNAL_START_WALRECEIVER);
+    }
 	else if (latch)
 		SetLatch(latch);
 }
