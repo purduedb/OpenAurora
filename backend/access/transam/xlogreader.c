@@ -1135,6 +1135,7 @@ WALRead(XLogReaderState *state,
 		readbytes = pg_pread_rpc_local2(state->seg.ws_file, p, segbytes, (off_t) startoff);
 #else
 		readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+
 #endif
 
 #ifndef FRONTEND

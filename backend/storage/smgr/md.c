@@ -367,10 +367,10 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 		else
 			ret = unlink(path);
 //		ret = unlink(path);
-		if (ret < 0 && errno != ENOENT)
-			ereport(WARNING,
-					(errcode_for_file_access(),
-					 errmsg("could not remove file \"%s\": %m", path)));
+//		if (ret < 0 && errno != ENOENT)
+//			ereport(WARNING,
+//					(errcode_for_file_access(),
+//					 errmsg("could not remove file \"%s\": %m", path)));
 	}
 	else
 	{
@@ -436,10 +436,10 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 			if (((IsRpcClient)? RpcUnlink(segpath): unlink(segpath) ) < 0)
 			{
 				/* ENOENT is expected after the last segment... */
-				if (errno != ENOENT)
-					ereport(WARNING,
-							(errcode_for_file_access(),
-							 errmsg("could not remove file \"%s\": %m", segpath)));
+//				if (errno != ENOENT)
+//					ereport(WARNING,
+//							(errcode_for_file_access(),
+//							 errmsg("could not remove file \"%s\": %m", segpath)));
 				break;
 			}
 		}
@@ -742,18 +742,20 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 //					 errmsg("could not read block %u in file \"%s\": %m",
 //							blocknum, FilePathName(v->mdfd_vfd))));
 
-		if(IsRpcClient)
-			if (nbytes < 0)
-				ereport(ERROR,
-						(errcode_for_file_access(),
-								errmsg("could not read block %u in file \"%s\": %m",
-									   blocknum, RpcFilePathName(v->mdfd_vfd))));
-		else
-			if (nbytes < 0)
-				ereport(ERROR,
-						(errcode_for_file_access(),
-								errmsg("could not read block %u in file \"%s\": %m",
-									   blocknum, FilePathName(v->mdfd_vfd))));
+		if(IsRpcClient) {
+            if (nbytes < 0)
+                ereport(ERROR,
+                        (errcode_for_file_access(),
+                                errmsg("could not read block %u in file \"%s\": %m",
+                                       blocknum, RpcFilePathName(v->mdfd_vfd))));
+        }
+		else {
+            if (nbytes < 0)
+                ereport(ERROR,
+                        (errcode_for_file_access(),
+                                errmsg("could not read block %u in file \"%s\": %m",
+                                       blocknum, FilePathName(v->mdfd_vfd))));
+        }
 		/*
 		 * Short read: we are at or past EOF, or we read a partial block at
 		 * EOF.  Normally this is an error; upper levels should never try to
@@ -956,21 +958,22 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 //						(errcode_for_file_access(),
 //						 errmsg("could not truncate file \"%s\": %m",
 //								FilePathName(v->mdfd_vfd))));
-			if(IsRpcClient)
-				if (RpcFileTruncate(v->mdfd_vfd, 0) < 0)
-					ereport(ERROR,
-							(errcode_for_file_access(),
-									errmsg("could not truncate file \"%s\": %m",
-										   RpcFilePathName(v->mdfd_vfd))));
+			if(IsRpcClient) {
+                if (RpcFileTruncate(v->mdfd_vfd, 0) < 0)
+                    ereport(ERROR,
+                            (errcode_for_file_access(),
+                                    errmsg("could not truncate file \"%s\": %m",
+                                           RpcFilePathName(v->mdfd_vfd))));
 //										   (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)))));
-			else
-				if (FileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
-					ereport(ERROR,
-							(errcode_for_file_access(),
-									errmsg("could not truncate file \"%s\": %m",
-										   FilePathName(v->mdfd_vfd))));
+            }
+            else {
+                if (FileTruncate(v->mdfd_vfd, 0, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+                    ereport(ERROR,
+                            (errcode_for_file_access(),
+                                    errmsg("could not truncate file \"%s\": %m",
+                                           FilePathName(v->mdfd_vfd))));
 //										   (IsRpcClient? RpcFilePathName(v->mdfd_vfd): FilePathName(v->mdfd_vfd)))));
-
+            }
 
 
 			if (!SmgrIsTemp(reln))
@@ -1003,21 +1006,22 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 //						 errmsg("could not truncate file \"%s\" to %u blocks: %m",
 //								FilePathName(v->mdfd_vfd),
 //								nblocks)));
-			if(IsRpcClient)
-				if (RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
-					ereport(ERROR,
-							(errcode_for_file_access(),
-									errmsg("could not truncate file \"%s\" to %u blocks: %m",
-										   RpcFilePathName(v->mdfd_vfd),
-										   nblocks)));
-			else
-				if (FileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
-					ereport(ERROR,
-							(errcode_for_file_access(),
-									errmsg("could not truncate file \"%s\" to %u blocks: %m",
-											FilePathName(v->mdfd_vfd),
-										   nblocks)));
-
+			if(IsRpcClient) {
+                if (RpcFileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ) < 0)
+                    ereport(ERROR,
+                            (errcode_for_file_access(),
+                                    errmsg("could not truncate file \"%s\" to %u blocks: %m",
+                                           RpcFilePathName(v->mdfd_vfd),
+                                           nblocks)));
+            }
+			else {
+                if (FileTruncate(v->mdfd_vfd, (off_t) lastsegblocks * BLCKSZ, WAIT_EVENT_DATA_FILE_TRUNCATE) < 0)
+                    ereport(ERROR,
+                            (errcode_for_file_access(),
+                                    errmsg("could not truncate file \"%s\" to %u blocks: %m",
+                                           FilePathName(v->mdfd_vfd),
+                                           nblocks)));
+            }
 			if (!SmgrIsTemp(reln))
 				register_dirty_segment(reln, forknum, v);
 		}
@@ -1077,18 +1081,21 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 //					 errmsg("could not fsync file \"%s\": %m",
 //							FilePathName(v->mdfd_vfd))));
 
-		if(IsRpcClient)
-			if (RpcFileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
-				ereport(data_sync_elevel(ERROR),
-						(errcode_for_file_access(),
-								errmsg("could not fsync file \"%s\": %m",
-										RpcFilePathName(v->mdfd_vfd))));
-		else
-			if (FileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
-				ereport(data_sync_elevel(ERROR),
-						(errcode_for_file_access(),
-								errmsg("could not fsync file \"%s\": %m",
-										FilePathName(v->mdfd_vfd))));
+//        printf("%s %d, vfd = %d\n", __func__, IsRpcClient, v->mdfd_vfd);
+		if(IsRpcClient) {
+            if (RpcFileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
+                ereport(data_sync_elevel(ERROR),
+                        (errcode_for_file_access(),
+                                errmsg("could not fsync file \"%s\": %m",
+                                       RpcFilePathName(v->mdfd_vfd))));
+        }
+		else {
+            if (FileSync(v->mdfd_vfd, WAIT_EVENT_DATA_FILE_IMMEDIATE_SYNC) < 0)
+                ereport(data_sync_elevel(ERROR),
+                        (errcode_for_file_access(),
+                                errmsg("could not fsync file \"%s\": %m",
+                                       FilePathName(v->mdfd_vfd))));
+        }
 
 		/* Close inactive segments immediately */
 		if (segno > min_inactive_seg)
@@ -1134,18 +1141,21 @@ register_dirty_segment(SMgrRelation reln, ForkNumber forknum, MdfdVec *seg)
 //					(errcode_for_file_access(),
 //					 errmsg("could not fsync file \"%s\": %m",
 //							FilePathName(seg->mdfd_vfd))));
-		if(IsRpcClient)
-			if (RpcFileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
-				ereport(data_sync_elevel(ERROR),
-						(errcode_for_file_access(),
-								errmsg("could not fsync file \"%s\": %m",
-										RpcFilePathName(seg->mdfd_vfd))));
-		else
-			if (FileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
-				ereport(data_sync_elevel(ERROR),
-						(errcode_for_file_access(),
-								errmsg("could not fsync file \"%s\": %m",
-										FilePathName(seg->mdfd_vfd))));
+//        printf("%s %d\n", __func__, IsRpcClient);
+		if(IsRpcClient) {
+            if (RpcFileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
+                ereport(data_sync_elevel(ERROR),
+                        (errcode_for_file_access(),
+                                errmsg("could not fsync file \"%s\": %m",
+                                       RpcFilePathName(seg->mdfd_vfd))));
+        }
+		else {
+            if (FileSync(seg->mdfd_vfd, WAIT_EVENT_DATA_FILE_SYNC) < 0)
+                ereport(data_sync_elevel(ERROR),
+                        (errcode_for_file_access(),
+                                errmsg("could not fsync file \"%s\": %m",
+                                       FilePathName(seg->mdfd_vfd))));
+        }
 	}
 }
 
@@ -1534,7 +1544,8 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 
 	/* Sync the file. */
 //	result = FileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
-	if(IsRpcClient)
+//    printf("%s %d\n", __func__, IsRpcClient);
+    if(IsRpcClient)
 		result = RpcFileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
 	else
 		result = FileSync(file, WAIT_EVENT_DATA_FILE_SYNC);
@@ -1551,7 +1562,7 @@ mdsyncfiletag(const FileTag *ftag, char *path)
 			FileClose(file);
 	}
 	errno = save_errno;
-    printf("[%s] function end\n", __func__ );
+//    printf("[%s] function end\n", __func__ );
 	return result;
 }
 

@@ -22,6 +22,12 @@
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
+#include "signal.h"
+
+void sigIntHandler(int sig) {
+    printf("Start to clean up process\n");
+    proc_exit(0);
+}
 
 extern int IsRpcClient;
 
@@ -35,11 +41,19 @@ RpcServerMain(int argc, char *argv[],
 
     SetProcessingMode(InitProcessing);
 
+    struct sigaction catchTermSig;
+    struct sigaction oldSigAction;
+    catchTermSig.sa_handler = sigIntHandler;
+    int setTermSigSucc = sigaction(SIGINT, &catchTermSig, &oldSigAction);
+    if(setTermSigSucc == -1) {
+        printf("Set signal action failed \n");
+    }
+
     /*
      * Set default values for command-line options.
      */
     InitializeGUCOptions();
-
+//    set_debug_options(5, PGC_POSTMASTER, PGC_S_ARGV);
     /* Acquire configuration parameters */
     if (!SelectConfigFiles(NULL, progname))
         proc_exit(1);

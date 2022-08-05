@@ -41,7 +41,33 @@
 #include "access/xlogdefs.h"
 #include "pgstat.h"
 #include "storage/fd.h"
+#include "storage/rpcclient.h"
 
+
+#define RPC_REMOTE_DISK
+#ifdef RPC_REMOTE_DISK
+
+#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag, __func__, __FILE__, __LINE__)
+#define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
+#define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
+#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+#define FileClose(_File) RpcFileClose(_File)
+#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _amount, _offset, _flag)
+#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
+//#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
+#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags, __FILE__, __func__, __LINE__)
+#define FileSize(_file) RpcFileSize(_file, __func__, __FILE__, __LINE__)
+#define FilePathName(_file) RpcFilePathName(_file)
+#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+#define unlink(_path) RpcUnlink(_path)
+#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+#define pg_fsync(_fd) RpcPgFsync(_fd)
+
+#endif
 /*
  * Copies all timeline history files with id's between 'begin' and 'end'
  * from archive to pg_wal.
@@ -304,6 +330,7 @@ void
 writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 					 XLogRecPtr switchpoint, char *reason)
 {
+//    printf("%s\n" ,__func__);
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	char		histfname[MAXFNAMELEN];
@@ -354,7 +381,11 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 		{
 			errno = 0;
 			pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_READ);
-			nbytes = (int) read(srcfd, buffer, sizeof(buffer));
+#ifdef RPC_REMOTE_DISK
+            nbytes = (int) RpcPgPRead(srcfd, buffer, sizeof(buffer), 0);
+#else
+            nbytes = (int) read(srcfd, buffer, sizeof(buffer));
+#endif
 			pgstat_report_wait_end();
 			if (nbytes < 0 || errno != 0)
 				ereport(ERROR,
@@ -364,7 +395,11 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 				break;
 			errno = 0;
 			pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_WRITE);
+#ifdef RPC_REMOTE_DISK
+            if((int) RpcPgPWrite(fd, buffer, nbytes, 0) != nbytes)
+#else
 			if ((int) write(fd, buffer, nbytes) != nbytes)
+#endif
 			{
 				int			save_errno = errno;
 
@@ -408,7 +443,11 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 	nbytes = strlen(buffer);
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_WRITE);
-	if ((int) write(fd, buffer, nbytes) != nbytes)
+#ifdef RPC_REMOTE_DISK
+    if((int) RpcPgPWrite(fd, buffer, nbytes, 0) != nbytes)
+#else
+    if ((int) write(fd, buffer, nbytes) != nbytes)
+#endif
 	{
 		int			save_errno = errno;
 
@@ -466,6 +505,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 void
 writeTimeLineHistoryFile(TimeLineID tli, char *content, int size)
 {
+//    printf("%s start \n", __func__);
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	int			fd;
@@ -486,7 +526,11 @@ writeTimeLineHistoryFile(TimeLineID tli, char *content, int size)
 
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_FILE_WRITE);
-	if ((int) write(fd, content, size) != size)
+#ifdef RPC_REMOTE_DISK
+    if((int) RpcPgPWrite(fd, content, size, 0) != size)
+#else
+    if ((int) write(fd, content, size) != size)
+#endif
 	{
 		int			save_errno = errno;
 

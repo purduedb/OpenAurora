@@ -21,6 +21,7 @@
 #endif
 
 #include "postmaster/fork_process.h"
+#include "storage/rpcclient.h"
 
 #ifndef WIN32
 /*

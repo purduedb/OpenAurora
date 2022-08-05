@@ -125,4 +125,156 @@ void _Stat_Resp::printTo(std::ostream& out) const {
   out << ")";
 }
 
+
+_Smgr_Relation::~_Smgr_Relation() noexcept {
+}
+
+
+void _Smgr_Relation::__set__spc_node(const _Oid val) {
+  this->_spc_node = val;
+}
+
+void _Smgr_Relation::__set__db_node(const _Oid val) {
+  this->_db_node = val;
+}
+
+void _Smgr_Relation::__set__rel_node(const _Oid val) {
+  this->_rel_node = val;
+}
+
+void _Smgr_Relation::__set__backend_id(const int32_t val) {
+  this->_backend_id = val;
+}
+std::ostream& operator<<(std::ostream& out, const _Smgr_Relation& obj)
+{
+  obj.printTo(out);
+  return out;
+}
+
+
+uint32_t _Smgr_Relation::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_spc_node);
+          this->__isset._spc_node = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_db_node);
+          this->__isset._db_node = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 3:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_rel_node);
+          this->__isset._rel_node = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_backend_id);
+          this->__isset._backend_id = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t _Smgr_Relation::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("_Smgr_Relation");
+
+  xfer += oprot->writeFieldBegin("_spc_node", ::apache::thrift::protocol::T_I64, 1);
+  xfer += oprot->writeI64(this->_spc_node);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_db_node", ::apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeI64(this->_db_node);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_rel_node", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeI64(this->_rel_node);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_backend_id", ::apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeI32(this->_backend_id);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+void swap(_Smgr_Relation &a, _Smgr_Relation &b) {
+  using ::std::swap;
+  swap(a._spc_node, b._spc_node);
+  swap(a._db_node, b._db_node);
+  swap(a._rel_node, b._rel_node);
+  swap(a._backend_id, b._backend_id);
+  swap(a.__isset, b.__isset);
+}
+
+_Smgr_Relation::_Smgr_Relation(const _Smgr_Relation& other2) {
+  _spc_node = other2._spc_node;
+  _db_node = other2._db_node;
+  _rel_node = other2._rel_node;
+  _backend_id = other2._backend_id;
+  __isset = other2.__isset;
+}
+_Smgr_Relation& _Smgr_Relation::operator=(const _Smgr_Relation& other3) {
+  _spc_node = other3._spc_node;
+  _db_node = other3._db_node;
+  _rel_node = other3._rel_node;
+  _backend_id = other3._backend_id;
+  __isset = other3.__isset;
+  return *this;
+}
+void _Smgr_Relation::printTo(std::ostream& out) const {
+  using ::apache::thrift::to_string;
+  out << "_Smgr_Relation(";
+  out << "_spc_node=" << to_string(_spc_node);
+  out << ", " << "_db_node=" << to_string(_db_node);
+  out << ", " << "_rel_node=" << to_string(_rel_node);
+  out << ", " << "_backend_id=" << to_string(_backend_id);
+  out << ")";
+}
+
 } // namespace

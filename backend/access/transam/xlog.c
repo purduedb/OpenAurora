@@ -110,6 +110,11 @@
 
 #define pg_fdatasync(_fd) pg_fdatasync_rpc_local(_fd)
 #define pg_fsync_no_writethrough(_fd) pg_fsync_no_writethrough_rpc_local(_fd)
+
+#define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
+//#define stat(_path, _stat) stat_rpc_local(_path, _stat)
+#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag)
+#define durable_rename_excl(_old, _new, _elevel) durable_rename_excl_rpc_local(_old, _new, _elevel)
 #endif
 
 extern int IsRpcClient;
@@ -3305,6 +3310,7 @@ XLogNeedsFlush(XLogRecPtr record)
 int
 XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 {
+//    printf("%s start \n", __func__);
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	PGAlignedXLogBlock zbuffer;
@@ -3356,7 +3362,7 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_INIT_WRITE);
 	save_errno = 0;
-	if (wal_init_zero)
+    if (wal_init_zero)
 	{
 		/*
 		 * Zero-fill the file.  With this setting, we do this the hard way to
@@ -3370,7 +3376,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		for (nbytes = 0; nbytes < wal_segment_size; nbytes += XLOG_BLCKSZ)
 		{
 			errno = 0;
-			if (write(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#ifdef RPC_REMOTE_DISK
+			if (pg_pwrite_rpc_local(fd, zbuffer.data, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+#else
+            if (write(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#endif
 			{
 				/* if write didn't set errno, assume no disk space */
 				save_errno = errno ? errno : ENOSPC;
@@ -3497,6 +3507,7 @@ static void
 XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 			 int upto)
 {
+//    printf("%s \n", __func__);
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	PGAlignedXLogBlock buffer;
@@ -3574,7 +3585,11 @@ XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 		}
 		errno = 0;
 		pgstat_report_wait_start(WAIT_EVENT_WAL_COPY_WRITE);
-		if ((int) write(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
+#ifdef RPC_REMOTE_DISK
+		if ((int) pg_pwrite_rpc_local(fd, buffer.data, sizeof(buffer), 0) != (int) sizeof(buffer))
+#else
+        if ((int) write(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
+#endif
 		{
 			int			save_errno = errno;
 
@@ -4674,6 +4689,7 @@ InitControlFile(uint64 sysidentifier)
 static void
 WriteControlFile(void)
 {
+//    printf("%s start\n", __func__);
 	int			fd;
 	char		buffer[PG_CONTROL_FILE_SIZE];	/* need not be aligned */
 
@@ -4735,7 +4751,11 @@ WriteControlFile(void)
 
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_WRITE);
-	if (write(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
+#ifdef RPC_REMOTE_DISK
+	if (pg_pwrite_rpc_local(fd, buffer, PG_CONTROL_FILE_SIZE, 0) != PG_CONTROL_FILE_SIZE)
+#else
+    if (write(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
+#endif
 	{
 		/* if write didn't set errno, assume problem is no disk space */
 		if (errno == 0)
@@ -5377,7 +5397,11 @@ BootStrapXLOG(void)
 	/* Write the first page with the initial record */
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_WAL_BOOTSTRAP_WRITE);
+#ifdef RPC_REMOTE_DISK
+	if (pg_pwrite_rpc_local(openLogFile, page, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+#else
 	if (write(openLogFile, page, XLOG_BLCKSZ) != XLOG_BLCKSZ)
+#endif
 	{
 		/* if write didn't set errno, assume problem is no disk space */
 		if (errno == 0)
@@ -10430,6 +10454,7 @@ get_sync_bit(int method)
 void
 assign_xlog_sync_method(int new_sync_method, void *extra)
 {
+//    printf("%s start \n", __func__);
 	if (sync_method != new_sync_method)
 	{
 		/*
@@ -10472,6 +10497,7 @@ assign_xlog_sync_method(int new_sync_method, void *extra)
 void
 issue_xlog_fsync(int fd, XLogSegNo segno)
 {
+//    printf("%s \n", __func__);
 	char	   *msg = NULL;
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_SYNC);

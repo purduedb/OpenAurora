@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
     void RpcInit(void);
+    void RpcShutdown(void);
     void RpcFileClose(const int _fd);
     void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo);
     int RpcPathNameOpenFile(const char* _path, const int32_t _flag);
@@ -37,6 +38,9 @@ extern "C" {
     int RpcStat(const char* path,struct stat* _stat);
     int32_t RpcDirectoryIsEmpty(const char* path);
     int32_t RpcCopyDir(const char* _src, const char* _dst);
+    int32_t RpcPgFsync(const int32_t _fd);
+    int32_t RpcDurableUnlink(const char * filename, const int32_t _flag);
+    int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel);
 #ifdef __cplusplus
 }
 #endif

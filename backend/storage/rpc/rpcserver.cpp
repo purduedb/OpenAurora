@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <commands/tablespace.h>
 #include "storage/copydir.h"
+#include <sys/types.h>
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -26,6 +27,9 @@ using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
 
 using namespace  ::tutorial;
+
+//#define INFO_FUNC_START
+//#define INFO_FUNC_END
 
 class DataPageAccessHandler : virtual public DataPageAccessIf {
 public:
@@ -42,76 +46,92 @@ public:
      * @param _fd
      */
     void RpcFileClose(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcFileClose\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         FileClose(_fd);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
     }
 
     void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
-        // Your implementation goes here
-        printf("RpcTablespaceCreateDbspace\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         TablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
     }
 
     _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
-        // Your implementation goes here
-        printf("RpcPathNameOpenFile, path = %s, flag = %d, with_create = %d\n", _path.c_str(), _flag, _flag&O_CREAT);
+#ifdef INFO_FUNC_START
+        printf("%s start, filename = %s\n", __func__, _path.c_str() );
+#endif
         _File result =  PathNameOpenFile(_path.c_str(), _flag);
-        printf("[%s] result = %d\n", __func__ , result);
+//        printf("[%s] result = %d\n", __func__ , result);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
         return result;
     }
 
     // todo
     int32_t RpcFileWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         // Your implementation goes here
-        printf("RpcFileWrite\n");
-//        char buff[BLCKSZ+8];
-//        _page.copy(buff, BLCKSZ);
-//        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+        char buff[BLCKSZ+8];
+        _page.copy(buff, BLCKSZ);
+        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
 
-        int writeLen = 0;
-        char * page = (char *) malloc(BLCKSZ);
-        _page.copy(page, BLCKSZ);
-
-        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
-        if (relNode.parseSucc) {
-            writeLen = RpcFileWriteWithCache(_fd, page, relNode, _seekpos);
-        } else {
-            // We arrived here only when some rare cases occur, for example, have backendID etc.
-            writeLen = FileWrite(_fd, page, _amount, _seekpos, _wait_event_info);
-        }
-
-        free(page);
-        return writeLen;
+//        int writeLen = 0;
+//        char * page = (char *) malloc(BLCKSZ);
+//        _page.copy(page, BLCKSZ);
+//
+//        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+//        if (relNode.parseSucc) {
+//            writeLen = RpcFileWriteWithCache(_fd, page, relNode, _seekpos);
+//        } else {
+             //We arrived here only when some rare cases occur, for example, have backendID etc.
+//            writeLen = FileWrite(_fd, page, _amount, _seekpos, _wait_event_info);
+//        }
+//
+//        free(page);
+//        return writeLen;
     }
 
     void RpcFilePathName(_Path& _return, const _File _fd) {
-        // Your implementation goes here
-        printf("RpcFilePathName\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         char * filename = FilePathName(_fd);
         _return.assign(filename);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
         return;
     }
 
     // todo
     void RpcFileRead(_Page& _return, const _File _fd, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
-        // Your implementation goes here
-        printf("RpcFileRead, fd = %d, amount = %d, seekpos = %d\n", _fd, _amount, _seekpos);
-        printf("path = %s\n", FilePathName(_fd));
-        fflush(stdout);
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         char *page = (char *)malloc(BLCKSZ);
         int readLen = 0;
 
-        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
-        printf("[%s]parse succ=%d, spc = %d, db = %d, rel = %d, fork = %d, block = %d\n",
-               __func__, relNode.parseSucc, relNode.spcNode, relNode.dbNode, relNode.relNode, relNode.forkNum, relNode.blockNum);
-        if (relNode.parseSucc) {
-//        if (0) {
-            readLen = RpcFileReadWithCache(_fd, page, relNode, _seekpos);
-        } else {
+//        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+//        printf("[%s]parse succ=%d, spc = %d, db = %d, rel = %d, fork = %d, block = %d\n",
+//               __func__, relNode.parseSucc, relNode.spcNode, relNode.dbNode, relNode.relNode, relNode.forkNum, relNode.blockNum);
+//        if (relNode.parseSucc) {
+//            readLen = RpcFileReadWithCache(_fd, page, relNode, _seekpos);
+//        } else {
             // We arrived here only when some rare cases occur, for example, have backendID etc.
             readLen = FileRead(_fd, page, _amount, _seekpos, _wait_event_info);
-        }
+//        }
 
         _return.assign(page, readLen);
         free(page);
@@ -120,78 +140,95 @@ public:
 
     // todo
     int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
-        // Your implementation goes here
-        printf("RpcFileTruncate\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
     }
 
     _Off_t RpcFileSize(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcFileSize\n");
-        return FileSize(_fd);
+#ifdef INFO_FUNC_START
+        printf("%s start, fd = %d, tid = %d\n", __func__ , _fd, gettid());
+#endif
+        _Off_t result = FileSize(_fd);
+#ifdef INFO_FUNC_END
+        printf("%s end, tid = %d, fd = %d, result = %d\n", __func__ , gettid(), _fd, result);
+#endif
+        return result;
     }
 
     int32_t RpcFilePrefetch(const _File _fd, const _Off_t _offset, const int32_t _amount, const int32_t wait_event_info) {
-        // Your implementation goes here
-        printf("RpcFilePrefetch\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return FilePrefetch(_fd, _offset, _amount, wait_event_info);
     }
 
     void RpcFileWriteback(const _File _fd, const _Off_t _offset, const _Off_t nbytes, const int32_t wait_event_info) {
-        // Your implementation goes here
-        printf("RpcFileWriteback\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         FileWriteback(_fd, _offset, nbytes, wait_event_info);
         return;
     }
 
     int32_t RpcUnlink(const _Path& _path) {
-        // Your implementation goes here
-        printf("RpcUnlink\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return unlink(_path.c_str());
     }
 
     int32_t RpcFtruncate(const _File _fd, const _Off_t _offset) {
-        // Your implementation goes here
-        printf("RpcFtruncate\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return ftruncate(_fd, _offset);
     }
 
     void RpcInitFile(_Page& _return, const _Path& _path) {
-        // Your implementation goes here
-        printf("RpcInitFile\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
     }
 
     _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
-        // Your implementation goes here
-        printf("RpcOpenTransientFile\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return OpenTransientFile(_filename.c_str(), _fileflags);
     }
 
     int32_t RpcCloseTransientFile(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcCloseTransientFile\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return CloseTransientFile(_fd);
     }
 
     void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
-        // Your implementation goes here
-        printf("Rpcread\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
     }
 
     int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
-        // Your implementation goes here
-        printf("Rpcwrite\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
     }
 
     int32_t RpcFileSync(const _File _fd, const int32_t _wait_event_info) {
-        // Your implementation goes here
-        printf("RpcFileSync\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return FileSync(_fd, _wait_event_info);
     }
 
     void RpcPgPRead(_Page& _return, const _File _fd, const int32_t _seg_bytes, const _Off_t _start_off) {
-        // Your implementation goes here
-        printf("RpcPgPRead\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         char *p = (char*)malloc(_seg_bytes+64);
         pg_pread(_fd, p, _seg_bytes, _start_off);
         _return.assign(p, _seg_bytes);
@@ -200,44 +237,53 @@ public:
     }
 
     int32_t RpcPgPWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset) {
-        // Your implementation goes here
-        printf("RpcPgPWrite\n");
-        return pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        int32_t result =  pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+//        printf("RpcPgPWrite, result = %d\n", result);
+        return result;
     }
 
     int32_t RpcClose(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcClose\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return close(_fd);
     }
 
     int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
-        // Your implementation goes here
-        printf("RpcBasicOpenFile\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return BasicOpenFile(_path.c_str(), _flags);
     }
 
     int32_t RpcPgFdatasync(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcPgFdatasync\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return pg_fdatasync(_fd);
     }
 
     int32_t RpcPgFsyncNoWritethrough(const _File _fd) {
-        // Your implementation goes here
-        printf("RpcPgFsyncNoWritethrough\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return pg_fsync_no_writethrough(_fd);
     }
 
     int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
-        // Your implementation goes here
-        printf("RpcLseek\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return lseek(_fd, _offset, _flag);
     }
 
     void RpcStat(_Stat_Resp& _return, const _Path& _path) {
-        // Your implementation goes here
-        printf("RpcStat\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         struct stat result;
         _return._result = stat(_path.c_str(), &result);
         _return._stat_mode = result.st_mode;
@@ -245,14 +291,16 @@ public:
     }
 
     int32_t RpcDirectoryIsEmpty(const _Path& _path) {
-        // Your implementation goes here
-        printf("RpcDirectoryIsEmpty\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         return directory_is_empty(_path.c_str());
     }
 
     int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
-        // Your implementation goes here
-        printf("RpcCopyDir\n");
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         char* src = (char*) malloc(1024);
         char* dst = (char*) malloc(1024);
 //        printf("_src = %s, dst = %s\n", _src.c_str(), _dst.c_str());
@@ -267,6 +315,47 @@ public:
         return 0;
     }
 
+
+    void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    int32_t RpcMdExist(const _Smgr_Relation& _reln, const int32_t _forknum) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    int32_t RpcPgFsync(const int32_t _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        int32_t result = pg_fsync(_fd);
+//        printf("RpcPgFsync, result = %d\n", result);
+        return result;
+    }
+
+    int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return durable_unlink(_fname.c_str(), _flag);
+    }
+
+    int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return durable_rename_excl(_oldFname.c_str(), _newFname.c_str(), _elevel);
+    }
     /**
      * This method has a oneway modifier. That means the client only makes
      * a request and does not listen for any response at all. Oneway methods

@@ -98,6 +98,7 @@
 #include "utils/resowner_private.h"
 #include "storage/md.h"
 #include "storage/rpcclient.h"
+#include <pthread.h>
 
 /* Define PG_FLUSH_DATA_WORKS if we have an implementation for pg_flush_data */
 #if defined(HAVE_SYNC_FILE_RANGE)
@@ -140,7 +141,7 @@
  * This GUC parameter lets the DBA limit max_safe_fds to something less than
  * what the postmaster's initial probe suggests will work.
  */
-int			max_files_per_process = 1000;
+int			max_files_per_process = 8000;
 
 /*
  * Maximum number of file descriptors to open for operations that fd.c knows
@@ -275,6 +276,7 @@ static Oid *tempTableSpaces = NULL;
 static int	numTempTableSpaces = -1;
 static int	nextTempTableSpace = 0;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*--------------------
  *
@@ -312,8 +314,8 @@ static void Delete(File file);
 static void LruDelete(File file);
 static void Insert(File file);
 static int	LruInsert(File file);
-static bool ReleaseLruFile(void);
-static void ReleaseLruFiles(void);
+static bool ReleaseLruFile(int alreadyLocked);
+static void ReleaseLruFiles(int alreadyLocked);
 static File AllocateVfd(void);
 static void FreeVfd(File file);
 
@@ -340,6 +342,42 @@ static void unlink_if_exists_fname(const char *fname, bool isdir, int elevel);
 static int	fsync_parent_path(const char *fname, int elevel);
 
 extern int IsRpcClient;
+
+//#define START_FUNC_INFO
+
+int stat_rpc_local(const char* path,struct stat* _stat) {
+    if(IsRpcClient)
+        return RpcStat(path, _stat);
+    else
+        return stat(path, _stat);
+}
+
+int pg_fsync_rpc_local(int fd) {
+#ifdef START_FUNC_INFO
+    printf("%s fd = %d, isRpc= %d\n",__func__, fd, IsRpcClient);
+    fflush(stdout);
+#endif
+    if(IsRpcClient)
+        return RpcPgFsync(fd);
+    else
+        return pg_fsync(fd);
+}
+
+int
+durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elevel) {
+   if (IsRpcClient)
+       return RpcDurableRenameExcl(oldfile, newfile, elevel);
+   else
+       return durable_rename_excl(oldfile, newfile, elevel);
+}
+
+int
+durable_unlink_rpc_local(const char *fname, int elevel) {
+    if (IsRpcClient)
+        return RpcDurableUnlink(fname, elevel);
+    else
+        return durable_unlink(fname, elevel);
+}
 
 int
 OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
@@ -396,12 +434,29 @@ pg_fsync_no_writethrough_rpc_local(int fd) {
         return pg_fsync_no_writethrough(fd);
 }
 
+void VfdLruLock() {
+    pthread_mutex_lock(&mutex);
+//    printf("%s, tid = %d\n", __func__ , gettid());
+//    fflush(stdout);
+}
+
+void VfdLruUnlock() {
+    pthread_mutex_unlock(&mutex);
+//    printf("%s, tid = %d\n", __func__ , gettid());
+//    fflush(stdout);
+}
+
+
 /*
  * pg_fsync --- do fsync with or without writethrough
  */
 int
 pg_fsync(int fd)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , fd = %d\n", __func__, fd);
+    fflush(stdout);
+#endif
 #if !defined(WIN32) && defined(USE_ASSERT_CHECKING)
 	struct stat st;
 
@@ -457,6 +512,10 @@ pg_fsync(int fd)
 int
 pg_fsync_no_writethrough(int fd)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , fd = %d\n", __func__, fd);
+    fflush(stdout);
+#endif
 	if (enableFsync)
 		return fsync(fd);
 	else
@@ -469,6 +528,10 @@ pg_fsync_no_writethrough(int fd)
 int
 pg_fsync_writethrough(int fd)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , fd = %d\n", __func__, fd);
+    fflush(stdout);
+#endif
 	if (enableFsync)
 	{
 #ifdef WIN32
@@ -492,6 +555,10 @@ pg_fsync_writethrough(int fd)
 int
 pg_fdatasync(int fd)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , fd = %d\n", __func__, fd);
+    fflush(stdout);
+#endif
 	if (enableFsync)
 	{
 #ifdef HAVE_FDATASYNC
@@ -512,6 +579,10 @@ pg_fdatasync(int fd)
 void
 pg_flush_data(int fd, off_t offset, off_t nbytes)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start fd = %d\n", __func__, fd);
+    fflush(stdout);
+#endif
 	/*
 	 * Right now file flushing is primarily used to avoid making later
 	 * fsync()/fdatasync() calls have less impact. Thus don't trigger flushes
@@ -689,6 +760,10 @@ pg_flush_data(int fd, off_t offset, off_t nbytes)
 void
 fsync_fname(const char *fname, bool isdir)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , fname = %s\n", __func__, fname);
+    fflush(stdout);
+#endif
 	fsync_fname_ext(fname, isdir, false, data_sync_elevel(ERROR));
 }
 
@@ -715,6 +790,10 @@ fsync_fname(const char *fname, bool isdir)
 int
 durable_rename(const char *oldfile, const char *newfile, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			fd;
 
 	/*
@@ -730,13 +809,13 @@ durable_rename(const char *oldfile, const char *newfile, int elevel)
 	fd = OpenTransientFile(newfile, PG_BINARY | O_RDWR);
 	if (fd < 0)
 	{
-		if (errno != ENOENT)
-		{
-			ereport(elevel,
-					(errcode_for_file_access(),
-					 errmsg("could not open file \"%s\": %m", newfile)));
-			return -1;
-		}
+//		if (errno != ENOENT)
+//		{
+//			ereport(elevel,
+//					(errcode_for_file_access(),
+//					 errmsg("could not open file \"%s\": %m", newfile)));
+//			return -1;
+//		}
 	}
 	else
 	{
@@ -805,6 +884,10 @@ durable_rename(const char *oldfile, const char *newfile, int elevel)
 int
 durable_unlink(const char *fname, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	if (unlink(fname) < 0)
 	{
 		ereport(elevel,
@@ -842,6 +925,10 @@ durable_unlink(const char *fname, int elevel)
 int
 durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	/*
 	 * Ensure that, if we crash directly after the rename/link, a file with
 	 * valid contents is moved into place.
@@ -882,6 +969,10 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 void
 InitFileAccess(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
     char *pgRpcClient = getenv("RPC_CLIENT");
 
     if(pgRpcClient != NULL) {
@@ -904,6 +995,7 @@ InitFileAccess(void)
 
 	SizeVfdCache = 1;
 
+
 	/* register proc-exit hook to ensure temp files are dropped at exit */
 	on_proc_exit(AtProcExit_Files, 0);
 }
@@ -923,6 +1015,10 @@ InitFileAccess(void)
 static void
 count_usable_fds(int max_to_probe, int *usable_fds, int *already_open)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int		   *fd;
 	int			size;
 	int			used = 0;
@@ -1007,6 +1103,10 @@ count_usable_fds(int max_to_probe, int *usable_fds, int *already_open)
 void
 set_max_safe_fds(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			usable_fds;
 	int			already_open;
 
@@ -1050,6 +1150,10 @@ set_max_safe_fds(void)
 int
 BasicOpenFile(const char *fileName, int fileFlags)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	return BasicOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
 }
 
@@ -1072,6 +1176,12 @@ BasicOpenFile(const char *fileName, int fileFlags)
 int
 BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
+//    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
+//    fflush(stdout);
 	int			fd;
 
 tryAgain:
@@ -1088,7 +1198,7 @@ tryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto tryAgain;
 		errno = save_errno;
 	}
@@ -1112,6 +1222,10 @@ tryAgain:
 bool
 AcquireExternalFD(void)
 {
+#ifdef START_FUNC_INFO
+//    printf("%s start \n", __func__);
+//    fflush(stdout);
+#endif
 	/*
 	 * We don't want more than max_safe_fds / 3 FDs to be consumed for
 	 * "external" FDs.
@@ -1147,12 +1261,16 @@ AcquireExternalFD(void)
 void
 ReserveExternalFD(void)
 {
+#ifdef START_FUNC_INFO
+//    printf("%s start \n", __func__);
+//    fflush(stdout);
+#endif
 	/*
 	 * Release VFDs if needed to stay safe.  Because we do this before
 	 * incrementing numExternalFDs, the final state will be as desired, i.e.,
 	 * nfile + numAllocatedDescs + numExternalFDs <= max_safe_fds.
 	 */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 	numExternalFDs++;
 }
@@ -1165,6 +1283,10 @@ ReserveExternalFD(void)
 void
 ReleaseExternalFD(void)
 {
+#ifdef START_FUNC_INFO
+//    printf("%s start \n", __func__);
+//    fflush(stdout);
+#endif
 	Assert(numExternalFDs > 0);
 	numExternalFDs--;
 }
@@ -1194,6 +1316,10 @@ _dump_lru(void)
 static void
 Delete(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start  fd = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	Vfd		   *vfdP;
 
 	Assert(file != 0);
@@ -1203,18 +1329,29 @@ Delete(File file)
 	DO_DB(_dump_lru());
 
 	vfdP = &VfdCache[file];
-
+//    printf("%s vfdP is NULL? %d\n", __func__ , vfdP==NULL);
+//    fflush(stdout);
+//    printf("%s lessRec = %d, moreRec = %d\n", __func__ , vfdP->lruLessRecently, vfdP->lruMoreRecently);
+//    fflush(stdout);
 	VfdCache[vfdP->lruLessRecently].lruMoreRecently = vfdP->lruMoreRecently;
 	VfdCache[vfdP->lruMoreRecently].lruLessRecently = vfdP->lruLessRecently;
 
+//    printf("%s here  \n",__func__ );
+//    fflush(stdout);
 	DO_DB(_dump_lru());
 }
 
 static void
 LruDelete(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start  fd = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	Vfd		   *vfdP;
 
+//    printf("%s start, file = %d, tid = %d\n", __func__, file, gettid());
+//    fflush(stdout);
 	Assert(file != 0);
 
 	DO_DB(elog(LOG, "LruDelete %d (%s)",
@@ -1222,13 +1359,21 @@ LruDelete(File file)
 
 	vfdP = &VfdCache[file];
 
+//    if(vfdP->fileName)
+//        printf("%s try to close vfd %d, rfd %d, %s, fileName address is %p\n", __func__ , file, vfdP->fd, vfdP->fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s try to close vfd %d, rfd %d, fileName is NULL!, &vfd address is %p\n", __func__ , file, vfdP->fd, &(VfdCache[file].fileName));
+//    fflush(stdout);
 	/*
 	 * Close the file.  We aren't expecting this to fail; if it does, better
 	 * to leak the FD than to mess up our internal state.
 	 */
 	if (close(vfdP->fd) != 0)
-		elog(vfdP->fdstate & FD_TEMP_FILE_LIMIT ? LOG : data_sync_elevel(LOG),
+        elog(vfdP->fdstate & FD_TEMP_FILE_LIMIT ? LOG : data_sync_elevel(LOG),
 			 "could not close file \"%s\": %m", vfdP->fileName);
+
+//    printf("%s set vfd %d to VFD_CLOSED\n", __func__ , file);
+//    fflush(stdout);
 	vfdP->fd = VFD_CLOSED;
 	--nfile;
 
@@ -1239,6 +1384,10 @@ LruDelete(File file)
 static void
 Insert(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	Vfd		   *vfdP;
 
 	Assert(file != 0);
@@ -1261,6 +1410,12 @@ Insert(File file)
 static int
 LruInsert(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start , file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
+//    printf("%s start file = %d \n", __func__ , file);
+//    fflush(stdout);
 	Vfd		   *vfdP;
 
 	Assert(file != 0);
@@ -1273,7 +1428,8 @@ LruInsert(File file)
 	if (FileIsNotOpen(file))
 	{
 		/* Close excess kernel FDs. */
-		ReleaseLruFiles();
+
+		ReleaseLruFiles(1);
 
 		/*
 		 * The open could still fail for lack of file descriptors, eg due to
@@ -1293,6 +1449,10 @@ LruInsert(File file)
 		}
 	}
 
+//    if (vfdP->fileName)
+//        printf("%s try to insert %d %s, &vfp address is %p\n", __func__ , file, vfdP->fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s try to insert %d filename is NULL!, &vfd address is %p\n", __func__ , file, &(VfdCache[file].fileName));
 	/*
 	 * put it at the head of the Lru ring
 	 */
@@ -1306,8 +1466,12 @@ LruInsert(File file)
  * Release one kernel FD by closing the least-recently-used VFD.
  */
 static bool
-ReleaseLruFile(void)
+ReleaseLruFile(int alreadyLocked)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	DO_DB(elog(LOG, "ReleaseLruFile. Opened %d", nfile));
 
 	if (nfile > 0)
@@ -1316,8 +1480,12 @@ ReleaseLruFile(void)
 		 * There are opened files and so there should be at least one used vfd
 		 * in the ring.
 		 */
+        if(!alreadyLocked)
+            VfdLruLock();
 		Assert(VfdCache[0].lruMoreRecently != 0);
 		LruDelete(VfdCache[0].lruMoreRecently);
+        if(!alreadyLocked)
+            VfdLruUnlock();
 		return true;			/* freed a file */
 	}
 	return false;				/* no files available to free */
@@ -1328,11 +1496,15 @@ ReleaseLruFile(void)
  * After calling this, it's OK to try to open another file.
  */
 static void
-ReleaseLruFiles(void)
+ReleaseLruFiles(int alreadyLocked)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	while (nfile + numAllocatedDescs + numExternalFDs >= max_safe_fds)
 	{
-		if (!ReleaseLruFile())
+		if (!ReleaseLruFile(alreadyLocked))
 			break;
 	}
 }
@@ -1340,6 +1512,11 @@ ReleaseLruFiles(void)
 static File
 AllocateVfd(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
+//    printf("%s start , tid = %d\n", __func__ , gettid());
 	Index		i;
 	File		file;
 
@@ -1347,8 +1524,10 @@ AllocateVfd(void)
 
 	Assert(SizeVfdCache > 0);	/* InitFileAccess not called? */
 
+    VfdLruLock();
 	if (VfdCache[0].nextFree == 0)
 	{
+//        printf("%s start expand the VfdCache, current size = %d, tid = %d\n", __func__ , SizeVfdCache, gettid());
 		/*
 		 * The free list is empty so it is time to increase the size of the
 		 * array.  We choose to double it each time this happens. However,
@@ -1360,6 +1539,10 @@ AllocateVfd(void)
 		if (newCacheSize < 32)
 			newCacheSize = 32;
 
+#ifdef START_FUNC_INFO
+        printf("%s newCacheSize = %d \n", __func__, newCacheSize);
+        fflush(stdout);
+#endif
 		/*
 		 * Be careful not to clobber VfdCache ptr if realloc fails.
 		 */
@@ -1391,13 +1574,20 @@ AllocateVfd(void)
 	file = VfdCache[0].nextFree;
 
 	VfdCache[0].nextFree = VfdCache[file].nextFree;
+    VfdLruUnlock();
 
+//    printf("%s end, tid = %d\n", __func__ , gettid());
 	return file;
 }
 
 static void
 FreeVfd(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
+//    printf("%s start, vfd = %d\n", __func__ , file);
 	Vfd		   *vfdP = &VfdCache[file];
 
 	DO_DB(elog(LOG, "FreeVfd: %d (%s)",
@@ -1410,14 +1600,21 @@ FreeVfd(File file)
 	}
 	vfdP->fdstate = 0x0;
 
+    VfdLruLock();
 	vfdP->nextFree = VfdCache[0].nextFree;
 	VfdCache[0].nextFree = file;
+    VfdLruUnlock();
 }
 
 /* returns 0 on success, -1 on re-open failure (with errno set) */
 static int
 FileAccess(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start, file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
+//    printf("%s start , file = %d, tid = %d, filename is NULL? %d\n", __func__, file, gettid(), VfdCache[file].fileName==NULL);
 	int			returnValue;
 
 	DO_DB(elog(LOG, "FileAccess %d (%s)",
@@ -1428,14 +1625,21 @@ FileAccess(File file)
 	 * ring (possibly closing the least recently used file to get an FD).
 	 */
 
+    VfdLruLock();
 	if (FileIsNotOpen(file))
 	{
+//        printf("%s here1 , vfd = %d, tid = %d\n", __func__, file , gettid());
+//        fflush(stdout);
 		returnValue = LruInsert(file);
-		if (returnValue != 0)
-			return returnValue;
+		if (returnValue != 0){
+            VfdLruUnlock();
+            return returnValue;
+        }
 	}
 	else if (VfdCache[0].lruLessRecently != file)
 	{
+//        printf("%s here2 , tid = %d\n", __func__ , gettid());
+//        fflush(stdout);
 		/*
 		 * We now know that the file is open and that it is not the last one
 		 * accessed, so we need to move it to the head of the Lru ring.
@@ -1444,6 +1648,7 @@ FileAccess(File file)
 		Delete(file);
 		Insert(file);
 	}
+    VfdLruUnlock();
 
 	return 0;
 }
@@ -1454,6 +1659,10 @@ FileAccess(File file)
 static void
 ReportTemporaryFileUsage(const char *path, off_t size)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	pgstat_report_tempfile(size);
 
 	if (log_temp_files >= 0)
@@ -1473,6 +1682,10 @@ ReportTemporaryFileUsage(const char *path, off_t size)
 static void
 RegisterTemporaryFile(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start, file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
 	ResourceOwnerRememberFile(CurrentResourceOwner, file);
 	VfdCache[file].resowner = CurrentResourceOwner;
 
@@ -1488,6 +1701,10 @@ RegisterTemporaryFile(File file)
 void
 FileInvalidate(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start, file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 	if (!FileIsNotOpen(file))
 		LruDelete(file);
@@ -1501,6 +1718,10 @@ FileInvalidate(File file)
 File
 PathNameOpenFile(const char *fileName, int fileFlags)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
     File result = PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
 //    printf("[%s] filename = %s, flag = %d, result = %d\n", __func__ , fileName, fileFlags, result);
     return result;
@@ -1517,6 +1738,10 @@ PathNameOpenFile(const char *fileName, int fileFlags)
 File
 PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	char	   *fnamecopy;
 	File		file;
 	Vfd		   *vfdP;
@@ -1534,15 +1759,17 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 				 errmsg("out of memory")));
 
 	file = AllocateVfd();
+    VfdLruLock();
 	vfdP = &VfdCache[file];
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(1);
 
 	vfdP->fd = BasicOpenFilePerm(fileName, fileFlags, fileMode);
 
 	if (vfdP->fd < 0)
 	{
+        VfdLruUnlock();
 		int			save_errno = errno;
 
 		FreeVfd(file);
@@ -1554,9 +1781,13 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	DO_DB(elog(LOG, "PathNameOpenFile: success %d",
 			   vfdP->fd));
 
+
+//    printf("%s try to insert %d, name = %s, tid = %d\n", __func__ , file, fnamecopy, gettid());
 	Insert(file);
 
 	vfdP->fileName = fnamecopy;
+//    printf("%s vfd = %d compare two name = %s, %s, &vfdP address is %p, string copy address is %p\n",
+//           __func__ , file, vfdP->fileName, fnamecopy, &(VfdCache[file].fileName), fnamecopy);
 	/* Saved flags are adjusted to be OK for re-opening file */
 	vfdP->fileFlags = fileFlags & ~(O_CREAT | O_TRUNC | O_EXCL);
 	vfdP->fileMode = fileMode;
@@ -1564,6 +1795,7 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 	vfdP->fdstate = 0x0;
 	vfdP->resowner = NULL;
 
+    VfdLruUnlock();
 	return file;
 }
 
@@ -1581,6 +1813,10 @@ PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 void
 PathNameCreateTemporaryDir(const char *basedir, const char *directory)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	if (MakePGDirectory(directory) < 0)
 	{
 		if (errno == EEXIST)
@@ -1612,6 +1848,10 @@ PathNameCreateTemporaryDir(const char *basedir, const char *directory)
 void
 PathNameDeleteTemporaryDir(const char *dirname)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	struct stat statbuf;
 
 	/* Silently ignore missing directory. */
@@ -1645,6 +1885,10 @@ PathNameDeleteTemporaryDir(const char *dirname)
 File
 OpenTemporaryFile(bool interXact)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	File		file = 0;
 
 	/*
@@ -1698,6 +1942,10 @@ OpenTemporaryFile(bool interXact)
 void
 TempTablespacePath(char *path, Oid tablespace)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	/*
 	 * Identify the tempfile directory for this tablespace.
 	 *
@@ -1723,6 +1971,10 @@ TempTablespacePath(char *path, Oid tablespace)
 static File
 OpenTemporaryFileInTablespace(Oid tblspcOid, bool rejectError)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	char		tempdirpath[MAXPGPATH];
 	char		tempfilepath[MAXPGPATH];
 	File		file;
@@ -1780,6 +2032,10 @@ OpenTemporaryFileInTablespace(Oid tblspcOid, bool rejectError)
 File
 PathNameCreateTemporaryFile(const char *path, bool error_on_failure)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	File		file;
 
 	ResourceOwnerEnlargeFiles(CurrentResourceOwner);
@@ -1818,6 +2074,10 @@ PathNameCreateTemporaryFile(const char *path, bool error_on_failure)
 File
 PathNameOpenTemporaryFile(const char *path)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	File		file;
 
 	ResourceOwnerEnlargeFiles(CurrentResourceOwner);
@@ -1848,6 +2108,10 @@ PathNameOpenTemporaryFile(const char *path)
 bool
 PathNameDeleteTemporaryFile(const char *path, bool error_on_failure)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	struct stat filestats;
 	int			stat_errno;
 
@@ -1894,6 +2158,11 @@ PathNameDeleteTemporaryFile(const char *path, bool error_on_failure)
 void
 FileClose(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start, file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
+//    printf("%s close file %d\n", __func__ , file);
 	Vfd		   *vfdP;
 
 	Assert(FileIsValid(file));
@@ -1901,6 +2170,7 @@ FileClose(File file)
 	DO_DB(elog(LOG, "FileClose: %d (%s)",
 			   file, VfdCache[file].fileName));
 
+    VfdLruLock();
 	vfdP = &VfdCache[file];
 
 	if (!FileIsNotOpen(file))
@@ -1922,8 +2192,9 @@ FileClose(File file)
 		/* remove the file from the lru ring */
 		Delete(file);
 	}
+    VfdLruUnlock();
 
-	if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
+    if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
 	{
 		/* Subtract its size from current usage (do first in case of error) */
 		temporary_files_size -= vfdP->fileSize;
@@ -1990,6 +2261,10 @@ FileClose(File file)
 int
 FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start, file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
 #if defined(USE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
 	int			returnCode;
 
@@ -2018,6 +2293,10 @@ FilePrefetch(File file, off_t offset, int amount, uint32 wait_event_info)
 void
 FileWriteback(File file, off_t offset, off_t nbytes, uint32 wait_event_info)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
 	int			returnCode;
 
 	Assert(FileIsValid(file));
@@ -2042,7 +2321,11 @@ int
 FileRead(File file, char *buffer, int amount, off_t offset,
 		 uint32 wait_event_info)
 {
-    printf("[%s] function start\n", __func__ );
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
+//    printf("[%s] function start\n", __func__ );
 	int			returnCode;
 	Vfd		   *vfdP;
 
@@ -2099,7 +2382,11 @@ int
 FileWrite(File file, char *buffer, int amount, off_t offset,
 		  uint32 wait_event_info)
 {
-    printf("[%s] function start\n", __func__ );
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
+//    printf("[%s] function start\n", __func__ );
 	int			returnCode;
 	Vfd		   *vfdP;
 
@@ -2197,6 +2484,10 @@ retry:
 int
 FileSync(File file, uint32 wait_event_info)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	int			returnCode;
 
 	Assert(FileIsValid(file));
@@ -2218,23 +2509,58 @@ FileSync(File file, uint32 wait_event_info)
 off_t
 FileSize(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 
 	DO_DB(elog(LOG, "FileSize %d (%s)",
 			   file, VfdCache[file].fileName));
 
+//    if(VfdCache[file].fileName)
+//        printf("%s start, tid = %d, vfd = %d, filename = %s, &vfd address is %p\n", __func__ , file, gettid(), VfdCache[file].fileName, &(VfdCache[file].fileName));
+//    else
+//        printf("%s start, tid = %d, vfd = %d, filename is NULL!, &fileName is %p\n", __func__ , file, gettid(), &(VfdCache[file].fileName));
+
+    VfdLruLock();
 	if (FileIsNotOpen(file))
 	{
-		if (FileAccess(file) < 0)
-			return (off_t) -1;
+        VfdLruUnlock();
+		if (FileAccess(file) < 0) {
+//            printf("%s FileAccess failed \n", __func__ );
+            return (off_t) -1;
+        }
+
+        off_t result = lseek(VfdCache[file].fd, 0, SEEK_END);
+        if(result < 0) {
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not lseek file in 1 \"%s\": %m",
+                                   VfdCache[file].fileName)));
+        }
+        return result;
 	}
 
-	return lseek(VfdCache[file].fd, 0, SEEK_END);
+    off_t result = lseek(VfdCache[file].fd, 0, SEEK_END);
+    VfdLruUnlock();
+    if(result < 0) {
+        ereport(ERROR,
+                (errcode_for_file_access(),
+                        errmsg("could not lseek file in 2 \"%s\": %m",
+                               VfdCache[file].fileName)));
+    }
+    return result;
+
 }
 
 int
 FileTruncate(File file, off_t offset, uint32 wait_event_info)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d \n", __func__, file);
+    fflush(stdout);
+#endif
 	int			returnCode;
 
 	Assert(FileIsValid(file));
@@ -2270,6 +2596,10 @@ FileTruncate(File file, off_t offset, uint32 wait_event_info)
 char *
 FilePathName(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d\n", __func__, file);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 
 	return VfdCache[file].fileName;
@@ -2286,6 +2616,10 @@ FilePathName(File file)
 int
 FileGetRawDesc(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 	return VfdCache[file].fd;
 }
@@ -2296,6 +2630,10 @@ FileGetRawDesc(File file)
 int
 FileGetRawFlags(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 	return VfdCache[file].fileFlags;
 }
@@ -2306,6 +2644,10 @@ FileGetRawFlags(File file)
 mode_t
 FileGetRawMode(File file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Assert(FileIsValid(file));
 	return VfdCache[file].fileMode;
 }
@@ -2317,6 +2659,10 @@ FileGetRawMode(File file)
 static bool
 reserveAllocatedDesc(void)
 {
+#ifdef START_FUNC_INFO
+//    printf("%s start \n", __func__);
+//    fflush(stdout);
+#endif
 	AllocateDesc *newDescs;
 	int			newMax;
 
@@ -2392,6 +2738,10 @@ reserveAllocatedDesc(void)
 FILE *
 AllocateFile(const char *name, const char *mode)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	FILE	   *file;
 
 	DO_DB(elog(LOG, "AllocateFile: Allocated %d (%s)",
@@ -2405,7 +2755,7 @@ AllocateFile(const char *name, const char *mode)
 						maxAllocatedDescs, name)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	if ((file = fopen(name, mode)) != NULL)
@@ -2427,7 +2777,7 @@ TryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2442,6 +2792,10 @@ TryAgain:
 int
 OpenTransientFile(const char *fileName, int fileFlags)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	return OpenTransientFilePerm(fileName, fileFlags, pg_file_create_mode);
 }
 
@@ -2451,6 +2805,10 @@ OpenTransientFile(const char *fileName, int fileFlags)
 int
 OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			fd;
 
 	DO_DB(elog(LOG, "OpenTransientFile: Allocated %d (%s)",
@@ -2464,7 +2822,7 @@ OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 						maxAllocatedDescs, fileName)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 	fd = BasicOpenFilePerm(fileName, fileFlags, fileMode);
 
@@ -2495,6 +2853,10 @@ OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 FILE *
 OpenPipeStream(const char *command, const char *mode)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	FILE	   *file;
 	int			save_errno;
 
@@ -2509,7 +2871,7 @@ OpenPipeStream(const char *command, const char *mode)
 						maxAllocatedDescs, command)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	fflush(stdout);
@@ -2536,7 +2898,7 @@ TryAgain:
 		ereport(LOG,
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2552,6 +2914,10 @@ TryAgain:
 static int
 FreeDesc(AllocateDesc *desc)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			result;
 
 	/* Close the underlying object */
@@ -2591,6 +2957,10 @@ FreeDesc(AllocateDesc *desc)
 int
 FreeFile(FILE *file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start file = %d\n", __func__, *file);
+    fflush(stdout);
+#endif
 	int			i;
 
 	DO_DB(elog(LOG, "FreeFile: Allocated %d", numAllocatedDescs));
@@ -2619,6 +2989,10 @@ FreeFile(FILE *file)
 int
 CloseTransientFile(int fd)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			i;
 
 	DO_DB(elog(LOG, "CloseTransientFile: Allocated %d", numAllocatedDescs));
@@ -2653,6 +3027,10 @@ CloseTransientFile(int fd)
 DIR *
 AllocateDir(const char *dirname)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	DIR		   *dir;
 
 	DO_DB(elog(LOG, "AllocateDir: Allocated %d (%s)",
@@ -2666,7 +3044,7 @@ AllocateDir(const char *dirname)
 						maxAllocatedDescs, dirname)));
 
 	/* Close excess kernel FDs. */
-	ReleaseLruFiles();
+	ReleaseLruFiles(0);
 
 TryAgain:
 	if ((dir = opendir(dirname)) != NULL)
@@ -2688,7 +3066,7 @@ TryAgain:
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("out of file descriptors: %m; release and retry")));
 		errno = 0;
-		if (ReleaseLruFile())
+		if (ReleaseLruFile(0))
 			goto TryAgain;
 		errno = save_errno;
 	}
@@ -2719,6 +3097,10 @@ TryAgain:
 struct dirent *
 ReadDir(DIR *dir, const char *dirname)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	return ReadDirExtended(dir, dirname, ERROR);
 }
 
@@ -2734,6 +3116,10 @@ ReadDir(DIR *dir, const char *dirname)
 struct dirent *
 ReadDirExtended(DIR *dir, const char *dirname, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	struct dirent *dent;
 
 	/* Give a generic message for AllocateDir failure, if caller didn't */
@@ -2771,6 +3157,10 @@ ReadDirExtended(DIR *dir, const char *dirname, int elevel)
 int
 FreeDir(DIR *dir)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			i;
 
 	/* Nothing to do if AllocateDir failed */
@@ -2801,6 +3191,10 @@ FreeDir(DIR *dir)
 int
 ClosePipeStream(FILE *file)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			i;
 
 	DO_DB(elog(LOG, "ClosePipeStream: Allocated %d", numAllocatedDescs));
@@ -2830,16 +3224,23 @@ ClosePipeStream(FILE *file)
 void
 closeAllVfds(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
+//    printf("%s start \n", __func__ );
 	Index		i;
 
 	if (SizeVfdCache > 0)
 	{
 		Assert(FileIsNotOpen(0));	/* Make sure ring not corrupted */
+        VfdLruLock();
 		for (i = 1; i < SizeVfdCache; i++)
 		{
 			if (!FileIsNotOpen(i))
 				LruDelete(i);
 		}
+        VfdLruUnlock();
 	}
 }
 
@@ -2859,6 +3260,10 @@ closeAllVfds(void)
 void
 SetTempTablespaces(Oid *tableSpaces, int numSpaces)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Assert(numSpaces >= 0);
 	tempTableSpaces = tableSpaces;
 	numTempTableSpaces = numSpaces;
@@ -2887,6 +3292,10 @@ SetTempTablespaces(Oid *tableSpaces, int numSpaces)
 bool
 TempTablespacesAreSet(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	return (numTempTableSpaces >= 0);
 }
 
@@ -2902,6 +3311,10 @@ TempTablespacesAreSet(void)
 int
 GetTempTablespaces(Oid *tableSpaces, int numSpaces)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			i;
 
 	Assert(TempTablespacesAreSet());
@@ -2920,6 +3333,10 @@ GetTempTablespaces(Oid *tableSpaces, int numSpaces)
 Oid
 GetNextTempTableSpace(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	if (numTempTableSpaces > 0)
 	{
 		/* Advance nextTempTableSpace counter with wraparound */
@@ -2942,6 +3359,10 @@ void
 AtEOSubXact_Files(bool isCommit, SubTransactionId mySubid,
 				  SubTransactionId parentSubid)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Index		i;
 
 	for (i = 0; i < numAllocatedDescs; i++)
@@ -2974,6 +3395,10 @@ AtEOSubXact_Files(bool isCommit, SubTransactionId mySubid,
 void
 AtEOXact_Files(bool isCommit)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	CleanupTempFiles(isCommit, false);
 	tempTableSpaces = NULL;
 	numTempTableSpaces = -1;
@@ -2988,6 +3413,10 @@ AtEOXact_Files(bool isCommit)
 static void
 AtProcExit_Files(int code, Datum arg)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	CleanupTempFiles(false, true);
 }
 
@@ -3006,6 +3435,10 @@ AtProcExit_Files(int code, Datum arg)
 static void
 CleanupTempFiles(bool isCommit, bool isProcExit)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	Index		i;
 
 	/*
@@ -3076,6 +3509,10 @@ CleanupTempFiles(bool isCommit, bool isProcExit)
 void
 RemovePgTempFiles(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	char		temp_path[MAXPGPATH + 10 + sizeof(TABLESPACE_VERSION_DIRECTORY) + sizeof(PG_TEMP_FILES_DIR)];
 	DIR		   *spc_dir;
 	struct dirent *spc_de;
@@ -3135,6 +3572,10 @@ RemovePgTempFiles(void)
 void
 RemovePgTempFilesInDir(const char *tmpdirname, bool missing_ok, bool unlink_all)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	DIR		   *temp_dir;
 	struct dirent *temp_de;
 	char		rm_path[MAXPGPATH * 2];
@@ -3201,6 +3642,10 @@ RemovePgTempFilesInDir(const char *tmpdirname, bool missing_ok, bool unlink_all)
 static void
 RemovePgTempRelationFiles(const char *tsdirname)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	DIR		   *ts_dir;
 	struct dirent *de;
 	char		dbspace_path[MAXPGPATH * 2];
@@ -3229,6 +3674,10 @@ RemovePgTempRelationFiles(const char *tsdirname)
 static void
 RemovePgTempRelationFilesInDbspace(const char *dbspacedirname)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	DIR		   *dbspace_dir;
 	struct dirent *de;
 	char		rm_path[MAXPGPATH * 2];
@@ -3327,6 +3776,10 @@ looks_like_temp_rel_name(const char *name)
 void
 SyncDataDirectory(void)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	bool		xlog_is_symlink;
 
 	/* We can skip this whole thing if fsync is disabled. */
@@ -3466,6 +3919,10 @@ walkdir(const char *path,
 static void
 pre_sync_fname(const char *fname, bool isdir, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			fd;
 
 	/* Don't try to flush directories, it'll likely just fail */
@@ -3476,11 +3933,11 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 
 	if (fd < 0)
 	{
-		if (errno == EACCES)
-			return;
-		ereport(elevel,
-				(errcode_for_file_access(),
-				 errmsg("could not open file \"%s\": %m", fname)));
+//		if (errno == EACCES)
+//			return;
+//		ereport(elevel,
+//				(errcode_for_file_access(),
+//				 errmsg("could not open file \"%s\": %m", fname)));
 		return;
 	}
 
@@ -3490,10 +3947,11 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 	 */
 	pg_flush_data(fd, 0, 0);
 
-	if (CloseTransientFile(fd) != 0)
-		ereport(elevel,
-				(errcode_for_file_access(),
-				 errmsg("could not close file \"%s\": %m", fname)));
+	if (CloseTransientFile(fd) != 0) {
+        ereport(elevel,
+                (errcode_for_file_access(),
+                        errmsg("could not close file \"%s\": %m", fname)));
+    }
 }
 
 #endif							/* PG_FLUSH_DATA_WORKS */
@@ -3501,6 +3959,10 @@ pre_sync_fname(const char *fname, bool isdir, int elevel)
 static void
 datadir_fsync_fname(const char *fname, bool isdir, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	/*
 	 * We want to silently ignoring errors about unreadable files.  Pass that
 	 * desire on to fsync_fname_ext().
@@ -3511,6 +3973,10 @@ datadir_fsync_fname(const char *fname, bool isdir, int elevel)
 static void
 unlink_if_exists_fname(const char *fname, bool isdir, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	if (isdir)
 	{
 		if (rmdir(fname) != 0 && errno != ENOENT)
@@ -3536,6 +4002,10 @@ unlink_if_exists_fname(const char *fname, bool isdir, int elevel)
 int
 fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	int			fd;
 	int			flags;
 	int			returncode;
@@ -3612,6 +4082,10 @@ fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel)
 static int
 fsync_parent_path(const char *fname, int elevel)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	char		parentpath[MAXPGPATH];
 
 	strlcpy(parentpath, fname, MAXPGPATH);
@@ -3652,6 +4126,10 @@ fsync_parent_path(const char *fname, int elevel)
 int
 MakePGDirectory(const char *directoryName)
 {
+#ifdef START_FUNC_INFO
+    printf("%s start \n", __func__);
+    fflush(stdout);
+#endif
 	return mkdir(directoryName, pg_dir_create_mode);
 }
 
@@ -3694,7 +4172,7 @@ int parseNumEndWith0(const char* path) {
 }
 
 RpcRelation ParseRpcRequestPath(char *path, int blockNum) {
-	printf("[%s] start \n", path);
+//	printf("[%s] start \n", path);
 	RpcRelation rel = {1, 0, 0, 0, 0, blockNum};
 	RpcRelation errResult = {0, 0, 0, 0, 0, 0};
 	int parsedCount = 0;
