@@ -21,11 +21,14 @@
 #include "storage/bufmgr.h"
 #include "storage/ipc.h"
 #include "storage/md.h"
+#include "storage/rpcmd.h"
 #include "storage/smgr.h"
+#include "storage/rpcclient.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 
 
+extern int IsRpcClient;
 /*
  * This struct of function pointers defines the API between smgr.c and
  * any individual storage manager module.  Note that smgr subfunctions are
@@ -81,7 +84,24 @@ static const f_smgr smgrsw[] = {
 		.smgr_nblocks = mdnblocks,
 		.smgr_truncate = mdtruncate,
 		.smgr_immedsync = mdimmedsync,
-	}
+	},
+    {
+        .smgr_init = rpcmdinit,
+        .smgr_shutdown = NULL,
+        .smgr_open = rpcmdopen,
+        .smgr_close = rpcmdclose,
+        .smgr_create = rpcmdcreate,
+        .smgr_exists = rpcmdexists,
+        .smgr_unlink = rpcmdunlink,
+        .smgr_extend = rpcmdextend,
+        .smgr_prefetch = rpcmdprefetch,
+        .smgr_read = rpcmdread,
+        .smgr_write = rpcmdwrite,
+        .smgr_writeback = rpcmdwriteback,
+        .smgr_nblocks = rpcmdnblocks,
+        .smgr_truncate = rpcmdtruncate,
+        .smgr_immedsync = rpcmdimmedsync,
+    }
 };
 
 static const int NSmgr = lengthof(smgrsw);
@@ -109,6 +129,12 @@ static void smgrshutdown(int code, Datum arg);
 void
 smgrinit(void)
 {
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+
 	int			i;
 
 	for (i = 0; i < NSmgr; i++)
@@ -176,7 +202,11 @@ smgropen(RelFileNode rnode, BackendId backend)
 		reln->smgr_targblock = InvalidBlockNumber;
 		reln->smgr_fsm_nblocks = InvalidBlockNumber;
 		reln->smgr_vm_nblocks = InvalidBlockNumber;
-		reln->smgr_which = 0;	/* we only have md.c at present */
+
+        if(IsRpcClient)
+            reln->smgr_which = 1;
+        else
+    		reln->smgr_which = 0;	/* we only have md.c at present */
 
 		/* implementation-specific initialization */
 		smgrsw[reln->smgr_which].smgr_open(reln);

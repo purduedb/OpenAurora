@@ -94,6 +94,7 @@
 #include "portability/mem.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
+#include "storage/rpcclient.h"
 #include "utils/guc.h"
 #include "utils/resowner_private.h"
 
@@ -131,6 +132,8 @@
  * will not pass unless that can grow to at least 14.)
  */
 #define FD_MINFREE				48
+
+extern int IsRpcClient;
 
 /*
  * A number of platforms allow individual processes to open many more files
@@ -824,6 +827,12 @@ durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 void
 InitFileAccess(void)
 {
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+
 	Assert(SizeVfdCache == 0);	/* call me only once */
 
 	/* initialize cache header entry */

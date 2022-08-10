@@ -458,13 +458,10 @@ XLogInsert(RmgrId rmid, uint8 info)
 		 */
 		GetFullPageWriteInfo(&RedoRecPtr, &doPageWrites);
 
-        printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 		rdt = XLogRecordAssemble(rmid, info, RedoRecPtr, doPageWrites,
 								 &fpw_lsn, &num_fpi);
-        printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 
 		EndPos = XLogInsertRecord(rdt, fpw_lsn, curinsert_flags, num_fpi);
-        printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	} while (EndPos == InvalidXLogRecPtr);
 
 	XLogResetInsertion();

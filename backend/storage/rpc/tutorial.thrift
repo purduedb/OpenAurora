@@ -104,69 +104,16 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
-   void RpcFileClose(1:_File _fd),
-
-   void RpcTablespaceCreateDbspace(1:_Oid _spcnode, 2:_Oid _dbnode 3:bool isRedo),
-
-   _File RpcPathNameOpenFile(1:_Path _path, 2:_Flag _flag),
-
-   i32 RpcFileWrite(1:_File _fd, 2:_Page _page, 3:i32 _amount, 4:_Off_t _seekpos, 5:i32 _wait_event_info),
-
-   _Path RpcFilePathName(1:_File _fd),
-
-   _Page RpcFileRead(1:_File _fd, 2:i32 _amount, 3:_Off_t _seekpos, 4:i32 _wait_event_info),
-
-   i32 RpcFileTruncate(1:_File _fd, 2:_Off_t _offset),
-
-   _Off_t RpcFileSize(1:_File _fd),
-
-   i32 RpcFilePrefetch(1:_File _fd, 2:_Off_t _offset, 3:i32 _amount, 4:i32 wait_event_info),
-
-   void RpcFileWriteback(1:_File _fd, 2:_Off_t _offset, 3:_Off_t nbytes, 4:i32 wait_event_info),
-
-   i32 RpcUnlink(1:_Path _path),
-
-   i32 RpcFtruncate(1:_File _fd, 2:_Off_t _offset),
-
-   _Page RpcInitFile(1:_Path _path),
-
-   _File RpcOpenTransientFile(1:_Path _filename, 2:i32 _fileflags),
-
-   i32 RpcCloseTransientFile(1:_File _fd),
-
-   _Page Rpcread(1:_File _fd, 2:i32 size),
-
-   i32 Rpcwrite(1:_File _fd, 2:_Page _page, 3:i32 size),
-   
-   i32 RpcFileSync(1:_File _fd, 2:i32 _wait_event_info),
-
-   _Page RpcPgPRead(1:_File _fd, 2:i32 _seg_bytes, 3:_Off_t _start_off),
-
-   i32 RpcPgPWrite(1: _File _fd, 2:_Page _page, 3:i32 _amount, 4: _Off_t _offset),
-
-   /* linux close() function */
-   i32 RpcClose(1: _File _fd),
-
-   i32 RpcBasicOpenFile(1: _Path _path, 2: i32 _flags),
-
-   i32 RpcPgFdatasync(1: _File _fd),
-
-   i32 RpcPgFsyncNoWritethrough(1: _File _fd),
-
-   i32 RpcLseek(1:i32 _fd, 2:_Off_t _offset, 3:i32 _flag),
-
-   _Stat_Resp RpcStat(1:_Path _path),
-
-   i32 RpcDirectoryIsEmpty(1:_Path _path),
-
-   i32 RpcCopyDir(1:_Path _src, 2:_Path _dst),
-
    _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum),
-
-   i32 RpcMdExist(1:_Smgr_Relation _reln, 2:i32 _forknum),
 
    i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum),
 
+   i32 RpcMdExists(1:_Smgr_Relation _reln, 2:i32 _forknum),
+
+   void RpcMdCreate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _isRedo),
+
+   void RpcMdExtend(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum, 4:_Page _buff, 5:i32 skipFsync), 
+   
    /**
     * This method has a oneway modifier. That means the client only makes
     * a request and does not listen for any response at all. Oneway methods

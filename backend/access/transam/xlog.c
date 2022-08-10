@@ -6309,8 +6309,8 @@ CheckRequiredParameterValues(void)
 void
 StartupXLOG(void)
 {
-    fflush(stdout);
-
+    if(IsRpcServer)
+        sleep(5);
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
 	bool		wasShutdown;
