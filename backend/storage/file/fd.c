@@ -978,7 +978,7 @@ InitFileAccess(void)
     if(pgRpcClient != NULL) {
         IsRpcClient = 1;
     }
-    printf("[%s], IsRpcClient = %d\n", __func__ , IsRpcClient);
+//    printf("[%s], IsRpcClient = %d\n", __func__ , IsRpcClient);
 
 
     Assert(SizeVfdCache == 0);	/* call me only once */
