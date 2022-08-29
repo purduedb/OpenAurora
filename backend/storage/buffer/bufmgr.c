@@ -197,6 +197,10 @@ static PrivateRefCountEntry *GetPrivateRefCountEntry(Buffer buffer, bool do_move
 static inline int32 GetPrivateRefCount(Buffer buffer);
 static void ForgetPrivateRefCountEntry(PrivateRefCountEntry *ref);
 
+static bool polar_apply_io_locked_page(BufferDesc *bufHdr, XLogRecPtr replay_from, XLogRecPtr checkpoint_lsn);
+static polar_redo_action polar_require_backend_redo(bool local_buf, ReadBufferMode mode, ForkNumber fork_num, XLogRecPtr *replay_from);
+static polar_checksum_err_action polar_handle_read_error_block(Block bufBlock, SMgrRelation smgr, ForkNumber forkNum, BlockNumber blockNum, ReadBufferMode mode, polar_redo_action redo_action, int *repeat_read_times, BufferDesc *buf_desc);
+
 /*
  * Ensure that the PrivateRefCountArray has sufficient space to store one more
  * entry. This has to be called before using NewPrivateRefCountEntry() to fill
@@ -705,6 +709,7 @@ ReadBufferWithoutRelcache(RelFileNode rnode, ForkNumber forkNum,
 							 mode, strategy, &hit);
 }
 
+static pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * ReadBuffer_common -- common logic for all ReadBuffer variants
@@ -742,7 +747,9 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	if (isLocalBuf)
 	{
+		pthread_mutex_lock(buffer_mutex);
 		bufHdr = LocalBufferAlloc(smgr, forkNum, blockNum, &found);
+		pthread_mutex_unlock(buffer_mutex);
 		if (found)
 			pgBufferUsage.local_blks_hit++;
 		else if (isExtend)
@@ -757,8 +764,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * lookup the buffer.  IO_IN_PROGRESS is set if the requested block is
 		 * not currently in memory.
 		 */
+		pthread_mutex_lock(buffer_mutex);
 		bufHdr = BufferAlloc(smgr, relpersistence, forkNum, blockNum,
 							 strategy, &found);
+		pthread_mutex_unlock(buffer_mutex);
 		if (found)
 			pgBufferUsage.shared_blks_hit++;
 		else if (isExtend)
@@ -4555,3 +4564,525 @@ TestForOldSnapshot_impl(Snapshot snapshot, Relation relation)
 				(errcode(ERRCODE_SNAPSHOT_TOO_OLD),
 				 errmsg("snapshot too old")));
 }
+
+static pthread_mutex_t buffer_replay_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* POLAR: Replay buffer with io lock. Return true if page lsn changed after replay */
+static bool
+polar_apply_io_locked_page(BufferDesc *bufHdr, XLogRecPtr replay_from, XLogRecPtr checkpoint_redo_lsn)
+{
+	/*
+	 * POLAR: It's better to use AmStartupProcess() than InRecovery to avoid
+	 * ambiguity.
+	 */
+	if (polar_logindex_redo_instance &&
+		((!InRecovery) || reachedConsistency))
+	{
+		/*
+		 * Note: All modifications about replay-page must be
+		 *       applied to both polar_bulk_read_buffer_common() and ReadBuffer_common().
+		 */
+
+		return polar_logindex_io_lock_apply(polar_logindex_redo_instance, bufHdr, replay_from, checkpoint_redo_lsn);
+	}
+
+	return false;
+}
+
+static polar_redo_action 
+polar_require_backend_redo(bool local_buf, ReadBufferMode mode, ForkNumber fork_num, XLogRecPtr *replay_from)
+{
+	bool redo_required = polar_logindex_require_backend_redo(polar_logindex_redo_instance, fork_num, replay_from);
+	polar_redo_action action = POLAR_REDO_NO_ACTION;
+
+	if (!local_buf)
+	{
+		if (redo_required)
+		{
+			if (POLAR_IN_LOGINDEX_PARALLEL_REPLAY() &&
+					!(mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK))
+			{
+				action = POLAR_REDO_MARK_OUTDATE;
+			}
+			else
+				action = POLAR_REDO_REPLAY_XLOG;
+		}
+	}
+
+	return action;
+}
+
+static polar_checksum_err_action
+polar_handle_read_error_block(Block bufBlock, SMgrRelation smgr, ForkNumber forkNum, BlockNumber blockNum,
+		ReadBufferMode mode, polar_redo_action redo_action, int *repeat_read_times, BufferDesc *buf_desc)
+{
+	bool has_redo_action = (redo_action != POLAR_REDO_NO_ACTION);
+
+	if (mode == RBM_ZERO_ON_ERROR || zero_damaged_pages)
+	{
+		char *relpath = relpath(smgr->smgr_rnode, forkNum);
+		ereport(WARNING,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg("invalid page in block %u of relation %s; zeroing out page",
+						blockNum, relpath)));
+		MemSet((char *) bufBlock, 0, BLCKSZ);
+		pfree(relpath);
+		return POLAR_CHECKSUM_ERR_NO_ACTION;
+	}
+	else if (polar_has_partial_write && polar_in_replica_mode())
+	{
+		/*
+		 * POLAR: We enable full_page_writes if filesystem doesn't support atomic wirte. rw could write part of the page while ro read this page and failed to verify checksum.
+		 * So in replica mode we will delay some time and read this page again
+		 */
+		(*repeat_read_times)++;
+		if (*repeat_read_times % POLAR_WARNING_REPEAT_TIMES == 0)
+		{
+			char *relpath = relpath(smgr->smgr_rnode, forkNum);
+			ereport(WARNING, (errmsg("%d times to repeat read block %u of relation %s",
+							*repeat_read_times, blockNum, relpath)));
+			pfree(relpath);
+			CHECK_FOR_INTERRUPTS();
+		}
+
+		POLAR_DELAY_REPEAT_READ();
+		return POLAR_CHECKSUM_ERR_REPEAT_READ;
+	}
+	else if (fullPageWrites && has_redo_action)
+	{
+		/*
+		 * POLAR: It's doing online promote if redo_required but is not in replica mode.
+		 * We will replay this page from last checkpoint, so we can find the first FPI log to replay
+		 */
+		char *relpath = relpath(smgr->smgr_rnode, forkNum);
+		ereport(WARNING,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg("invalid page in block %u of relation %s; will replay from last checkpoint",
+						blockNum, relpath)));
+		MemSet((char *) bufBlock, 0, BLCKSZ);
+		pfree(relpath);
+
+		return POLAR_CHECKSUM_ERR_CHECKPOINT_REDO;
+	}
+	else if (polar_can_flog_repair(flog_instance, buf_desc, has_redo_action))
+	{
+		/*
+		 * POLAR: When it is in recovery but not a ro node
+		 * and flashback log is enable, we can repair the page by flashback log.
+		 */
+		char *relpath = relpath(smgr->smgr_rnode, forkNum);
+
+		/* Just WARNING */
+		ereport(WARNING, (errcode(ERRCODE_DATA_CORRUPTED),
+						  errmsg("invalid page in block %u of relation %s; "
+								 "get origin page in flashback log to repair it",
+								 blockNum, relpath)));
+		pfree(relpath);
+		polar_repair_partial_write(flog_instance, buf_desc);
+		if (has_redo_action)
+			return POLAR_CHECKSUM_ERR_CHECKPOINT_REDO;
+		else
+			return POLAR_CHECKSUM_ERR_NO_ACTION;
+	}
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				 errmsg("invalid page in block %u of relation %s",
+						blockNum,
+						relpath(smgr->smgr_rnode, forkNum))));
+
+	return POLAR_CHECKSUM_ERR_NO_ACTION;
+}
+
+/*
+ * POLAR: In some cases, we check for interrupt between pin buffer and
+ * unpin buffer, so we must unpin the buffer before exit.
+ */
+void
+polar_unpin_buffer_proc_exit(Buffer buf)
+{
+	if (GetPrivateRefCount(buf))
+	{
+		BufferDesc *buf_desc;
+
+		buf_desc = GetBufferDescriptor(buf - 1);
+		UnpinBuffer(buf_desc, false);
+	}
+}
+
+/*
+ * ReadBuffer_common -- common logic for all ReadBuffer variants
+ *
+ * *hit is set to true if the request was satisfied from shared buffer cache.
+ */
+static Buffer
+ReadBufferAndReplay_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
+				  BlockNumber blockNum, ReadBufferMode mode,
+				  BufferAccessStrategy strategy, bool *hit)
+{
+	BufferDesc *bufHdr;
+	Block		bufBlock;
+	bool		found;
+	bool		isExtend;
+	bool		isLocalBuf = SmgrIsTemp(smgr);
+	/* Polar: start lsn to do replay */
+	XLogRecPtr  replay_from = InvalidXLogRecPtr;
+	XLogRecPtr  checkpoint_redo_lsn = InvalidXLogRecPtr;
+	polar_redo_action        redo_action;
+	int 		repeat_read_times = 0;
+
+	/* POLAR: make sure that buffer pool has been inited */
+	if (unlikely(!polar_buffer_pool_is_inited))
+		elog(PANIC, "buffer pool is not inited");
+	/* POLAR end */
+
+	*hit = false;
+
+	/* Make sure we will have room to remember the buffer pin */
+	// replay_mutex 
+	pthread_mutex_lock(buffer_replay_mutex);
+	ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
+	pthread_mutex_unlock(buffer_replay_mutex);
+
+	isExtend = (blockNum == P_NEW);
+
+	TRACE_POSTGRESQL_BUFFER_READ_START(forkNum, blockNum,
+									   smgr->smgr_rnode.node.spcNode,
+									   smgr->smgr_rnode.node.dbNode,
+									   smgr->smgr_rnode.node.relNode,
+									   smgr->smgr_rnode.backend,
+									   isExtend);
+
+	/* Substitute proper block number if caller asked for P_NEW */
+	if (isExtend)
+		blockNum = smgrnblocks(smgr, forkNum);
+
+	if (isLocalBuf)
+	{
+		// replay_mutex to avoid allocating the same buffer
+		pthread_mutex_lock(buffer_replay_mutex);
+		bufHdr = LocalBufferAlloc(smgr, forkNum, blockNum, &found);
+		pthread_mutex_unlock(buffer_replay_mutex);
+		if (found)
+			pgBufferUsage.local_blks_hit++;
+		else
+			pgBufferUsage.local_blks_read++;
+	}
+	else
+	{
+		/*
+		 * lookup the buffer.  IO_IN_PROGRESS is set if the requested block is
+		 * not currently in memory.
+		 */
+		// replay_mutex to avoid allocating the same buffer
+		pthread_mutex_lock(buffer_replay_mutex);
+		bufHdr = BufferAlloc(smgr, relpersistence, forkNum, blockNum,
+							 strategy, &found);
+		pthread_mutex_unlock(buffer_replay_mutex);
+		if (found)
+			pgBufferUsage.shared_blks_hit++;
+		else
+			pgBufferUsage.shared_blks_read++;
+	}
+
+	/* At this point we do NOT hold any locks. */
+
+	/* if it was already in the buffer pool, we're done */
+	if (found)
+	{
+		if (!isExtend)
+		{
+			/* Just need to update stats before we exit */
+			*hit = true;
+			VacuumPageHit++;
+
+			if (VacuumCostActive)
+				VacuumCostBalance += VacuumCostPageHit;
+
+			TRACE_POSTGRESQL_BUFFER_READ_DONE(forkNum, blockNum,
+											  smgr->smgr_rnode.node.spcNode,
+											  smgr->smgr_rnode.node.dbNode,
+											  smgr->smgr_rnode.node.relNode,
+											  smgr->smgr_rnode.backend,
+											  isExtend,
+											  found);
+
+			/*
+			 * In RBM_ZERO_AND_LOCK mode the caller expects the page to be
+			 * locked on return.
+			 */
+			if (!isLocalBuf)
+			{
+				if (mode == RBM_ZERO_AND_LOCK)
+					LWLockAcquire(BufferDescriptorGetContentLock(bufHdr),
+								  LW_EXCLUSIVE);
+				else if (mode == RBM_ZERO_AND_CLEANUP_LOCK)
+					LockBufferForCleanup(BufferDescriptorGetBuffer(bufHdr));
+			}
+
+			return BufferDescriptorGetBuffer(bufHdr);
+		}
+
+		/*
+		 * We get here only in the corner case where we are trying to extend
+		 * the relation but we found a pre-existing buffer marked BM_VALID.
+		 * This can happen because mdread doesn't complain about reads beyond
+		 * EOF (when zero_damaged_pages is ON) and so a previous attempt to
+		 * read a block beyond EOF could have left a "valid" zero-filled
+		 * buffer.  Unfortunately, we have also seen this case occurring
+		 * because of buggy Linux kernels that sometimes return an
+		 * lseek(SEEK_END) result that doesn't account for a recent write. In
+		 * that situation, the pre-existing buffer would contain valid data
+		 * that we don't want to overwrite.  Since the legitimate case should
+		 * always have left a zero-filled buffer, complain if not PageIsNew.
+		 */
+		bufBlock = isLocalBuf ? LocalBufHdrGetBlock(bufHdr) : BufHdrGetBlock(bufHdr);
+		if (!PageIsNew((Page) bufBlock))
+			ereport(ERROR,
+					(errmsg("unexpected data beyond EOF in block %u of relation %s",
+							blockNum, relpath(smgr->smgr_rnode, forkNum)),
+					 errhint("This has been seen to occur with buggy kernels; consider updating your system.")));
+
+		/*
+		 * We *must* do smgrextend before succeeding, else the page will not
+		 * be reserved by the kernel, and the next P_NEW call will decide to
+		 * return the same page.  Clear the BM_VALID bit, do the StartBufferIO
+		 * call that BufferAlloc didn't, and proceed.
+		 */
+		if (isLocalBuf)
+		{
+			/* Only need to adjust flags */
+			uint32		buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+			Assert(buf_state & BM_VALID);
+			buf_state &= ~BM_VALID;
+			pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+		}
+		else
+		{
+			/*
+			 * Loop to handle the very small possibility that someone re-sets
+			 * BM_VALID between our clearing it and StartBufferIO inspecting
+			 * it.
+			 */
+			do
+			{
+				uint32		buf_state = LockBufHdr(bufHdr);
+
+				Assert(buf_state & BM_VALID);
+				buf_state &= ~BM_VALID;
+				UnlockBufHdr(bufHdr, buf_state);
+			} while (!StartBufferIO(bufHdr, true));
+		}
+	}
+
+repeat_read:
+	/*
+	 * POLAR: page-replay.
+	 *
+	 * Get consistent lsn which used by replay.
+	 *
+	 * Note: All modifications about replay-page must be
+	 *       applied to both polar_bulk_read_buffer_common() and ReadBuffer_common().
+	 */
+	redo_action = polar_require_backend_redo(isLocalBuf, mode, forkNum, &replay_from);
+
+	if (redo_action != POLAR_REDO_NO_ACTION)
+	{
+		checkpoint_redo_lsn = GetRedoRecPtr();
+		Assert(!XLogRecPtrIsInvalid(checkpoint_redo_lsn));
+	}
+	/* POLAR end */
+
+	/*
+	 * if we have gotten to this point, we have allocated a buffer for the
+	 * page but its contents are not yet valid.  IO_IN_PROGRESS is set for it,
+	 * if it's a shared buffer.
+	 *
+	 * Note: if smgrextend fails, we will end up with a buffer that is
+	 * allocated but not marked BM_VALID.  P_NEW will still select the same
+	 * block number (because the relation didn't get any longer on disk) and
+	 * so future attempts to extend the relation will find the same buffer (if
+	 * it's not been recycled) but come right back here to try smgrextend
+	 * again.
+	 */
+	Assert(!(pg_atomic_read_u32(&bufHdr->state) & BM_VALID));	/* spinlock not needed */
+
+	bufBlock = isLocalBuf ? LocalBufHdrGetBlock(bufHdr) : BufHdrGetBlock(bufHdr);
+
+	if (isExtend)
+	{
+		/* new buffers are zero-filled */
+		MemSet((char *) bufBlock, 0, BLCKSZ);
+		/* don't set checksum for all-zero page */
+		smgrextend(smgr, forkNum, blockNum, (char *) bufBlock, false);
+
+		/*
+		 * NB: we're *not* doing a ScheduleBufferTagForWriteback here;
+		 * although we're essentially performing a write. At least on linux
+		 * doing so defeats the 'delayed allocation' mechanism, leading to
+		 * increased file fragmentation.
+		 */
+	}
+	else
+	{
+		/*
+		 * Read in the page, unless the caller intends to overwrite it and
+		 * just wants us to allocate a buffer.
+		 */
+		if (mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK)
+			MemSet((char *) bufBlock, 0, BLCKSZ);
+		else
+		{
+			instr_time	io_start,
+						io_time;
+
+			if (track_io_timing)
+				INSTR_TIME_SET_CURRENT(io_start);
+
+			smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
+
+			if (track_io_timing)
+			{
+				INSTR_TIME_SET_CURRENT(io_time);
+				INSTR_TIME_SUBTRACT(io_time, io_start);
+				pgstat_count_buffer_read_time(INSTR_TIME_GET_MICROSEC(io_time));
+				INSTR_TIME_ADD(pgBufferUsage.blk_read_time, io_time);
+			}
+
+			/* check for garbage data */
+			if (!PageIsVerified((Page) bufBlock, forkNum, blockNum, smgr))
+			{
+				polar_checksum_err_action err_act = polar_handle_read_error_block(bufBlock, smgr, forkNum, blockNum,
+						mode, redo_action, &repeat_read_times, bufHdr);
+
+				if (err_act == POLAR_CHECKSUM_ERR_REPEAT_READ)
+					POLAR_REPEAT_READ();
+				else if (err_act == POLAR_CHECKSUM_ERR_CHECKPOINT_REDO)
+				{
+					replay_from = checkpoint_redo_lsn;
+					ereport(WARNING,
+							(errcode(ERRCODE_DATA_CORRUPTED),
+							 errmsg("Replay from lastcheckpoint which is %lX", checkpoint_redo_lsn)));
+
+				}
+			}
+		}
+	}
+
+	/*
+	 * In RBM_ZERO_AND_LOCK mode, grab the buffer content lock before marking
+	 * the page as valid, to make sure that no other backend sees the zeroed
+	 * page before the caller has had a chance to initialize it.
+	 *
+	 * Since no-one else can be looking at the page contents yet, there is no
+	 * difference between an exclusive lock and a cleanup-strength lock. (Note
+	 * that we cannot use LockBuffer() or LockBufferForCleanup() here, because
+	 * they assert that the buffer is already valid.)
+	 */
+	if ((mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK) &&
+		!isLocalBuf)
+	{
+		LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
+	}
+
+	if (isLocalBuf)
+	{
+		/* Only need to adjust flags */
+		uint32		buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+		buf_state |= BM_VALID;
+		pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+	}
+	else
+	{
+		/*
+		 * POLAR: page-replay.
+		 *
+		 * apply logs to this old page when read from disk.
+		 *
+		 * Note: All modifications about replay-page must be
+		 *       applied to both polar_bulk_read_buffer_common() and ReadBuffer_common().
+		 */
+		if (redo_action == POLAR_REDO_REPLAY_XLOG)
+		{
+			/*
+			 * POLAR: we want to do record replay on page only in
+			 * non-Startup process and consistency reached Startup process.
+			 * This judge is *ONLY* valid in replica mode, so we set
+			 * replica check above with polar_in_replica_mode().
+			 */
+			// replay_mutex to avoid replay the same buffer
+			pthread_mutex_lock(buffer_replay_mutex);
+			polar_apply_io_locked_page(bufHdr, replay_from, checkpoint_redo_lsn);
+			pthread_mutex_unlock(buffer_replay_mutex);
+
+			POLAR_RESET_BACKEND_READ_MIN_LSN();
+		}
+		else if (redo_action == POLAR_REDO_MARK_OUTDATE)
+		{
+			uint32 redo_state = polar_lock_redo_state(bufHdr);
+			redo_state |= POLAR_REDO_OUTDATE;
+			polar_unlock_redo_state(bufHdr, redo_state);
+
+			POLAR_RESET_BACKEND_READ_MIN_LSN();
+		}
+		/* POLAR end */
+
+		/* Set BM_VALID, terminate IO, and wake up any waiters */
+		TerminateBufferIO(bufHdr, false, BM_VALID);
+	}
+
+	VacuumPageMiss++;
+	if (VacuumCostActive)
+		VacuumCostBalance += VacuumCostPageMiss;
+
+	TRACE_POSTGRESQL_BUFFER_READ_DONE(forkNum, blockNum,
+									  smgr->smgr_rnode.node.spcNode,
+									  smgr->smgr_rnode.node.dbNode,
+									  smgr->smgr_rnode.node.relNode,
+									  smgr->smgr_rnode.backend,
+									  isExtend,
+									  found);
+
+	return BufferDescriptorGetBuffer(bufHdr);
+}
+
+Buffer
+ReadBufferAndReplayExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
+				   ReadBufferMode mode, BufferAccessStrategy strategy)
+{
+	bool		hit;
+	Buffer		buf;
+
+	/* Open it at the smgr level if not already done */
+	RelationOpenSmgr(reln);
+
+	/*
+	 * Reject attempts to read non-local temporary relations; we would be
+	 * likely to get wrong data since we have no visibility into the owning
+	 * session's local buffers.
+	 */
+	if (RELATION_IS_OTHER_TEMP(reln))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot access temporary tables of other sessions")));
+
+	/*
+	 * Read the buffer, and update pgstat counters to reflect a cache hit or
+	 * miss.
+	 */
+	pgstat_count_buffer_read(reln);
+	buf = ReadBufferAndReplay_common(reln->rd_smgr, reln->rd_rel->relpersistence,
+							forkNum, blockNum, mode, strategy, &hit);
+	if (hit)
+		pgstat_count_buffer_hit(reln);
+	return buf;
+}
+
+#ifndef POLAR_BUFMGR_C
+#define POLAR_BUFMGR_C
+
+#include "polar_bufmgr.c"
+
+#endif
