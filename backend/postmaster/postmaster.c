@@ -436,7 +436,7 @@ static bool CreateOptsFile(int argc, char *argv[], char *fullprogname);
 static pid_t StartChildProcess(AuxProcType type);
 static void StartAutovacuumWorker(void);
 static void MaybeStartWalReceiver(void);
-static void InitPostmasterDeathWatchHandle(void);
+void InitPostmasterDeathWatchHandle(void);
 
 /*
  * Archiver is allowed to start up at the current postmaster state?
@@ -6622,7 +6622,7 @@ pgwin32_deadchild_callback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
  * Called once in the postmaster, so that child processes can subsequently
  * monitor if their parent is dead.
  */
-static void
+void
 InitPostmasterDeathWatchHandle(void)
 {
 #ifndef WIN32

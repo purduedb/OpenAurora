@@ -82,7 +82,7 @@
 
 #include <pthread.h>
 
-extern int WalRcvTid;
+extern pthread_t WalRcvTid;
 
 /*
  * GUC variables.  (Other variables that affect walreceiver are in xlog.c
@@ -180,8 +180,7 @@ void StartWalRcvThread(void) {
     if(WalRcvTid != 0) {
         return;
     }
-    pthread_t tid;
-    if( 0 != pthread_create(&tid, NULL, (void*)WalReceiverMain, NULL) ) {
+    if( 0 != pthread_create(&WalRcvTid, NULL, (void*)WalReceiverMain, NULL) ) {
         printf("[%s] WalReceiverMain start failed\n", __func__ );
         return;
     }
@@ -647,11 +646,11 @@ WalReceiverMain(void)
 			else
 				XLogArchiveNotify(xlogfname);
 		}
-		recvFile = -1;
+        recvFile = -1;
 
 		elog(DEBUG1, "walreceiver ended streaming and awaits new instructions");
 		WalRcvWaitForStartPosition(&startpoint, &startpointTLI);
-	}
+    }
 	/* not reached */
 }
 
@@ -856,7 +855,6 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 	{
 		case 'w':				/* WAL records */
 			{
-                printf("%s received a msg of WAL\n", __func__ );
 				/* copy message to StringInfo */
 				hdrlen = sizeof(int64) + sizeof(int64) + sizeof(int64);
 				if (len < hdrlen)
@@ -878,7 +876,6 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 			}
 		case 'k':				/* Keepalive */
 			{
-                printf("%s received a msg of heartbeat\n", __func__ );
 				/* copy message to StringInfo */
 				hdrlen = sizeof(int64) + sizeof(int64) + sizeof(char);
 				if (len != hdrlen)

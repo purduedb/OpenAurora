@@ -10,6 +10,9 @@
  *-------------------------------------------------------------------------
  */
 
+#include "c.h"
+#include "postgres.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -46,7 +49,7 @@
  */
 #define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
 
-#define PRIMARY_NODE_IP ("127.0.0.1")
+#define PRIMARY_NODE_IP ("10.145.21.36")
 #define BLCKSZ 8192
 
 using namespace std;
@@ -92,6 +95,8 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
     int32_t _forkNum, _blkNum;
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
 
+//    printf("%s %s %d , spcID = %d, dbID = %d, tabID = %d, fornum = %d, blkNum = %d\n", __func__ , __FILE__, __LINE__,
+//           _reln._spc_node, _reln._db_node, _reln._rel_node, forknum, blknum );
     _forkNum = forknum;
     _blkNum = blknum;
 

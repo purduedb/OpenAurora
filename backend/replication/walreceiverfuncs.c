@@ -301,10 +301,11 @@ RequestXLogStreaming(TimeLineID tli, XLogRecPtr recptr, const char *conninfo,
 
 	SpinLockRelease(&walrcv->mutex);
 
+//	printf("%s set latch, try to launch = %d\n", __func__ , launch);
 	if (launch) {
-        if (IsRpcServer)
-            StartWalRcvThread();
-        else
+//        if (IsRpcServer)
+//            StartWalRcvThread();
+//        else
             SendPostmasterSignal(PMSIGNAL_START_WALRECEIVER);
     }
 	else if (latch)

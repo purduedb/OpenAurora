@@ -2601,17 +2601,12 @@ PrintBufferLeakWarning(Buffer buffer)
 void
 CheckPointBuffers(int flags)
 {
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	TRACE_POSTGRESQL_BUFFER_CHECKPOINT_START(flags);
 	CheckpointStats.ckpt_write_t = GetCurrentTimestamp();
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	BufferSync(flags);
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	CheckpointStats.ckpt_sync_t = GetCurrentTimestamp();
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	TRACE_POSTGRESQL_BUFFER_CHECKPOINT_SYNC_START();
 	ProcessSyncRequests();
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	CheckpointStats.ckpt_sync_end_t = GetCurrentTimestamp();
 	TRACE_POSTGRESQL_BUFFER_CHECKPOINT_DONE();
 }
