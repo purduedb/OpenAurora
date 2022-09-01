@@ -288,7 +288,7 @@ RpcServerMain(int argc, char *argv[],
 pthread_t XlogStartupTid = 0;
 pthread_t WalRcvTid = 0;
 void
-RpcServerMain_j(int argc, char *argv[],
+RpcServerMain_(int argc, char *argv[],
               const char *dbname,
               const char *username) {
 
