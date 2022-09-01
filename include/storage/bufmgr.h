@@ -190,6 +190,10 @@ extern Buffer ReadBufferWithoutRelcache(RelFileNode rnode,
                                         ForkNumber forkNum, BlockNumber blockNum,
                                         ReadBufferMode mode, BufferAccessStrategy strategy);
 
+extern Buffer ReadBufferAndReplayExtended(Relation reln, 
+                                          ForkNumber forkNum, BlockNumber blockNum,
+				                          ReadBufferMode mode, BufferAccessStrategy strategy);
+
 extern void ReleaseBuffer(Buffer buffer);
 
 extern void UnlockReleaseBuffer(Buffer buffer);
