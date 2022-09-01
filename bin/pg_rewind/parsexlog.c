@@ -3,7 +3,7 @@
  * parsexlog.c
  *	  Functions for reading Write-Ahead-Log
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2018, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *-------------------------------------------------------------------------
@@ -13,21 +13,22 @@
 
 #include <unistd.h>
 
+#include "pg_rewind.h"
+#include "filemap.h"
+
 #include "access/rmgr.h"
 #include "access/xlog_internal.h"
 #include "access/xlogreader.h"
 #include "catalog/pg_control.h"
 #include "catalog/storage_xlog.h"
 #include "commands/dbcommands_xlog.h"
-#include "fe_utils/archive.h"
-#include "filemap.h"
-#include "pg_rewind.h"
+
 
 /*
  * RmgrNames is an array of resource manager names, to make error messages
  * a bit nicer.
  */
-#define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup,mask) \
+#define PG_RMGR(symname,name,redo,polar_idx_save, polar_idx_parse, polar_idx_redo, desc,identify,startup,cleanup,mask) \
   name,
 
 static const char *RmgrNames[RM_MAX_ID + 1] = {
@@ -72,7 +73,6 @@ extractPageMap(const char *datadir, XLogRecPtr startpoint, int tliIndex,
 	if (xlogreader == NULL)
 		pg_fatal("out of memory");
 
-	XLogBeginRead(xlogreader, startpoint);
 	do
 	{
 		record = XLogReadRecord(xlogreader, &errormsg);

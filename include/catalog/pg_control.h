@@ -5,7 +5,7 @@
  *	  However, we define it here so that the format is documented.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2018, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_control.h
@@ -22,7 +22,7 @@
 
 
 /* Version identifier for this pg_control format */
-#define PG_CONTROL_VERSION	1300
+#define PG_CONTROL_VERSION	1100
 
 /* Nonce key length, see below */
 #define MOCK_AUTH_NONCE_LEN		32
@@ -76,6 +76,19 @@ typedef struct CheckPoint
 #define XLOG_END_OF_RECOVERY			0x90
 #define XLOG_FPI_FOR_HINT				0xA0
 #define XLOG_FPI						0xB0
+#define XLOG_FPI_MULTI					0xC0
+
+/* POLAR: maybe 0xC0 is used in the future community version */
+#define XLOG_FPSI						0xD0	/* POLAR: write fullpage snapshot image */
+
+/* POLAR csn
+ * add csnlog zero page and truncate wal log type,
+ * which are like clog, to XLOG rmgr for compatible 
+ * with old version
+ */
+#define XLOG_CSNLOG_ZEROPAGE			0xE0
+#define XLOG_CSNLOG_TRUNCATE			0xF0
+/* POLAR end */
 
 
 /*
@@ -214,6 +227,8 @@ typedef struct ControlFileData
 	uint32		toast_max_chunk_size;	/* chunk size in TOAST tables */
 	uint32		loblksize;		/* chunk size in pg_largeobject */
 
+	/* flags indicating pass-by-value status of various types */
+	bool		float4ByVal;	/* float4 pass-by-value? */
 	bool		float8ByVal;	/* float8, int8, etc pass-by-value? */
 
 	/* Are data pages protected by checksums? Zero if no checksum version */

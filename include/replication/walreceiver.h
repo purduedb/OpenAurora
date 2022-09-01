@@ -338,4 +338,6 @@ extern int	GetReplicationApplyDelay(void);
 extern int	GetReplicationTransferLatency(void);
 extern void WalRcvForceReply(void);
 
+extern XLogRecPtr polar_get_primary_consist_ptr(void);
+
 #endif							/* _WALRECEIVER_H */

@@ -128,6 +128,155 @@ extern bool ignore_checksum_failure;
 extern bool ignore_invalid_pages;
 extern bool synchronize_seqscans;
 
+#define POLAR_MAX_PDB_HOSTID			512
+int		polar_hostid = 0;
+int		polar_bulk_extend_size = 0;
+int		polar_min_bulk_extend_table_size = 0;
+int		polar_bulk_read_size = 0;
+int		polar_recovery_bulk_extend_size = 0;
+bool 	polar_enable_master_recovery_bulk_extend = false;
+int		polar_index_create_bulk_extend_size = 0;
+int		polar_index_bulk_extend_size = 0;
+int 	polar_csnlog_slot_size = 0;
+int		polar_clog_slot_size = 0;
+int     polar_committs_buffer_slot_size = 0;
+int		polar_mxact_offset_buffer_slot_size = 0;
+int		polar_mxact_member_buffer_slot_size = 0;
+int 	polar_subtrans_buffer_slot_size = 0;
+int		polar_async_buffer_slot_size = 0;
+int		polar_oldserxid_buffer_slot_size = 0;
+int 	polar_clog_max_local_cache_segments = 0;
+int		polar_logindex_max_local_cache_segments = 0;
+int 	polar_commit_ts_max_local_cache_segments = 0;
+int 	polar_multixact_max_local_cache_segments = 0;
+int		polar_csnlog_max_local_cache_segments = 0;
+int 	polar_parallel_replay_proc_num = 0;
+int 	polar_parallel_replay_task_queue_depth = 0;
+char	*polar_datadir = NULL;
+char	*polar_disk_name = NULL;
+char	*polar_storage_cluster_name = NULL;
+bool	polar_use_statistical_relpages = false;
+bool	polar_enable_shared_storage_mode = false;
+bool	polar_enable_ddl_sync_mode = true;
+bool	polar_enable_transaction_sync_mode = false;
+bool    polar_enable_debug = false;
+bool    polar_enable_pwrite = false;
+bool    polar_enable_pread = false;
+bool    polar_enable_parallel_replay_standby_mode = false;
+int  	polar_check_checkpoint_legal_interval;
+int  	polar_copy_buffers;
+int 	polar_logindex_table_batch_size = 1;
+bool 	polar_enable_copy_buffer;
+bool 	polar_enable_flushlist;
+int  	polar_bgwriter_max_batch_size;
+int  	polar_bgwriter_batch_size_flushlist;
+bool 	polar_force_flush_buffer = false;
+int  	polar_buffer_copy_min_modified_count;
+int  	polar_buffer_copy_lsn_lag_with_cons_lsn;
+bool 	polar_enable_normal_bgwriter;
+int  	polar_bgwriter_sleep_lsn_lag;
+int  	polar_ring_buffer_vacuum;
+bool  	polar_enable_control_vm_flush;
+bool    polar_enable_lazy_checkpoint;
+int     polar_read_ahead_xlog_num;
+bool    polar_enable_master_xlog_read_ahead;
+bool    polar_enable_parallel_bgwriter;
+int     polar_parallel_bgwriter_workers;
+int     polar_parallel_bgwriter_delay;
+int     polar_parallel_bgwriter_check_interval;
+int     polar_parallel_new_bgwriter_threshold_lag;
+int     polar_parallel_new_bgwriter_threshold_time;
+bool    polar_parallel_bgwriter_enable_dynamic;
+bool    polar_enable_physical_repl_non_super_wal_snd;
+int     polar_wal_snd_reserved_for_superuser;
+int     polar_repl_slots_reserved_for_superuser;
+int     polar_logical_repl_workers_reserved_for_superuser;
+
+/* POLAR gucs */
+bool    polar_force_change_checkpoint = false;
+bool	polar_enable_resolve_conflict = true;
+
+bool    polar_enable_fallocate_walfile = true;
+bool    polar_skip_fill_walfile_zero_page = false;
+bool	polar_enable_maxscale_support = true;
+bool	polar_enable_xlog_buffer = false;
+int	    polar_xlog_page_buffers;
+int     polar_xlog_queue_buffers;
+int     polar_logindex_mem_size;
+int     polar_logindex_bloom_blocks;
+int     polar_rel_size_cache_blocks;
+int     polar_unit_test_mem_size;
+
+int 	polar_bg_replay_batch_size;
+int		polar_enable_coredump_handler;
+bool	polar_dropdb_write_wal_beforehand = true;
+bool	polar_enable_full_page_write_in_backup;
+bool	polar_enable_lazy_checkpoint_in_backup;
+bool	polar_enable_checkpoint_in_backup;
+bool	polar_enable_switch_wal_in_backup;
+bool	polar_enable_create_backup_history_file_in_backup;
+bool	polar_enable_persisted_logical_slot = true;
+bool	polar_enable_persisted_physical_slot = false;
+bool	polar_enable_persisted_spill_file = false;
+bool	polar_enable_early_launch_checkpointer = true;
+int		polar_fullpage_snapshot_min_modified_count = 0;
+int		polar_fullpage_snapshot_replay_delay_threshold = 0;
+int		polar_fullpage_snapshot_oldest_lsn_delay_threshold = 0;
+int		polar_write_logindex_active_table_delay = 200;
+bool	polar_enable_fullpage_snapshot = true;
+int		polar_startup_replay_delay_size = 0;
+int		polar_wait_old_version_page_timeout = 30 * 1000;
+bool	polar_enable_keep_wal_ready_file = true;
+bool 	polar_enable_node_static_config = true;
+bool    polar_enable_slru_hash_index = false;
+int		polar_fullpage_keep_segments = 16;
+bool    polar_enable_track_lock_timing = false;
+bool    polar_enable_track_lock_stat = false;
+bool    polar_enable_track_network_timing = false;
+bool    polar_enable_track_network_stat = false;
+bool    polar_enable_stat_wait_info = true;
+bool 	polar_super_call_all_trigger_event = false;
+bool    polar_enable_track_sql_time_stat = false;
+bool	polar_droptbl_write_wal_beforehand = true;
+bool	polar_enable_promote_wait_for_walreceive_done = false;
+bool	polar_enable_send_stop = false;
+bool	polar_enable_buffer_alignment = false;
+bool	polar_enable_io_fencing = true;
+bool	polar_enable_operator_mem_limit = true;
+bool	polar_enable_operator_mem_limit_by_level = true;
+bool	polar_enable_dump_incorrect_checksum_xlog = false;
+bool	polar_trace_heap_scan_flow = false;
+
+/*
+ * polar replica multi version snapshot related GUC parameters
+ */
+bool 	polar_replica_multi_version_snapshot_enable = true;
+int  	polar_replica_multi_version_snapshot_slot_num = 32;
+int  	polar_replica_multi_version_snapshot_retry_times = 3;
+
+bool	polar_enable_simply_redo_error_log = false;
+bool	polar_enable_persisted_buffer_pool;
+bool	polar_enable_early_launch_parallel_bgwriter;
+bool	polar_enable_alb_client_address = true;
+bool	polar_enable_lazy_end_of_recovery_checkpoint = false;
+bool	polar_create_table_with_full_replica_identity = true;
+bool    polar_enable_standby_pbp = true;
+bool    polar_enable_master_pbp = false;
+int		polar_save_stack_info_level = FATAL;
+
+/* POLAR: xact split */
+bool    polar_enable_xact_split = true;
+bool    polar_enable_xact_split_debug = true;
+char   *polar_xact_split_xids = NULL;
+bool	polar_xact_split_enable_sethintbits = false;
+static char *polar_xact_split_wait_lsn_str = NULL;
+
+int		polar_max_log_files;
+int     polar_max_auditlog_files;
+int     polar_max_slowlog_files;
+int     polar_max_logindex_files;
+int 	polar_trace_logindex_messages = LOG;
+
 #ifdef TRACE_SYNCSCAN
 extern bool trace_syncscan;
 #endif

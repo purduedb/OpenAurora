@@ -7972,7 +7972,7 @@ heap_xlog_freeze_page(XLogReaderState *record)
  *
  * (This is the reverse of compute_infobits).
  */
-static void
+void
 fix_infomask_from_infobits(uint8 infobits, uint16 *infomask, uint16 *infomask2)
 {
 	*infomask &= ~(HEAP_XMAX_IS_MULTI | HEAP_XMAX_LOCK_ONLY |
@@ -8069,6 +8069,8 @@ heap_xlog_delete(XLogReaderState *record)
 static void
 heap_xlog_insert(XLogReaderState *record)
 {
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	XLogRecPtr	lsn = record->EndRecPtr;
 	xl_heap_insert *xlrec = (xl_heap_insert *) XLogRecGetData(record);
 	Buffer		buffer;
@@ -8091,12 +8093,16 @@ heap_xlog_insert(XLogReaderState *record)
 	ItemPointerSetBlockNumber(&target_tid, blkno);
 	ItemPointerSetOffsetNumber(&target_tid, xlrec->offnum);
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	/*
 	 * The visibility map may need to be fixed even if the heap page is
 	 * already up-to-date.
 	 */
 	if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
 	{
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 		Relation	reln = CreateFakeRelcacheEntry(target_node);
 		Buffer		vmbuffer = InvalidBuffer;
 
@@ -8104,6 +8110,8 @@ heap_xlog_insert(XLogReaderState *record)
 		visibilitymap_clear(reln, blkno, vmbuffer, VISIBILITYMAP_VALID_BITS);
 		ReleaseBuffer(vmbuffer);
 		FreeFakeRelcacheEntry(reln);
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 	}
 
 	/*
@@ -8112,15 +8120,21 @@ heap_xlog_insert(XLogReaderState *record)
 	 */
 	if (XLogRecGetInfo(record) & XLOG_HEAP_INIT_PAGE)
 	{
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 		buffer = XLogInitBufferForRedo(record, 0);
 		page = BufferGetPage(buffer);
 		PageInit(page, BufferGetPageSize(buffer), 0);
 		action = BLK_NEEDS_REDO;
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 	}
 	else
 		action = XLogReadBufferForRedo(record, 0, &buffer);
 	if (action == BLK_NEEDS_REDO)
 	{
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 		Size		datalen;
 		char	   *data;
 
@@ -8162,7 +8176,11 @@ heap_xlog_insert(XLogReaderState *record)
 			PageClearAllVisible(page);
 
 		MarkBufferDirty(buffer);
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 	}
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	if (BufferIsValid(buffer))
 		UnlockReleaseBuffer(buffer);
 

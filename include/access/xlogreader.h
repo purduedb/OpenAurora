@@ -200,6 +200,8 @@ struct XLogReaderState
 	 * private/internal state
 	 * ----------------------------------------
 	 */
+    /* POLAR: Is this only have meta data? */
+    bool noPayload;
 
 	/*
 	 * Buffer for currently read page (XLOG_BLCKSZ bytes, valid up to at least

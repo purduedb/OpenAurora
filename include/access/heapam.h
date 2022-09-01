@@ -220,4 +220,7 @@ extern bool ResolveCminCmaxDuringDecoding(struct HTAB *tuplecid_data,
 extern void HeapCheckForSerializableConflictOut(bool valid, Relation relation, HeapTuple tuple,
 												Buffer buffer, Snapshot snapshot);
 
+/* POLAR: change static to extern */
+extern void fix_infomask_from_infobits(uint8 infobits, uint16 *infomask, uint16 *infomask2);
+
 #endif							/* HEAPAM_H */

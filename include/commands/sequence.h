@@ -51,6 +51,12 @@ typedef struct xl_seq_rec
 	/* SEQUENCE TUPLE DATA FOLLOWS AT THE END */
 } xl_seq_rec;
 
+#define SEQ_MAGIC	  0x1717
+typedef struct sequence_magic
+{
+    uint32		magic;
+} sequence_magic;
+
 extern int64 nextval_internal(Oid relid, bool check_permissions);
 extern Datum nextval(PG_FUNCTION_ARGS);
 extern List *sequence_options(Oid relid);

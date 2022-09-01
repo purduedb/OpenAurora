@@ -395,4 +395,9 @@ extern SessionBackupState get_backup_status(void);
 #define PROMOTE_SIGNAL_FILE		"promote"
 #define FALLBACK_PROMOTE_SIGNAL_FILE  "fallback_promote"
 
+extern bool polar_in_replica_mode(void);
+extern XLogRecPtr polar_get_consistent_lsn(void);
+extern XLogRecPtr polar_get_replay_end_rec_ptr(TimeLineID *replyTLI);
+extern XLogRecPtr polar_calc_min_used_lsn(bool is_contain_replication_slot);
+
 #endif							/* XLOG_H */

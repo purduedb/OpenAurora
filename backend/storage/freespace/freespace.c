@@ -890,3 +890,16 @@ fsm_vacuum_page(Relation rel, FSMAddress addr,
 
 	return max_avail;
 }
+
+BlockNumber
+polar_calc_fsm_blocks(SMgrRelation reln, BlockNumber heap_blocks, uint16 *first_removed_slot)
+{
+    BlockNumber new_nfsmblocks;
+    FSMAddress first_removed_address;
+
+    /* Get the location in the FSM of the first removed heap block */
+    first_removed_address = fsm_get_location(heap_blocks, first_removed_slot);
+    new_nfsmblocks = fsm_logical_to_physical(first_removed_address);
+
+    return new_nfsmblocks;
+}

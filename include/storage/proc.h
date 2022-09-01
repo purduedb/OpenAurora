@@ -203,10 +203,29 @@ struct PGPROC
 	PGPROC	   *lockGroupLeader;	/* lock group leader, if I'm a member */
 	dlist_head	lockGroupMembers;	/* list of members, if I'm a leader */
 	dlist_node	lockGroupLink;	/* my member link, if I'm a member */
+
+    /* POLAR: record min lsn when reading in case that replica clear xlog buffer */
+    pg_atomic_uint64	polar_read_min_lsn;
+    /* POLAR end */
 };
 
 /* NOTE: "typedef struct PGPROC PGPROC" appears in storage/lock.h. */
 
+/* POLAR: We need to remember read min lsn before read from storage to prevent
+ * bgwriter clean hashtable and logindex
+ */
+#define POLAR_SET_BACKEND_READ_MIN_LSN(lsn) \
+	do { \
+		if (MyProc) \
+			pg_atomic_write_u64(&(MyProc->polar_read_min_lsn), (lsn)); \
+	} while (0)
+
+/* POLAR: Reset read min lsn */
+#define POLAR_RESET_BACKEND_READ_MIN_LSN() \
+	do { \
+		if (MyProc) \
+			pg_atomic_write_u64(&(MyProc->polar_read_min_lsn), InvalidXLogRecPtr); \
+	} while(0)
 
 extern PGDLLIMPORT PGPROC *MyProc;
 extern PGDLLIMPORT struct PGXACT *MyPgXact;

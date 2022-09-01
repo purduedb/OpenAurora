@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/types.h>
 
 #include "access/clog.h"
 #include "access/commit_ts.h"
@@ -728,6 +729,44 @@ typedef struct XLogCtlData
 	XLogRecPtr	lastFpwDisableRecPtr;
 
 	slock_t		info_lck;		/* locks shared variables shown above */
+
+    /* POLAR */
+
+    /* Oldest LSN applied by any slot */
+    XLogRecPtr	replication_slot_oldest_applied_lsn;
+    /* Oldest lock LSN applied by any slot */
+    XLogRecPtr	replication_slot_oldest_lock_lsn;
+    /*
+     * Latest LSN flushed, all pages which latest_lsn <= consistent_lsn have
+     * been flushed to disk.
+     */
+    XLogRecPtr	consistent_lsn;
+
+    /* POLAR: put standbyState into shared memory */
+    HotStandbyState		polar_hot_standby_state;
+
+    /* POLAR: Protected by info_lck */
+    XLogRecPtr	ConsensusCommit;			/* last byte + 1 consensus committed */
+    /* POLAR end */
+
+    /*
+     * POLAR: state change info for PostMaster, Protected by pm_state_lck.
+     */
+    bool	pmInStateChange; /* set by Consensus main thread and reset by PostMaster */
+    slock_t		pm_state_lck;		/* locks shared variables shown above */
+
+    /*
+     * POLAR: state change for StartupProcess, modified by PostMaster
+     * Protected by info_lck.
+     */
+    char		PrimaryConnInfoStr[MAXCONNINFO];
+    uint64  consensusTerm;
+    uint64  consensusLogTerm;
+    XLogRecPtr consensusLogUpto;
+    TimeLineID consensusLogTLI;
+    bool  	becameLeader;
+    bool  	inLeaderState;
+    slock_t	consens_state_lck;		/* locks shared variables shown above */
 } XLogCtlData;
 
 static XLogCtlData *XLogCtl = NULL;
@@ -973,6 +1012,40 @@ static void WALInsertLockAcquireExclusive(void);
 static void WALInsertLockRelease(void);
 static void WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt);
 
+bool polar_in_replica_mode(void) {
+    return false;
+}
+
+XLogRecPtr polar_get_consistent_lsn(void) {
+    return InvalidXLogRecPtr;
+}
+
+/*
+ * POLAR: get startup replay end ptr including replaying now
+ */
+XLogRecPtr
+polar_get_replay_end_rec_ptr(TimeLineID *replayTLI)
+{
+    XLogRecPtr	recptr;
+    TimeLineID	tli;
+
+    SpinLockAcquire(&XLogCtl->info_lck);
+    recptr = XLogCtl->replayEndRecPtr;
+    tli = XLogCtl->replayEndTLI;
+    SpinLockRelease(&XLogCtl->info_lck);
+
+    if (replayTLI)
+        *replayTLI = tli;
+    return recptr;
+}
+
+//Update
+XLogRecPtr
+polar_calc_min_used_lsn(bool is_contain_replication_slot)
+{
+    return InvalidXLogRecPtr;
+
+}
 /*
  * Insert an XLOG record represented by an already-constructed chain of data
  * chunks.  This is a low-level routine; to construct the WAL record header
@@ -2416,6 +2489,7 @@ XLogCheckpointNeeded(XLogSegNo new_segno)
 static void
 XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 {
+	printf("%s start, writeRqst = %ld\n", __func__ , WriteRqst.Write);
 	bool		ispartialpage;
 	bool		last_iteration;
 	bool		finishing_seg;
@@ -4331,6 +4405,8 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+	printf("%s %s %d targetLSN = %ld ,tid = %d\n", __func__ , __FILE__, __LINE__, xlogreader->EndRecPtr, gettid());
+	fflush(stdout);
 	XLogRecord *record;
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 
@@ -4905,6 +4981,7 @@ ReadControlFile(void)
 void
 UpdateControlFile(void)
 {
+    printf("%s %s %d , DataDir = %s\n", __func__ , __FILE__, __LINE__, DataDir);
 	update_controlfile(DataDir, ControlFile, true);
 }
 
@@ -6309,8 +6386,10 @@ CheckRequiredParameterValues(void)
 void
 StartupXLOG(void)
 {
-    if(IsRpcServer)
+	printf("%s %s %d , tid is %d\n", __func__ , __FILE__, __LINE__,gettid());
+	if(IsRpcServer)
         sleep(5);
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
 	bool		wasShutdown;
@@ -6341,6 +6420,7 @@ StartupXLOG(void)
 		   CurrentResourceOwner == AuxProcessResourceOwner);
 	CurrentResourceOwner = AuxProcessResourceOwner;
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * Check that contents look valid.
 	 */
@@ -6406,6 +6486,7 @@ StartupXLOG(void)
 		pg_usleep(60000000L);
 #endif
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * Verify that pg_wal and pg_wal/archive_status exist.  In cases where
 	 * someone has performed a copy for PITR, these directories may have been
@@ -6444,6 +6525,7 @@ StartupXLOG(void)
 	else
 		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * Check for signal files, and if so set up state for offline recovery
 	 */
@@ -6512,6 +6594,7 @@ StartupXLOG(void)
 	replay_image_masked = (char *) palloc(BLCKSZ);
 	master_image_masked = (char *) palloc(BLCKSZ);
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	if (read_backup_label(&checkPointLoc, &backupEndRequired,
 						  &backupFromStandby))
 	{
@@ -6687,6 +6770,7 @@ StartupXLOG(void)
 		wasShutdown = ((record->xl_info & ~XLR_INFO_MASK) == XLOG_CHECKPOINT_SHUTDOWN);
 	}
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * Clear out any old relcache cache files.  This is *necessary* if we do
 	 * any WAL replay, since that would probably result in the cache files
@@ -6728,6 +6812,7 @@ StartupXLOG(void)
 						   (uint32) (switchpoint >> 32),
 						   (uint32) switchpoint)));
 	}
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 
 	/*
 	 * The min recovery point should be part of the requested timeline's
@@ -6782,6 +6867,7 @@ StartupXLOG(void)
 					 checkPoint.newestCommitTsXid);
 	XLogCtl->ckptFullXid = checkPoint.nextFullXid;
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * Initialize replication slots, before there's a chance to remove
 	 * required resources.
@@ -6824,6 +6910,7 @@ StartupXLOG(void)
 	else
 		XLogCtl->unloggedLSN = FirstNormalUnloggedLSN;
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/*
 	 * We must replay WAL entries using the same TimeLineID they were created
 	 * under, so temporarily adopt the TLI indicated by the checkpoint (see
@@ -6855,6 +6942,7 @@ StartupXLOG(void)
 	 */
 	restoreTwoPhaseData();
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	lastFullPageWrites = checkPoint.fullPageWrites;
 
 	RedoRecPtr = XLogCtl->RedoRecPtr = XLogCtl->Insert.RedoRecPtr = checkPoint.redo;
@@ -6884,6 +6972,7 @@ StartupXLOG(void)
 		InRecovery = true;
 	}
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 	/* REDO */
 	if (InRecovery)
 	{
@@ -6932,6 +7021,7 @@ StartupXLOG(void)
 				ControlFile->minRecoveryPointTLI = checkPoint.ThisTimeLineID;
 			}
 		}
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 
 		/*
 		 * Set backupStartPoint if we're starting recovery from a base backup.
@@ -7174,6 +7264,8 @@ StartupXLOG(void)
 			/* just have to read next record after CheckPoint */
 			record = ReadRecord(xlogreader, LOG, false);
 		}
+        printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 
 		if (record != NULL)
 		{
@@ -7191,6 +7283,8 @@ StartupXLOG(void)
 			 */
 			do
 			{
+				printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+				fflush(stdout);
 				bool		switchedTLI = false;
 
 #ifdef WAL_DEBUG
@@ -7278,6 +7372,8 @@ StartupXLOG(void)
 				 * recovery point's TLI if recovery stops after this record,
 				 * is set correctly.
 				 */
+				printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+				fflush(stdout);
 				if (record->xl_rmid == RM_XLOG_ID)
 				{
 					TimeLineID	newTLI = ThisTimeLineID;
@@ -7329,9 +7425,20 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
+				const char*id=NULL;
+				id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+                if (id)
+				    printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+                else
+                    printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+
+				fflush(stdout);
+
 				/* Now apply the WAL record itself */
 				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
 
+				printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+				fflush(stdout);
 				/*
 				 * After redo, check whether the backup pages associated with
 				 * the WAL record are consistent with the existing pages. This
@@ -12128,6 +12235,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 
 	for (;;)
 	{
+		printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
 		XLogSource	oldSource = currentSource;
 		bool		startWalReceiver = false;
 
@@ -12412,6 +12520,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						XLogRecPtr	latestChunkStart;
 
 						flushedUpto = GetWalRcvFlushRecPtr(&latestChunkStart, &receiveTLI);
+						printf("%s %d, flushedUpto = %ld, RecPtr = %ld\n", __func__ , __LINE__, flushedUpto, RecPtr);
 						if (RecPtr < flushedUpto && receiveTLI == curFileTLI)
 						{
 							havedata = true;
@@ -12486,6 +12595,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						streaming_reply_sent = true;
 					}
 
+					printf("%s %d, start wait_latch\n", __func__ , __LINE__);
 					/*
 					 * Wait for more WAL to arrive. Time out after 5 seconds
 					 * to react to a trigger file promptly and to check if the

@@ -8,7 +8,7 @@
  * exit-time cleanup for either a postmaster or a backend.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2018, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/ipc.h
@@ -20,6 +20,18 @@
 
 typedef void (*pg_on_exit_callback) (int code, Datum arg);
 typedef void (*shmem_startup_hook_type) (void);
+
+/* POLAR: hook for backend memory context */
+typedef enum
+{
+	POLAR_SET_SIGNAL_MCTX,
+	POLAR_CHECK_SIGNAL_MCTX,
+	POLAR_SET_LOGGING_PLAN_OF_RUNNING_QUERY,
+	POLAR_CHECK_LOGGING_PLAN_OF_RUNNING_QUERY
+} PolarHookActionType;
+typedef void (*polar_monitor_hook_type) (PolarHookActionType action);
+
+typedef void (*polar_heap_profile_hook_type) (void);
 
 /*----------
  * API for handling cleanup that must occur during either ereport(ERROR)
@@ -77,5 +89,12 @@ extern void on_exit_reset(void);
 extern PGDLLIMPORT shmem_startup_hook_type shmem_startup_hook;
 
 extern void CreateSharedMemoryAndSemaphores(void);
+/* POLAR */
+extern PGDLLIMPORT polar_monitor_hook_type polar_monitor_hook;
+extern PGDLLIMPORT polar_heap_profile_hook_type polar_heap_profile_hook;
+
+extern void polar_unlink_shmem_stat_file(int status, Datum arg);
+extern bool polar_check_before_shmem_exit(pg_on_exit_callback function, Datum arg, bool print_backtrace);
+/* POLAR end */
 
 #endif							/* IPC_H */

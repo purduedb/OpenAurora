@@ -26,6 +26,7 @@ OBJS = \
 	spccache.o \
 	syscache.o \
 	ts_cache.o \
-	typcache.o
+	typcache.o \
+	polar_local_cache.o
 
 include $(top_srcdir)/src/backend/common.mk

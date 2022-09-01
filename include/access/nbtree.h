@@ -1145,4 +1145,7 @@ extern IndexBuildResult *btbuild(Relation heap, Relation index,
 								 struct IndexInfo *indexInfo);
 extern void _bt_parallel_build_main(dsm_segment *seg, shm_toc *toc);
 
+/* POLAR: change static to extern */
+extern void _bt_restore_page(Page page, char *from, int len);
+extern TransactionId btree_xlog_delete_get_latestRemovedXid(XLogReaderState *record);
 #endif							/* NBTREE_H */

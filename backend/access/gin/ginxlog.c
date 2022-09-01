@@ -21,7 +21,7 @@
 
 static MemoryContext opCtx;		/* working memory for operations */
 
-static void
+void
 ginRedoClearIncompleteSplit(XLogReaderState *record, uint8 block_id)
 {
 	XLogRecPtr	lsn = record->EndRecPtr;
@@ -67,7 +67,7 @@ ginRedoCreatePTree(XLogReaderState *record)
 	UnlockReleaseBuffer(buffer);
 }
 
-static void
+void
 ginRedoInsertEntry(Buffer buffer, bool isLeaf, BlockNumber rightblkno, void *rdata)
 {
 	Page		page = BufferGetPage(buffer);
@@ -113,7 +113,7 @@ ginRedoInsertEntry(Buffer buffer, bool isLeaf, BlockNumber rightblkno, void *rda
  * versions of segments.  Thanks to that we don't bother about moving page data
  * in-place.
  */
-static void
+ void
 ginRedoRecompress(Page page, ginxlogRecompressDataLeaf *data)
 {
 	int			actionno;
@@ -315,7 +315,7 @@ ginRedoRecompress(Page page, ginxlogRecompressDataLeaf *data)
 	GinDataPageSetDataSize(page, totalsize);
 }
 
-static void
+void
 ginRedoInsertData(Buffer buffer, bool isLeaf, BlockNumber rightblkno, void *rdata)
 {
 	Page		page = BufferGetPage(buffer);

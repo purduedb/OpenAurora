@@ -530,6 +530,11 @@ typedef uint32 CommandId;
 #define InvalidCommandId	(~(CommandId)0)
 
 /*
+ * POLAR
+ * 64 bit commit sequence number
+ */
+typedef uint64 CommitSeqNo;
+/*
  * Array indexing support
  */
 #define MAXDIM 6

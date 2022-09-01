@@ -58,7 +58,7 @@
 #include "pgstat.h"
 #include "storage/fd.h"
 #include "storage/shmem.h"
-
+#include "utils/guc.h"
 #define SlruFileName(ctl, path, seg) \
 	snprintf(path, MAXPGPATH, "%s/%04X", (ctl)->Dir, seg)
 
@@ -122,6 +122,9 @@ typedef enum
 static SlruErrorCause slru_errcause;
 static int	slru_errno;
 
+int n_polar_slru_stats = 0;
+const polar_slru_stat *polar_slru_stats[POLAR_SLRU_STATS_NUM];
+
 
 static void SimpleLruZeroLSNs(SlruCtl ctl, int slotno);
 static void SimpleLruWaitIO(SlruCtl ctl, int slotno);
@@ -136,6 +139,20 @@ static bool SlruScanDirCbDeleteCutoff(SlruCtl ctl, char *filename,
 									  int segpage, void *data);
 static void SlruInternalDeleteSegment(SlruCtl ctl, char *filename);
 
+/* POLAR */
+static void polar_slru_file_name_by_seg(SlruCtl ctl, char *path, int seg);
+static void polar_slru_file_name_by_name(SlruCtl ctl, char *path, char *filename);
+static void polar_slru_file_dir(SlruCtl ctl, char *path);
+static bool polar_slru_local_cache_read_page(SlruCtl ctl, int pageno, int slotno);
+static bool polar_slru_local_cache_write_page(SlruCtl ctl, int pageno, int slotno);
+
+#define SlruFileName(a,b,c)			polar_slru_file_name_by_seg(a,b,c)
+
+/* POLAR: hash table */
+#define SlruHashSlots(nslots)       (nslots * 2)
+#define VICTIM_WINDOW				128      /* victim slot window */
+static inline void polar_slru_set_page_status(SlruShared shared, int slotno, SlruPageStatus pagestatus);
+static void polar_slru_hash_init(SlruShared shared, int nslots, const char *name);
 /*
  * Initialization of shared memory
  */
@@ -1460,4 +1477,308 @@ SlruScanDirectory(SlruCtl ctl, SlruScanCallback callback, void *data)
 	FreeDir(cldir);
 
 	return retval;
+}
+
+/*
+ * POLAR: Extend from SlruFileName
+ */
+static void
+polar_slru_file_name_by_seg(SlruCtl ctl, char *path, int seg)
+{
+//    if (POLAR_SLRU_FILE_IN_SHARED_STORAGE())
+//        snprintf(path, MAXPGPATH, "%s/%s/%04X", polar_datadir, (ctl)->Dir, seg);
+//    else
+        snprintf(path, MAXPGPATH, "%s/%04X", (ctl)->Dir, seg);
+
+    return;
+}
+
+static void
+polar_slru_file_dir(SlruCtl ctl, char *path)
+{
+//    if (POLAR_SLRU_FILE_IN_SHARED_STORAGE())
+//        snprintf(path, MAXPGPATH, "%s/%s", polar_datadir, (ctl)->Dir);
+//    else
+        snprintf(path, MAXPGPATH, "%s", (ctl)->Dir);
+
+    return;
+}
+
+static void
+polar_slru_file_name_by_name(SlruCtl ctl, char *path, char *filename)
+{
+//    if (POLAR_SLRU_FILE_IN_SHARED_STORAGE())
+//        snprintf(path, MAXPGPATH, "%s/%s/%s", polar_datadir, ctl->Dir, filename);
+//    else
+        snprintf(path, MAXPGPATH, "%s/%s", ctl->Dir, filename);
+
+    return;
+}
+
+/*
+ * For primary, some slru files, such as pg_xact, pg_commit_ts and pg_multixact,
+ * are on the shared storage, for replica, all slru files are on the local storage.
+ */
+bool
+polar_slru_file_in_shared_storage(bool in_shared_storage)
+{
+//    if (polar_in_replica_mode() || !polar_enable_shared_storage_mode)
+//        return false;
+//    else
+//        return in_shared_storage;
+    return false;
+}
+
+/*
+ * POLAR: Scan SimpleLru and force to invalid specific page
+ */
+void
+polar_slru_invalid_page(SlruCtl ctl, int pageno)
+{
+    SlruShared	shared = ctl->shared;
+    int			slotno;
+
+    LWLockAcquire(shared->ControlLock, LW_EXCLUSIVE);
+    if (polar_enable_slru_hash_index)
+    {
+        for (;;)
+        {
+            polar_slru_hash_entry *entry;
+            entry = hash_search(shared->polar_hash_index, (void *) &pageno,
+                                HASH_FIND, NULL);
+
+            if (entry != NULL)
+            {
+                slotno = entry->slotno;
+
+                if (shared->page_status[slotno] == SLRU_PAGE_READ_IN_PROGRESS ||
+                    shared->page_status[slotno] == SLRU_PAGE_WRITE_IN_PROGRESS)
+                {
+                    SimpleLruWaitIO(ctl, slotno);
+                    /* POLAR: Now we must recheck from the top */
+                    continue;
+                }
+
+                Assert(shared->page_status[slotno] == SLRU_PAGE_EMPTY ||
+                       (shared->page_status[slotno] == SLRU_PAGE_VALID &&
+                        !shared->page_dirty[slotno]));
+
+                if (shared->page_status[slotno] != SLRU_PAGE_EMPTY)
+                {
+                    if (hash_search(shared->polar_hash_index,
+                                    (void *) &(shared->page_number[slotno]),
+                                    HASH_REMOVE, NULL) == NULL)
+                        elog(FATAL, "slru hash table corrupted");
+
+                    polar_successor_list_push(shared->polar_free_list, slotno);
+                }
+
+                polar_slru_set_page_status(shared, slotno, SLRU_PAGE_EMPTY);
+                shared->page_dirty[slotno] = false;
+                shared->page_lru_count[slotno] = 0;
+            }
+
+            break;
+        }
+    }
+    else
+    {
+        for (slotno = 0; slotno < shared->num_slots; slotno++)
+        {
+            if (shared->page_number[slotno] == pageno)
+            {
+                if (shared->page_status[slotno] == SLRU_PAGE_READ_IN_PROGRESS ||
+                    shared->page_status[slotno] == SLRU_PAGE_WRITE_IN_PROGRESS)
+                {
+                    SimpleLruWaitIO(ctl, slotno);
+                    slotno = 0;
+                    /* POLAR: Now we must recheck from the top */
+                    continue;
+                }
+
+                Assert(shared->page_status[slotno] == SLRU_PAGE_EMPTY ||
+                       (shared->page_status[slotno] == SLRU_PAGE_VALID &&
+                        !shared->page_dirty[slotno]));
+
+                polar_slru_set_page_status(shared, slotno, SLRU_PAGE_EMPTY);
+                shared->page_dirty[slotno] = false;
+                shared->page_lru_count[slotno] = 0;
+                break;
+            }
+        }
+    }
+
+    LWLockRelease(shared->ControlLock);
+}
+
+/*
+ * POLAR: Wrapper of SlruInternalWritePage, for external callers to append data to segment file.
+ * fdata is always passed a NULL here.
+ * If we know the segment file does not exists then set update to be false, otherwise set to be true.
+ */
+//Updated
+void
+polar_slru_append_page(SlruCtl ctl, int slotno, bool update)
+{
+//    SlruInternalWritePage(ctl, slotno, NULL, update);
+    SlruInternalWritePage(ctl, slotno, NULL);
+}
+
+/*
+ * POLAR:Check whether page exists in file
+ */
+bool
+polar_slru_page_physical_exists(SlruCtl ctl, int pageno)
+{
+    int			segno = pageno / SLRU_PAGES_PER_SEGMENT;
+    int			rpageno = pageno % SLRU_PAGES_PER_SEGMENT;
+    int			offset = rpageno * BLCKSZ;
+    char		path[MAXPGPATH];
+    struct stat fst;
+
+    SlruFileName(ctl, path, segno);
+
+    if (stat(path, &fst) < 0)
+        return false;
+
+    return fst.st_size >= (offset + BLCKSZ);
+}
+
+static inline void
+polar_slru_set_page_status(SlruShared shared, int slotno, SlruPageStatus pagestatus)
+{
+    polar_slru_stat *stat = &shared->stat;
+    SlruPageStatus oldstatus = shared->page_status[slotno];
+
+    if (oldstatus != pagestatus)
+    {
+        stat->n_page_status_stat[oldstatus]--;
+        stat->n_page_status_stat[pagestatus]++;
+    }
+
+    shared->page_status[slotno] = pagestatus;
+}
+
+static void
+polar_slru_hash_init(SlruShared shared, int nslots, const char *name)
+{
+#define POLAR_SLRU_HASH_NAME " slru hash index"
+    HASHCTL 	info;
+    char *hash_name;
+    size_t name_size = strlen(name) + strlen(POLAR_SLRU_HASH_NAME) + 1;
+
+    hash_name = palloc(name_size);
+    memset(&info, 0, sizeof(info));
+
+    info.keysize = sizeof(int);
+    info.entrysize = sizeof(polar_slru_hash_entry);
+
+    snprintf(hash_name, name_size, "%s%s", name, POLAR_SLRU_HASH_NAME);
+
+    shared->polar_hash_index = ShmemInitHash(hash_name,
+                                             nslots, nslots, &info,
+                                             HASH_ELEM | HASH_BLOBS);
+    pfree(hash_name);
+}
+
+void
+polar_slru_reg_local_cache(SlruCtl ctl, polar_local_cache cache)
+{
+    SlruShared shared = ctl->shared;
+
+    shared->polar_cache = cache;
+}
+
+static bool
+polar_slru_local_cache_read_page(SlruCtl ctl, int pageno, int slotno)
+{
+    SlruShared	shared = ctl->shared;
+    int			segno = pageno / SLRU_PAGES_PER_SEGMENT;
+    int			rpageno = pageno % SLRU_PAGES_PER_SEGMENT;
+    int			offset = rpageno * BLCKSZ;
+    polar_cache_io_error io_error;
+
+    if (!polar_local_cache_read(shared->polar_cache, segno, offset,
+                                shared->page_buffer[slotno], BLCKSZ, &io_error))
+    {
+        /*
+           * if we are InRecovery, allow the case where the file doesn't exist and where
+           * the page beyond the end of the file. (see notes in SlruPhysicalWritePage).
+           */
+        if ((!POLAR_SEGMENT_NOT_EXISTS(&io_error) &&
+             !POLAR_SEGMENT_BEYOND_END(&io_error)) ||
+            !InRecovery)
+        {
+            polar_local_cache_report_error(shared->polar_cache, &io_error, WARNING);
+//            slru_errcause = SLRU_CACHE_READ_FAILED;
+            return false;
+        }
+
+        polar_local_cache_report_error(shared->polar_cache, &io_error, LOG);
+        MemSet(shared->page_buffer[slotno], 0, BLCKSZ);
+    }
+
+    return true;
+}
+
+static bool
+polar_slru_local_cache_write_page(SlruCtl ctl, int pageno, int slotno)
+{
+    SlruShared	shared = ctl->shared;
+    int			segno = pageno / SLRU_PAGES_PER_SEGMENT;
+    int			rpageno = pageno % SLRU_PAGES_PER_SEGMENT;
+    int			offset = rpageno * BLCKSZ;
+    polar_cache_io_error io_error;
+
+    if (!polar_local_cache_write(shared->polar_cache, segno,
+                                 offset, shared->page_buffer[slotno], BLCKSZ, &io_error))
+    {
+        polar_local_cache_report_error(shared->polar_cache, &io_error, WARNING);
+//        slru_errcause = SLRU_CACHE_WRITE_FAILED;
+        return false;
+    }
+
+    return true;
+}
+
+static void
+polar_slru_stats_init(void)
+{
+    MemSet(polar_slru_stats, 0, sizeof(polar_slru_stat *) * POLAR_SLRU_STATS_NUM);
+    n_polar_slru_stats = 0;
+}
+
+void
+polar_slru_init(void)
+{
+    if (IsUnderPostmaster)
+        return;
+
+    polar_slru_stats_init();
+}
+
+/* POLAR: promote slru if local cache exists, copy data from local storage to shared storage */
+void
+polar_slru_promote(SlruCtl ctl)
+{
+    polar_local_cache cache = ctl->shared->polar_cache;
+    uint32 io_permission = POLAR_CACHE_LOCAL_FILE_READ | POLAR_CACHE_LOCAL_FILE_WRITE |
+                           POLAR_CACHE_SHARED_FILE_READ | POLAR_CACHE_SHARED_FILE_WRITE;
+    polar_cache_io_error io_error;
+
+    if (!cache)
+        elog(FATAL, "There's no local cache, so we can not promote");
+
+    if (!polar_local_cache_set_io_permission(cache, io_permission, &io_error))
+        polar_local_cache_report_error(cache, &io_error, FATAL);
+    ctl->shared->polar_file_in_shared_storage = true;
+}
+
+/* POLAR: remove slru local cache file */
+void
+polar_slru_remove_local_cache_file(SlruCtl ctl)
+{
+    SlruShared shared = ctl->shared;
+    if (shared && shared->polar_cache)
+        polar_local_cache_move_trash(shared->polar_cache->dir_name);
 }

@@ -1,0 +1,6 @@
+src/backend/polar_flashback/README
+
+Notes About Flashback Log
+======================================
+Flashback Log store the origin page infomations. It can be used
+to solve partial write problem.

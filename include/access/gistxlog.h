@@ -111,4 +111,7 @@ extern void gist_xlog_startup(void);
 extern void gist_xlog_cleanup(void);
 extern void gist_mask(char *pagedata, BlockNumber blkno);
 
+/* POLAR: change static to extern */
+extern IndexTuple *decodePageSplitRecord(char *begin, int len, int *n);
+extern TransactionId gistRedoPageUpdateRecordGetLatestRemovedXid(XLogReaderState *record);
 #endif

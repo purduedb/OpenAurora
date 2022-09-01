@@ -327,4 +327,23 @@ extern bool InArchiveRecovery;
 extern bool StandbyMode;
 extern char *recoveryRestoreCommand;
 
+
+
+/* POLAR: DMA */
+extern void polar_dma_xlog_archive_notify(const char *xlog, bool local);
+/* POLAR end */
+
+/* POLAR: FRONTEND use macro definition (old way), BACKEND(normal mode or polardb mode) use function define */
+#ifndef FRONTEND
+extern void polar_backup_history_file_path(char *path, TimeLineID tli, XLogSegNo logSegNo, XLogRecPtr startpoint, int wal_segsz_bytes);
+extern void polar_status_file_path(char *path, const char *xlog, char *suffix);
+extern void polar_tl_history_file_path(char *path, TimeLineID tli);
+extern void polar_xLog_file_path(char *path, TimeLineID tli, XLogSegNo logSegNo, int wal_segsz_bytes);
+extern XLogRecData *polar_get_main_data_head(void);
+extern uint32 polar_get_main_data_len(void);
+extern void polar_set_main_data(void *data, uint32 len);
+extern void polar_reset_main_data(void);
+
+#endif
+
 #endif							/* XLOG_INTERNAL_H */

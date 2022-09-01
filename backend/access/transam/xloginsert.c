@@ -74,6 +74,9 @@ static XLogRecData *mainrdata_head;
 static XLogRecData *mainrdata_last = (XLogRecData *) &mainrdata_head;
 static uint32 mainrdata_len;	/* total # of bytes in chain */
 
+/* POLAR: save main data addresss and length temporarily. */
+static XLogRecData polar_mainrdata;
+
 /* flags for the in-progress insertion */
 static uint8 curinsert_flags = 0;
 
@@ -1148,4 +1151,67 @@ InitXLogInsert(void)
 	if (hdr_scratch == NULL)
 		hdr_scratch = MemoryContextAllocZero(xloginsert_cxt,
 											 HEADER_SCRATCH_SIZE);
+}
+
+/* POLAR: Return main data head */
+XLogRecData *
+polar_get_main_data_head(void)
+{
+    Assert(mainrdata_head != NULL);
+    return mainrdata_head;
+}
+
+/* POLAR: Return main data len */
+uint32
+polar_get_main_data_len(void)
+{
+    return mainrdata_len;
+}
+
+/* POLAR: Add a temporary XLogRecData to save main data address and length. */
+void
+polar_set_main_data(void *data, uint32 len)
+{
+    Assert(mainrdata_last == (XLogRecData *) &mainrdata_head);
+    Assert(mainrdata_len == 0);
+    polar_mainrdata.next = NULL;
+    polar_mainrdata.data = data;
+    polar_mainrdata.len = len;
+    mainrdata_last->next = &polar_mainrdata;
+    mainrdata_last = &polar_mainrdata;
+    mainrdata_len += len;
+}
+
+/* POLAR: Rset mainrdata_head and mainrdata_last. */
+void
+polar_reset_main_data(void)
+{
+    mainrdata_len = 0;
+    mainrdata_head = NULL;
+    mainrdata_last = (XLogRecData *) &mainrdata_head;
+}
+
+/*
+ * POLAR: compress the block in log (xlog or flashback log).
+ * A external function of XLogCompressBackupBlock.
+ */
+//XI Updated
+bool
+polar_compress_block_in_log(char *page, uint16 hole_offset, uint16 hole_length,
+                            char *dest, uint16 *dlen, uint32 extra_bytes_with_hole)
+{
+    return XLogCompressBackupBlock(page, hole_offset, hole_length,
+                                   dest, dlen);
+}
+
+/*
+ * POLAR: Insert the flashback log from WAL registered buffers.
+ *
+ * NB: Must call it after reserver the WAL space which means
+ * the relative changes of the data are done in database.
+ */
+//UPDATED
+void
+polar_flashback_log_insert_from_xlog(XLogRecPtr redo_lsn, uint8 xl_info)
+{
 }

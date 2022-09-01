@@ -5,7 +5,7 @@
  *	  strategy.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2018, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/buf_internals.h
@@ -15,15 +15,16 @@
 #ifndef BUFMGR_INTERNALS_H
 #define BUFMGR_INTERNALS_H
 
-#include "port/atomics.h"
 #include "storage/buf.h"
 #include "storage/bufmgr.h"
 #include "storage/latch.h"
 #include "storage/lwlock.h"
 #include "storage/shmem.h"
 #include "storage/smgr.h"
+#include "port/atomics.h"
 #include "storage/spin.h"
 #include "utils/relcache.h"
+
 
 /*
  * Buffer state is a single 32-bit variable where following data is combined.
@@ -51,7 +52,7 @@
 /*
  * Flags for buffer descriptors
  *
- * Note: BM_TAG_VALID essentially means that there is a buffer hashtable
+ * Note: TAG_VALID essentially means that there is a buffer hashtable
  * entry associated with the buffer's tag.
  */
 #define BM_LOCKED				(1U << 22)	/* buffer header is locked */
@@ -74,6 +75,14 @@
  * value to be very large.
  */
 #define BM_MAX_USAGE_COUNT	5
+
+/*
+ * POLAR: polar_flags
+ */
+#define POLAR_BUF_OLDEST_LSN_IS_FAKE		1
+#define POLAR_BUF_FIRST_TOUCHED_AFTER_COPY	(1U << 1)
+#define POLAR_BUF_UNRECOVERABLE             (1U << 2)
+#define POLAR_BUF_REUSED                    (1U << 3)
 
 /*
  * Buffer tag identifies which disk block the buffer contains.
@@ -110,10 +119,14 @@ typedef struct buftag
 	(a).blockNum = (xx_blockNum) \
 )
 
+/*
+ * POLAR: Compare blockNum first to save comparing time.
+ * It's high probability that blockNum is different.
+ */
 #define BUFFERTAGS_EQUAL(a,b) \
 ( \
-	RelFileNodeEquals((a).rnode, (b).rnode) && \
 	(a).blockNum == (b).blockNum && \
+	RelFileNodeEquals((a).rnode, (b).rnode) && \
 	(a).forkNum == (b).forkNum \
 )
 
@@ -130,6 +143,9 @@ typedef struct buftag
 		BufTableHashPartition(hashcode)].lock)
 #define BufMappingPartitionLockByIndex(i) \
 	(&MainLWLockArray[BUFFER_MAPPING_LWLOCK_OFFSET + (i)].lock)
+
+/* POLAR */
+typedef struct CopyBufferDesc CopyBufferDesc;
 
 /*
  *	BufferDesc -- shared descriptor/state data for a single shared buffer.
@@ -186,6 +202,22 @@ typedef struct BufferDesc
 	int			freeNext;		/* link in freelist chain */
 
 	LWLock		content_lock;	/* to lock access to buffer contents */
+
+	/* POLAR */
+	int  		flush_next;      /* link to next dirty buffer */
+	int  		flush_prev;      /* link to prev dirty buffer */
+	XLogRecPtr	oldest_lsn;      /* the first lsn which marked this buffer dirty */
+	/*
+	 * If a buffer can not be flushed on primary because its latest modification
+	 * lsn > oldest apply lsn, in order to advance the consistent lsn, a copy
+	 * is made. So copy_buffer is used to point to its copied buffer of the
+	 * buffer.
+	 */
+	CopyBufferDesc	*copy_buffer;
+	uint8		polar_flags;
+	uint16		recently_modified_count;
+	/* POLAR: record buffer redo state */
+	pg_atomic_uint32 polar_redo_state;
 } BufferDesc;
 
 /*
@@ -203,7 +235,7 @@ typedef struct BufferDesc
  * Note that local buffer descriptors aren't forced to be aligned - as there's
  * no concurrent access to those it's unlikely to be beneficial.
  *
- * We use a 64-byte cache line size here, because that's the most common
+ * We use 64bit as the cache line size here, because that's the most common
  * size. Making it bigger would be a waste of memory. Even if running on a
  * platform with either 32 or 128 byte line sizes, it's good to align to
  * boundaries and avoid false sharing.
@@ -306,10 +338,10 @@ extern void ScheduleBufferTagForWriteback(WritebackContext *context, BufferTag *
 
 /* freelist.c */
 extern BufferDesc *StrategyGetBuffer(BufferAccessStrategy strategy,
-									 uint32 *buf_state);
+				  uint32 *buf_state);
 extern void StrategyFreeBuffer(BufferDesc *buf);
 extern bool StrategyRejectBuffer(BufferAccessStrategy strategy,
-								 BufferDesc *buf);
+					 BufferDesc *buf);
 
 extern int	StrategySyncStart(uint32 *complete_passes, uint32 *num_buf_alloc);
 extern void StrategyNotifyBgWriter(int bgwprocno);
@@ -331,10 +363,10 @@ extern PrefetchBufferResult PrefetchLocalBuffer(SMgrRelation smgr,
 												ForkNumber forkNum,
 												BlockNumber blockNum);
 extern BufferDesc *LocalBufferAlloc(SMgrRelation smgr, ForkNumber forkNum,
-									BlockNumber blockNum, bool *foundPtr);
+				 BlockNumber blockNum, bool *foundPtr);
 extern void MarkLocalBufferDirty(Buffer buffer);
 extern void DropRelFileNodeLocalBuffers(RelFileNode rnode, ForkNumber forkNum,
-										BlockNumber firstDelBlock);
+							BlockNumber firstDelBlock);
 extern void DropRelFileNodeAllLocalBuffers(RelFileNode rnode);
 extern void AtEOXact_LocalBuffers(bool isCommit);
 

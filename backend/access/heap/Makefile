@@ -22,6 +22,7 @@ OBJS = \
 	rewriteheap.o \
 	syncscan.o \
 	vacuumlazy.o \
-	visibilitymap.o
+	visibilitymap.o \
+	polar_visibilitymap.o
 
 include $(top_srcdir)/src/backend/common.mk

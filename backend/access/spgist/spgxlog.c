@@ -33,7 +33,7 @@ static MemoryContext opCtx;		/* working memory for operations */
  * At present, all we need is enough info to support spgFormDeadTuple(),
  * plus the isBuild flag.
  */
-static void
+void
 fillFakeState(SpGistState *state, spgxlogState stateSrc)
 {
 	memset(state, 0, sizeof(*state));
@@ -48,7 +48,7 @@ fillFakeState(SpGistState *state, spgxlogState stateSrc)
  * to replay SpGistPageAddNewItem() operations.  If the offset points at an
  * existing tuple, it had better be a placeholder tuple.
  */
-static void
+void
 addOrReplaceTuple(Page page, Item tuple, int size, OffsetNumber offset)
 {
 	if (offset <= PageGetMaxOffsetNumber(page))

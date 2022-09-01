@@ -17,6 +17,7 @@
 #include "lib/stringinfo.h"
 #include "storage/off.h"
 
+#include "storage/bufpage.h"
 /* XLOG record types for SPGiST */
  /* #define XLOG_SPGIST_CREATE_INDEX       0x00 */	/* not used anymore */
 #define XLOG_SPGIST_ADD_LEAF		0x10
@@ -247,6 +248,8 @@ typedef struct spgxlogVacuumRedirect
 
 #define SizeOfSpgxlogVacuumRedirect offsetof(spgxlogVacuumRedirect, offsets)
 
+struct SpGistState;
+
 extern void spg_redo(XLogReaderState *record);
 extern void spg_desc(StringInfo buf, XLogReaderState *record);
 extern const char *spg_identify(uint8 info);
@@ -254,4 +257,7 @@ extern void spg_xlog_startup(void);
 extern void spg_xlog_cleanup(void);
 extern void spg_mask(char *pagedata, BlockNumber blkno);
 
+/* POLAR: change static to extern */
+extern void addOrReplaceTuple(Page page, Item tuple, int size, OffsetNumber offset);
+extern void fillFakeState(struct SpGistState *state, spgxlogState stateSrc);
 #endif							/* SPGXLOG_H */

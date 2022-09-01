@@ -144,6 +144,23 @@ static void WalRcvSigHupHandler(SIGNAL_ARGS);
 static void WalRcvShutdownHandler(SIGNAL_ARGS);
 
 
+/* Set new consistent lsn received from primary node */
+void
+polar_set_primary_consistent_lsn(XLogRecPtr new_consistent_lsn)
+{
+    return;
+}
+
+/*
+ * Primay instance send the consistant lsn by walsender process,
+ * replica walreceiver process receives consistant lsn, and saves
+ * it in WalRcv->curr_primary_consistent_lsn
+ */
+XLogRecPtr
+polar_get_primary_consist_ptr(void)
+{
+    return InvalidXLogRecPtr;
+}
 /*
  * Process any interrupts the walreceiver process may have received.
  * This should be called any time the process's latch has become set.
