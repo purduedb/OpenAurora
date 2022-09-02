@@ -46,6 +46,7 @@
 #include "storage/spin.h"
 #include "utils/snapmgr.h"
 
+#include "access/polar_logindex_redo.h"
 /* GUCs */
 int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
 
@@ -147,6 +148,9 @@ CreateSharedMemoryAndSemaphores(void)
 		size = add_size(size, BTreeShmemSize());
 		size = add_size(size, SyncScanShmemSize());
 		size = add_size(size, AsyncShmemSize());
+
+        size = add_size(size, polar_logindex_redo_shmem_size());
+
 #ifdef EXEC_BACKEND
 		size = add_size(size, ShmemBackendArraySize());
 #endif
@@ -217,6 +221,10 @@ CreateSharedMemoryAndSemaphores(void)
 	SUBTRANSShmemInit();
 	MultiXactShmemInit();
 	InitBufferPool();
+    /*
+     * POLAR: Setup logindex
+     */
+    polar_logindex_redo_shmem_init();
 
 	/*
 	 * Set up lock manager

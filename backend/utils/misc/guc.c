@@ -202,7 +202,7 @@ bool	polar_enable_maxscale_support = true;
 bool	polar_enable_xlog_buffer = false;
 int	    polar_xlog_page_buffers;
 int     polar_xlog_queue_buffers;
-int     polar_logindex_mem_size;
+int     polar_logindex_mem_size = 128;
 int     polar_logindex_bloom_blocks;
 int     polar_rel_size_cache_blocks;
 int     polar_unit_test_mem_size;

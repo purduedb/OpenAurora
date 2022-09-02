@@ -263,6 +263,11 @@ polar_logindex_outdate_parse(polar_logindex_redo_ctl_t instance, XLogReaderState
 		tag = &vm_tag;
 	}
 
+    *page_lock = polar_logindex_mini_trans_lock(instance->mini_trans, tag, LW_EXCLUSIVE, NULL);
+    POLAR_LOGINDEX_MINI_TRANS_ADD_LSN(instance->wal_logindex_snapshot,
+                                      instance->mini_trans, *page_lock, state, tag);
+    return InvalidBuffer;
+
 	page_hash = BufTableHashCode(tag);
 	partition_lock = BufMappingPartitionLock(page_hash);
 
@@ -500,20 +505,20 @@ bool
 polar_logindex_parse_xlog(polar_logindex_redo_ctl_t instance, RmgrId rmid, XLogReaderState *state, XLogRecPtr redo_start_lsn, XLogRecPtr *mini_trans_lsn)
 {
 	bool redo = false;
-	static bool parse_valid = false;
-
-	if (unlikely(!parse_valid))
-	{
-		XLogRecPtr start_lsn = polar_logindex_redo_parse_start_lsn(instance);
-
-		if (!XLogRecPtrIsInvalid(start_lsn))
-			parse_valid = true;
-
-		if (!parse_valid)
-			return redo;
-
-		elog(LOG, "wal logindex parse from %lX", state->ReadRecPtr);
-	}
+//	static bool parse_valid = false;
+//
+//	if (unlikely(!parse_valid))
+//	{
+//		XLogRecPtr start_lsn = polar_logindex_redo_parse_start_lsn(instance);
+//
+//		if (!XLogRecPtrIsInvalid(start_lsn))
+//			parse_valid = true;
+//
+//		if (!parse_valid)
+//			return redo;
+//
+//		elog(LOG, "wal logindex parse from %lX", state->ReadRecPtr);
+//	}
 
 	Assert(mini_trans_lsn != NULL);
 	*mini_trans_lsn = InvalidXLogRecPtr;
@@ -522,13 +527,14 @@ polar_logindex_parse_xlog(polar_logindex_redo_ctl_t instance, RmgrId rmid, XLogR
 	 * Polar: In standby mode, parallel replay can be triggered only when
 	 * consistency reached, temporarily!
 	 */
-	if (polar_in_replica_mode() || (POLAR_IN_PARALLEL_REPLAY_STANDBY_MODE(polar_logindex_redo_instance) && reachedConsistency))
+//	if (polar_in_replica_mode() || (POLAR_IN_PARALLEL_REPLAY_STANDBY_MODE(polar_logindex_redo_instance) && reachedConsistency))
+    if (true)
 	{
 		if (polar_idx_redo[rmid].rm_polar_idx_parse != NULL)
 		{
 
-			if (unlikely(polar_trace_logindex_messages <= DEBUG4))
-				polar_xlog_log(LOG, state, __func__);
+//			if (unlikely(polar_trace_logindex_messages <= DEBUG4))
+//				polar_xlog_log(LOG, state, __func__);
 
 			polar_logindex_mini_trans_start(instance->mini_trans, state->EndRecPtr);
 			redo = polar_idx_redo[rmid].rm_polar_idx_parse(instance, state);
@@ -543,11 +549,11 @@ polar_logindex_parse_xlog(polar_logindex_redo_ctl_t instance, RmgrId rmid, XLogR
 		}
 	}
 	/* POLAR: create and save logindex in master and standby. */
-	else
-	{
-		if (polar_idx_redo[rmid].rm_polar_idx_save != NULL)
-			polar_idx_redo[rmid].rm_polar_idx_save(instance, state);
-	}
+//	else
+//	{
+//		if (polar_idx_redo[rmid].rm_polar_idx_save != NULL)
+//			polar_idx_redo[rmid].rm_polar_idx_save(instance, state);
+//	}
 
 	/*
 	 * POLAR: If current record lsn is smaller than redo start lsn, then we only parse xlog and create logindex.

@@ -80,6 +80,7 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 #include "tcop/storage_server.h"
+#include "access/polar_logindex_redo.h"
 
 extern uint32 bootstrap_data_checksum_version;
 
@@ -6410,6 +6411,9 @@ StartupXLOG(void)
 	XLogPageReadPrivate private;
 	bool		fast_promoted = false;
 	struct stat st;
+    XLogRecPtr  logindex_mini_trans_lsn,
+            redo_start_lsn,
+            xlog_read_from;
 
 	/*
 	 * We should have an aux process resource owner to use, and we should not
@@ -7255,12 +7259,36 @@ StartupXLOG(void)
 		 */
 		if (checkPoint.redo < RecPtr)
 		{
+		    if(IsRpcServer) {
+                /* POLAR: The valid lsn of log index start from check point */
+                redo_start_lsn = checkPoint.redo;
+                /*
+                 * POLAR: Init log index snapshot structure.
+                 *
+                 * Changing the xlog_read_from may lead to changing the TLI we read
+                 * from, so we update curFileTLI after change xlog_read_from.
+                 */
+                xlog_read_from = polar_logindex_redo_init(polar_logindex_redo_instance, redo_start_lsn, polar_in_replica_mode());
+		    }
+
 			/* back up to find the record */
 			XLogBeginRead(xlogreader, checkPoint.redo);
 			record = ReadRecord(xlogreader, PANIC, false);
 		}
 		else
 		{
+		    if(IsRpcServer) {
+                /* POLAR: The valid lsn of log index start from next record after CheckPoint */
+                redo_start_lsn = xlogreader->EndRecPtr;
+
+                /*
+                 * POLAR: Init log index snapshot structure.
+                 *
+                 * Changing the xlog_read_from may lead to changing the TLI we read
+                 * from, so we update curFileTLI after change xlog_read_from.
+                 */
+                xlog_read_from = polar_logindex_redo_init(polar_logindex_redo_instance, redo_start_lsn, polar_in_replica_mode());
+		    }
 			/* just have to read next record after CheckPoint */
 			record = ReadRecord(xlogreader, LOG, false);
 		}
@@ -7425,6 +7453,14 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
+                /*
+                 * POLAR: 1. Hook redo function. If it's handled by rm_polar_idx_redo function
+                 * rm_redo will not be called.
+                 * 2. logindex_mini_trans_lsn is output parameters.After we call polar_log_index_parse_xlog
+                 * if logindex_mini_trans_lsn is valid which means we parse xlog during a mini transaction.
+                 */
+                logindex_mini_trans_lsn = InvalidXLogRecPtr;
+
 				const char*id=NULL;
 				id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7435,7 +7471,12 @@ StartupXLOG(void)
 				fflush(stdout);
 
 				/* Now apply the WAL record itself */
-				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+//				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                /* Now apply the WAL record itself */
+                printf("%s %s %d ->logindex\n", __func__, __FILE__, __LINE__);
+                if (IsRpcServer && !polar_logindex_parse_xlog(polar_logindex_redo_instance, record->xl_rmid,
+                                               xlogreader, redo_start_lsn, &logindex_mini_trans_lsn))
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
 
 				printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 				fflush(stdout);
@@ -7460,6 +7501,9 @@ StartupXLOG(void)
 				XLogCtl->lastReplayedTLI = ThisTimeLineID;
 				SpinLockRelease(&XLogCtl->info_lck);
 
+
+                if (logindex_mini_trans_lsn != InvalidXLogRecPtr)
+                    polar_logindex_mini_trans_end(polar_logindex_redo_instance->mini_trans,  logindex_mini_trans_lsn);
 				/*
 				 * If rm_redo called XLogRequestWalReceiverReply, then we wake
 				 * up the receiver so that it notices the updated
