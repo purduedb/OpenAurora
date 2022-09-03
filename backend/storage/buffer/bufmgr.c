@@ -774,9 +774,9 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	if (isLocalBuf)
 	{
-		pthread_mutex_lock(buffer_mutex);
+		pthread_mutex_lock(&buffer_mutex);
 		bufHdr = LocalBufferAlloc(smgr, forkNum, blockNum, &found);
-		pthread_mutex_unlock(buffer_mutex);
+		pthread_mutex_unlock(&buffer_mutex);
 		if (found)
 			pgBufferUsage.local_blks_hit++;
 		else if (isExtend)
@@ -791,10 +791,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * lookup the buffer.  IO_IN_PROGRESS is set if the requested block is
 		 * not currently in memory.
 		 */
-		pthread_mutex_lock(buffer_mutex);
+		pthread_mutex_lock(&buffer_mutex);
 		bufHdr = BufferAlloc(smgr, relpersistence, forkNum, blockNum,
 							 strategy, &found);
-		pthread_mutex_unlock(buffer_mutex);
+		pthread_mutex_unlock(&buffer_mutex);
 		if (found)
 			pgBufferUsage.shared_blks_hit++;
 		else if (isExtend)
@@ -4770,9 +4770,9 @@ ReadBufferAndReplay_common(SMgrRelation smgr, char relpersistence, ForkNumber fo
 
 	/* Make sure we will have room to remember the buffer pin */
 	// replay_mutex 
-	pthread_mutex_lock(buffer_replay_mutex);
+	pthread_mutex_lock(&buffer_replay_mutex);
 	ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
-	pthread_mutex_unlock(buffer_replay_mutex);
+	pthread_mutex_unlock(&buffer_replay_mutex);
 
 	isExtend = (blockNum == P_NEW);
 
@@ -4790,9 +4790,9 @@ ReadBufferAndReplay_common(SMgrRelation smgr, char relpersistence, ForkNumber fo
 	if (isLocalBuf)
 	{
 		// replay_mutex to avoid allocating the same buffer
-		pthread_mutex_lock(buffer_replay_mutex);
+		pthread_mutex_lock(&buffer_replay_mutex);
 		bufHdr = LocalBufferAlloc(smgr, forkNum, blockNum, &found);
-		pthread_mutex_unlock(buffer_replay_mutex);
+		pthread_mutex_unlock(&buffer_replay_mutex);
 		if (found)
 			pgBufferUsage.local_blks_hit++;
 		else
@@ -4805,10 +4805,10 @@ ReadBufferAndReplay_common(SMgrRelation smgr, char relpersistence, ForkNumber fo
 		 * not currently in memory.
 		 */
 		// replay_mutex to avoid allocating the same buffer
-		pthread_mutex_lock(buffer_replay_mutex);
+		pthread_mutex_lock(&buffer_replay_mutex);
 		bufHdr = BufferAlloc(smgr, relpersistence, forkNum, blockNum,
 							 strategy, &found);
-		pthread_mutex_unlock(buffer_replay_mutex);
+		pthread_mutex_unlock(&buffer_replay_mutex);
 		if (found)
 			pgBufferUsage.shared_blks_hit++;
 		else
@@ -4981,7 +4981,7 @@ repeat_read:
 			}
 
 			/* check for garbage data */
-			if (!PageIsVerified((Page) bufBlock, forkNum, blockNum, smgr))
+			if (!PageIsVerified((Page) bufBlock, blockNum))
 			{
 				polar_checksum_err_action err_act = polar_handle_read_error_block(bufBlock, smgr, forkNum, blockNum,
 						mode, redo_action, &repeat_read_times, bufHdr);
@@ -5043,9 +5043,9 @@ repeat_read:
 			 * replica check above with polar_in_replica_mode().
 			 */
 			// replay_mutex to avoid replay the same buffer
-			pthread_mutex_lock(buffer_replay_mutex);
+			pthread_mutex_lock(&buffer_replay_mutex);
 			polar_apply_io_locked_page(bufHdr, replay_from, checkpoint_redo_lsn);
-			pthread_mutex_unlock(buffer_replay_mutex);
+			pthread_mutex_unlock(&buffer_replay_mutex);
 
 			POLAR_RESET_BACKEND_READ_MIN_LSN();
 		}
