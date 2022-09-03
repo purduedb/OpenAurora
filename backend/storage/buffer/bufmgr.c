@@ -32,6 +32,7 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "access/tableam.h"
 #include "access/xlog.h"
@@ -55,6 +56,19 @@
 #include "utils/timestamp.h"
 #include "storage/rpcclient.h"
 
+/* POLAR */
+#include "access/polar_logindex_redo.h"
+#include "polar_flashback/polar_flashback_log.h"
+#include "polar_flashback/polar_flashback_log_repair_page.h"
+#include "replication/walreceiver.h"
+#include "storage/checksum.h"
+//#include "storage/polar_fd.h"
+#include "storage/polar_bufmgr.h"
+#include "storage/polar_copybuf.h"
+#include "storage/polar_flushlist.h"
+#include "storage/polar_pbp.h"
+#include "utils/guc.h"
+
 
 /* Note: these two macros only work on shared buffers, not local ones! */
 #define BufHdrGetBlock(bufHdr)	((Block) (BufferBlocks + ((Size) (bufHdr)->buf_id) * BLCKSZ))
@@ -69,6 +83,20 @@
 #define BUF_REUSABLE			0x02
 
 #define RELS_BSEARCH_THRESHOLD		20
+
+typedef enum polar_redo_action
+{
+	POLAR_REDO_NO_ACTION,
+	POLAR_REDO_REPLAY_XLOG,
+	POLAR_REDO_MARK_OUTDATE
+} polar_redo_action;
+
+typedef enum polar_checksum_err_action
+{
+	POLAR_CHECKSUM_ERR_NO_ACTION,
+	POLAR_CHECKSUM_ERR_REPEAT_READ,		/* Repeat read this block */
+	POLAR_CHECKSUM_ERR_CHECKPOINT_REDO, /* Iterate logindex for this page from checkpoint and find the first FPI xlog to replay */
+} polar_checksum_err_action;
 
 typedef struct PrivateRefCountEntry
 {
