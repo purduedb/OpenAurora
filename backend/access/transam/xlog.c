@@ -7473,12 +7473,14 @@ StartupXLOG(void)
 				/* Now apply the WAL record itself */
 //				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                 /* Now apply the WAL record itself */
-                printf("%s %s %d ->logindex\n", __func__, __FILE__, __LINE__);
-                if (IsRpcServer && !polar_logindex_parse_xlog(polar_logindex_redo_instance, record->xl_rmid,
-                                               xlogreader, redo_start_lsn, &logindex_mini_trans_lsn))
-                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                if (IsRpcServer){
+					if(!polar_logindex_parse_xlog(polar_logindex_redo_instance, record->xl_rmid,
+												  xlogreader, redo_start_lsn, &logindex_mini_trans_lsn))
+					RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+				} else {
+					RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+				}
 
-				printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 				fflush(stdout);
 				/*
 				 * After redo, check whether the backup pages associated with
@@ -7502,7 +7504,7 @@ StartupXLOG(void)
 				SpinLockRelease(&XLogCtl->info_lck);
 
 
-                if (logindex_mini_trans_lsn != InvalidXLogRecPtr)
+                if (IsRpcServer && logindex_mini_trans_lsn != InvalidXLogRecPtr)
                     polar_logindex_mini_trans_end(polar_logindex_redo_instance->mini_trans,  logindex_mini_trans_lsn);
 				/*
 				 * If rm_redo called XLogRequestWalReceiverReply, then we wake

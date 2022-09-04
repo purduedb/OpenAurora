@@ -41,7 +41,7 @@ typedef uint32  polar_page_lock_t;
 #define MINI_TRANSACTION_HASH_SIZE   (31)
 #define MINI_TRANSACTION_TABLE_SIZE  (MINI_TRANSACTION_HASH_SIZE + MINI_TRANSACTION_HASH_SIZE/5)
 #define MINI_TRANSACTION_HASH_PAGE(tag) \
-	(tag_hash(tag, sizeof(BufferTag)) % MINI_TRANSACTION_HASH_SIZE)
+	((uint32)tag_hash(tag, sizeof(BufferTag)) % MINI_TRANSACTION_HASH_SIZE)
 
 typedef struct mini_trans_info_t
 {

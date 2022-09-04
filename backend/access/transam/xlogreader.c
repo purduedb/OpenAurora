@@ -1494,8 +1494,8 @@ XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
 {
 	DecodedBkpBlock *bkpb;
 
-	if (!record->blocks[block_id].in_use)
-		return false;
+//	if (!record->blocks[block_id].in_use)
+//		return false;
 
 	bkpb = &record->blocks[block_id];
 	if (rnode)

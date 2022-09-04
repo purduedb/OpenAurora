@@ -263,7 +263,6 @@ polar_logindex_outdate_parse(polar_logindex_redo_ctl_t instance, XLogReaderState
 		tag = &vm_tag;
 	}
 
-    *page_lock = polar_logindex_mini_trans_lock(instance->mini_trans, tag, LW_EXCLUSIVE, NULL);
     POLAR_LOGINDEX_MINI_TRANS_ADD_LSN(instance->wal_logindex_snapshot,
                                       instance->mini_trans, *page_lock, state, tag);
     return InvalidBuffer;
