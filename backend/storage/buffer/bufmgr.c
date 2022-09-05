@@ -5125,6 +5125,4 @@ ReadBufferAndReplayExtended(Relation reln, ForkNumber forkNum, BlockNumber block
 #ifndef POLAR_BUFMGR_C
 #define POLAR_BUFMGR_C
 
-#include "polar_bufmgr.c"
-
 #endif
