@@ -4706,7 +4706,7 @@ polar_handle_read_error_block(Block bufBlock, SMgrRelation smgr, ForkNumber fork
 
 		return POLAR_CHECKSUM_ERR_CHECKPOINT_REDO;
 	}
-	else if (polar_can_flog_repair(flog_instance, buf_desc, has_redo_action))
+	else if (false)//polar_can_flog_repair(flog_instance, buf_desc, has_redo_action))
 	{
 		/*
 		 * POLAR: When it is in recovery but not a ro node
@@ -4720,7 +4720,7 @@ polar_handle_read_error_block(Block bufBlock, SMgrRelation smgr, ForkNumber fork
 								 "get origin page in flashback log to repair it",
 								 blockNum, relpath)));
 		pfree(relpath);
-		polar_repair_partial_write(flog_instance, buf_desc);
+		//polar_repair_partial_write(flog_instance, buf_desc);
 		if (has_redo_action)
 			return POLAR_CHECKSUM_ERR_CHECKPOINT_REDO;
 		else
@@ -4773,10 +4773,10 @@ ReadBufferAndReplay_common(SMgrRelation smgr, char relpersistence, ForkNumber fo
 	polar_redo_action        redo_action;
 	int 		repeat_read_times = 0;
 
-	/* POLAR: make sure that buffer pool has been inited */
+	/* POLAR: make sure that buffer pool has been inited 
 	if (unlikely(!polar_buffer_pool_is_inited))
 		elog(PANIC, "buffer pool is not inited");
-	/* POLAR end */
+	 POLAR end */
 
 	*hit = false;
 
