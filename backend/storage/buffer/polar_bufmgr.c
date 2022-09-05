@@ -117,7 +117,7 @@ polar_get_exclusive_buffer_lock_delay(void)
 	while (current_delay_lsn > polar_get_max_xlog_delay_throughtput() && delay_times--)
 	{
 		elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed max gap, delay for %dms", delay_count);//polar_crash_recovery_rto_delay_count * delay_count);
-		pg_usleep(polar_crash_recovery_rto_delay_count * 1000 * delay_count);
+		pg_usleep(1000 * delay_count);//polar_crash_recovery_rto_delay_count * 1000 * delay_count);
 		delay_count = delay_count * 2;
 		PolarGlobalIOReadStats->force_delay++;
 	}
