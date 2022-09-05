@@ -4671,7 +4671,7 @@ polar_handle_read_error_block(Block bufBlock, SMgrRelation smgr, ForkNumber fork
 		pfree(relpath);
 		return POLAR_CHECKSUM_ERR_NO_ACTION;
 	}
-	else if (polar_has_partial_write && polar_in_replica_mode())
+	else if (false)//polar_has_partial_write && polar_in_replica_mode())
 	{
 		/*
 		 * POLAR: We enable full_page_writes if filesystem doesn't support atomic wirte. rw could write part of the page while ro read this page and failed to verify checksum.
