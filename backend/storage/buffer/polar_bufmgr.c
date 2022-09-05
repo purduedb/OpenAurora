@@ -140,8 +140,8 @@ polar_get_exclusive_buffer_lock_delay(void)
 		 */
 		if (current_delay_lsn <= last_delay_lsn)
 		{
-			elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed threshold gap, current has less gap, delay for %dms", polar_crash_recovery_rto_delay_count * last_delay_count);
-			pg_usleep(polar_crash_recovery_rto_delay_count * 1000 * last_delay_count);
+			elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed threshold gap, current has less gap, delay for %dms", last_delay_count);//polar_crash_recovery_rto_delay_count * last_delay_count);
+			pg_usleep(1000 * last_delay_count);//polar_crash_recovery_rto_delay_count * 1000 * last_delay_count);
 			PolarGlobalIOReadStats->less_than_delay++;
 		}
 		/*
@@ -150,9 +150,9 @@ polar_get_exclusive_buffer_lock_delay(void)
 		 */
 		else if (current_delay_lsn > last_delay_lsn)
 		{
-			elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed threshold gap, currrent has more gap, delay for %dms", polar_crash_recovery_rto_delay_count * last_delay_count);
+			elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed threshold gap, currrent has more gap, delay for %dms", last_delay_count);//polar_crash_recovery_rto_delay_count * last_delay_count);
 			last_delay_count = (last_delay_count >= 1024) ? 1024 : last_delay_count * 2;
-			pg_usleep(polar_crash_recovery_rto_delay_count * 1000 * last_delay_count);
+			pg_usleep(1000 * last_delay_count);//polar_crash_recovery_rto_delay_count * 1000 * last_delay_count);
 			PolarGlobalIOReadStats->more_than_delay++;
 		}
 	}
