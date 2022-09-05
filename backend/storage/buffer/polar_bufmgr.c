@@ -53,7 +53,7 @@
 	!InRecovery && (MyBackendId != InvalidBackendId) && \
 	 PolarGlobalIOReadStats != NULL && PolarGlobalIOReadStats->enabled)
 
-extern ParallelBgwriterInfo *polar_parallel_bgwriter_info;
+//extern ParallelBgwriterInfo *polar_parallel_bgwriter_info;
 extern void ResourceOwnerEnlargeBuffers(ResourceOwner owner);
 
 static int        prev_sync_count = 0;
@@ -116,7 +116,7 @@ polar_get_exclusive_buffer_lock_delay(void)
 	 */
 	while (current_delay_lsn > polar_get_max_xlog_delay_throughtput() && delay_times--)
 	{
-		elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed max gap, delay for %dms", polar_crash_recovery_rto_delay_count * delay_count);
+		elog(DEBUG5, "polar_get_exclusive_buffer_lock_delay:exceed max gap, delay for %dms", delay_count);//polar_crash_recovery_rto_delay_count * delay_count);
 		pg_usleep(polar_crash_recovery_rto_delay_count * 1000 * delay_count);
 		delay_count = delay_count * 2;
 		PolarGlobalIOReadStats->force_delay++;
@@ -132,7 +132,7 @@ polar_get_exclusive_buffer_lock_delay(void)
 	 * (calculate as 'the max xlog delay throughtput' * polar_crash_recovery_rto_threshold), there are three
 	 * small strategies
 	 */
-	if (current_delay_lsn > polar_get_max_xlog_delay_throughtput() * polar_crash_recovery_rto_threshold)
+	if (current_delay_lsn > polar_get_max_xlog_delay_throughtput()) //* polar_crash_recovery_rto_threshold)
 	{
 		/*
 		 * Strategy 2.1: if current_delay_lsn is less than or equal as last_delay_lsn, means in the last delay strategy, it is
@@ -220,7 +220,7 @@ polar_bg_buffer_sync(WritebackContext *wb_context, int flags)
 	/* Use normal BgBufferSync */
 	if (!polar_enable_shared_storage_mode || polar_in_replica_mode() ||
 			polar_get_bg_redo_state(polar_logindex_redo_instance) == POLAR_BG_WAITING_RESET)
-		return BgBufferSync(wb_context, flags);
+		return BgBufferSync(wb_context);
 
 	/*
 	 * For polardb, it should enable the flush list, otherwise, the consistent
@@ -229,12 +229,12 @@ polar_bg_buffer_sync(WritebackContext *wb_context, int flags)
 	if (polar_flush_list_enabled())
 	{
 		if (polar_enable_normal_bgwriter)
-			res = BgBufferSync(wb_context, flags);
+			res = BgBufferSync(wb_context);
 
 		res = polar_buffer_sync(wb_context, &consistent_lsn, true, flags) || res;
 	}
 	else
-		res = BgBufferSync(wb_context, flags);
+		res = BgBufferSync(wb_context);
 
 	polar_set_consistent_lsn(consistent_lsn);
 
@@ -435,8 +435,7 @@ polar_buffer_sync(WritebackContext *wb_context,
 
 			sync_state = SyncOneBuffer(batch_buf[i],
 									   false,
-									   wb_context,
-									   flags);
+									   wb_context);
 			i++;
 
 			if (sync_state & BUF_WRITTEN)
@@ -528,7 +527,7 @@ evaluate_sync_buffer_num(uint64 lag)
 	int        current_workers = 0;
 
 	if (polar_parallel_bgwriter_enabled())
-		current_workers = CURRENT_PARALLEL_WORKERS;
+		;//current_workers = CURRENT_PARALLEL_WORKERS;
 
 	cons_delta_per_worker = consistent_lsn_delta / (current_workers + 1);
 
@@ -552,7 +551,7 @@ evaluate_sync_buffer_num(uint64 lag)
 	return num_to_sync;
 }
 
-/* Normal background writer can start or stop some parallel background workers. */
+/* Normal background writer can start or stop some parallel background workers. 
 static void
 polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 {
@@ -571,7 +570,7 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 	/*
 	 * The consistent lsn does not be updated. It may be unhelpful to add or
 	 * stop parallel writers, so we do nothing.
-	 */
+	 *
 	if (consistent_lsn_delta == 0)
 	{
 		if (polar_enable_debug)
@@ -590,10 +589,10 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 	current_workers = CURRENT_PARALLEL_WORKERS;
 	at_most_workers = POLAR_MAX_BGWRITER_WORKERS;
 
-	/* Try to start one parallel background writer */
+	/* Try to start one parallel background writer *
 	if (lag > (polar_parallel_new_bgwriter_threshold_lag * 1024 * 1024L))
 	{
-		/* Reset the last check stop timestamp */
+		/* Reset the last check stop timestamp *
 		last_check_stop_tz = 0;
 
 		if (current_workers >= at_most_workers)
@@ -616,7 +615,7 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 										GetCurrentTimestamp(),
 										polar_parallel_new_bgwriter_threshold_time * 1000L);
 
-		/* Once start one */
+		/* Once start one *
 		if (ok)
 		{
 			polar_register_parallel_bgwriter_workers(1, true);
@@ -624,10 +623,10 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 		}
 	}
 
-	/* Try to stop one parallel background writer */
+	/* Try to stop one parallel background writer *
 	else if (current_workers > polar_parallel_bgwriter_workers)
 	{
-		/* Reset the last check start timestamp */
+		/* Reset the last check start timestamp *
 		last_check_start_tz = 0;
 
 		if (last_check_stop_tz == 0)
@@ -636,13 +635,13 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 			return;
 		}
 
-		/* Stop a background writer slowly, so wait more time. */
+		/* Stop a background writer slowly, so wait more time. *
 		ok = TimestampDifferenceExceeds(last_check_stop_tz,
 										GetCurrentTimestamp(),
 										polar_parallel_new_bgwriter_threshold_time *
 										1000L * STOP_PARALLEL_BGWRITER_DELAY_FACTOR);
 
-		/* Once stop one */
+		/* Once stop one *
 		if (ok)
 		{
 			polar_shutdown_parallel_bgwriter_workers(1);
@@ -650,6 +649,7 @@ polar_start_or_stop_parallel_bgwriter(bool is_normal_bgwriter, uint64 lag)
 		}
 	}
 }
+*/
 
 /*
  * polar_redo_set_buffer_oldest_lsn - Set the buffer oldest lsn when redo.
@@ -784,8 +784,7 @@ polar_sync_buffer_from_copy_buffer(WritebackContext *wb_context, int flags)
 		 */
 		SyncOneBuffer(buf_id,
 					  false,
-					  wb_context,
-					  flags);
+					  wb_context);
 	}
 }
 
@@ -1052,9 +1051,9 @@ polar_bulk_read_buffer_common(Relation reln, char relpersistence, ForkNumber for
 	{
 		Assert(NULL == polar_bulk_io_is_for_input);
 		polar_bulk_io_in_progress_buf = MemoryContextAlloc(TopMemoryContext,
-														   POLAR_MAX_BULK_IO_SIZE * sizeof(polar_bulk_io_in_progress_buf[0]));
+														   64 * sizeof(polar_bulk_io_in_progress_buf[0]));
 		polar_bulk_io_is_for_input = MemoryContextAlloc(TopMemoryContext,
-														POLAR_MAX_BULK_IO_SIZE * sizeof(polar_bulk_io_is_for_input[0]));
+														64 * sizeof(polar_bulk_io_is_for_input[0]));
 	}
 
 	*hit = false;
@@ -1273,7 +1272,7 @@ repeat_read:
 			bufBlock = (Block)(aligned_buf_read + index * BLCKSZ);
 
 			/* check for garbage data */
-			if (!PageIsVerified((Page) bufBlock, forkNum, blockNum, smgr))
+			if (!PageIsVerified((Page) bufBlock, blockNum))
 			{
 				if (zero_damaged_pages)
 				{

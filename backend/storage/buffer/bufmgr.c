@@ -183,6 +183,18 @@ int			backend_flush_after = 0;
 static BufferDesc *InProgressBuf = NULL;
 static bool IsForInput;
 
+/*
+ * POLAR: bulk io local state for StartBufferIO/TerminateBufferIO/AbortBufferIO and related functions.
+ *
+ * notice: bulk read io may be mixed with temporary write io, for flushing dirty evicted page.
+ *	       So polar_bulk_io_is_for_input[] is required for error recovery.
+ */
+bool polar_bulk_io_is_in_progress = false;
+int polar_bulk_io_in_progress_count = 0;
+BufferDesc **polar_bulk_io_in_progress_buf = NULL;
+static bool *polar_bulk_io_is_for_input = NULL;
+/* POLAR end */
+
 /* local state for LockBufferForCleanup */
 static BufferDesc *PinCountWaitBuf = NULL;
 

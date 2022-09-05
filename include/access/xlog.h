@@ -232,6 +232,11 @@ extern bool XLOG_DEBUG;
 #define CHECKPOINT_CAUSE_XLOG	0x0080	/* XLOG consumption */
 #define CHECKPOINT_CAUSE_TIME	0x0100	/* Elapsed time */
 
+/* POLAR: lazy checkpoint */
+#define CHECKPOINT_LAZY         0x1000
+/* POLAR: flashback point */
+#define CHECKPOINT_FLASHBACK	0x2000
+
 /*
  * Flag bits for the record being inserted, set using XLogSetRecordFlags().
  */
