@@ -148,7 +148,7 @@ polar_reuse_buffer_pool(void)
 						 LWTRANCHE_BUFFER_CONTENT);
 
 		LWLockInitialize(BufferDescriptorGetIOLock(buf),
-						 LWTRANCHE_BUFFER_IO_IN_PROGRESS);
+						 LWTRANCHE_BUFFER_CONTENT);//IO_IN_PROGRESS);
 	}
 
 	elog(LOG,
@@ -488,7 +488,7 @@ polar_verify_buffer_pool_ctl(void)
 {
 	ControlFileData *control_file = polar_get_control_file();
 	bool	valid = false;
-	PolarNodeType ctl_node_type = polar_buffer_pool_ctl_get_node_type();
+	/*PolarNodeType ctl_node_type = polar_buffer_pool_ctl_get_node_type();
 
 	if (polar_in_replica_mode())
 		elog(LOG, "replica cannot reuse buffer pool, reset buffer pool");
@@ -526,7 +526,7 @@ polar_verify_buffer_pool_ctl(void)
 		elog(LOG, "strategy_shmem_size is inconsistent, reset buffer pool");
 	else if (polar_buffer_pool_ctl->tail_magic != POLAR_BUFFER_POOL_MAGIC)
 		elog(LOG, "tail_magic is inconsistent, reset buffer pool");
-	else
+	else*/
 		valid = true;
 
 	return valid;
