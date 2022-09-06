@@ -89,6 +89,24 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
     return _reln;
 }
 
+void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
+                          BlockNumber blockNum, ReadBufferMode mode) {
+    RpcInit();
+
+    _Page _return;
+    int32_t _forkNum, _blkNum, _relpersistence, _readBufferMode;
+
+    _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
+    _forkNum = forkNum;
+    _blkNum = blockNum;
+    _relpersistence = (int32_t)relpersistence;
+    _readBufferMode = mode;
+
+    client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode);
+
+    _return.copy(buff, BLCKSZ);
+}
+
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
     RpcInit();
     _Page _return;

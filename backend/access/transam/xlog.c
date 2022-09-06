@@ -79,6 +79,8 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 #include "tcop/storage_server.h"
+#include "storage/rpcserver.h"
+#include <pthread.h>
 
 extern uint32 bootstrap_data_checksum_version;
 
@@ -6306,9 +6308,15 @@ CheckRequiredParameterValues(void)
 /*
  * This must be called ONCE during postmaster or standalone-backend startup
  */
+pthread_t RpcServerTid = 0;
 void
 StartupXLOG(void)
 {
+//	if(IsRpcServer) {
+//		printf("Startup process try to launch RpcServer\n");
+//		pthread_create(&RpcServerTid, NULL, (void*)RpcServerLoop, NULL);
+//		Assert(RpcServerTid != 0);
+//	}
     if(IsRpcServer)
         sleep(5);
 	XLogCtlInsert *Insert;
@@ -7774,8 +7782,11 @@ StartupXLOG(void)
 								  CHECKPOINT_IMMEDIATE |
 								  CHECKPOINT_WAIT);
 		}
-		else
-			CreateCheckPoint(CHECKPOINT_END_OF_RECOVERY | CHECKPOINT_IMMEDIATE);
+		else{
+            printf("%s %d\n", __func__, __LINE__);
+            fflush(stdout);
+            CreateCheckPoint(CHECKPOINT_END_OF_RECOVERY | CHECKPOINT_IMMEDIATE);
+		}
 	}
 
 	if (ArchiveRecoveryRequested)

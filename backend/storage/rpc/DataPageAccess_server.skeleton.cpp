@@ -27,9 +27,16 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * field lists in struct or exception definitions.
    * 
    * @param _reln
+   * @param _relpersistence
    * @param _forknum
    * @param _blknum
+   * @param _readBufferMode
    */
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
+    // Your implementation goes here
+    printf("ReadBufferCommon\n");
+  }
+
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
     // Your implementation goes here
     printf("RpcMdRead\n");

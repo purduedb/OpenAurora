@@ -45,6 +45,28 @@ public:
      *
      * @param _fd
      */
+    void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
+        printf("%s %s %d\n", __func__, __FILE__, __LINE__);
+        // Your implementation goes here
+        RelFileNode rnode;
+        rnode.spcNode = _reln._spc_node;
+        rnode.dbNode = _reln._db_node;
+        rnode.relNode = _reln._rel_node;
+        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+
+        char relpersistence = (char) _relpersistence;
+        bool hit;
+        char* page;
+
+        Buffer buff = ReadBuffer_common(smgrReln, relpersistence, (ForkNumber)_forknum, (BlockNumber)_blknum, (ReadBufferMode)_readBufferMode, NULL, &hit);
+        LockBuffer(buff, BUFFER_LOCK_SHARE);
+        page = BufferGetPage(buff);
+//        _return.resize(BLCKSZ);
+        _return.assign(page, BLCKSZ);
+
+        UnlockReleaseBuffer(buff);
+    }
+
     void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
 //        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %ld\n", __func__ , __FILE__, __LINE__,
 //               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
@@ -55,34 +77,33 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
-        RelationData relationData;
-        memset(&relationData, 0, sizeof(RelationData));
-        Relation relation = &relationData;
-        relation->rd_smgr = smgrReln;
+//        RelationData relationData;
+//        memset(&relationData, 0, sizeof(RelationData));
+//        Relation relation = &relationData;
+//        relation->rd_smgr = smgrReln;
 
         // Not guarantee right
-        FormData_pg_class formDataPgClass;
-        formDataPgClass.relpersistence = RELPERSISTENCE_PERMANENT;
-        relation->rd_rel = &formDataPgClass;
+//        FormData_pg_class formDataPgClass;
+//        formDataPgClass.relpersistence = RELPERSISTENCE_PERMANENT;
+//        relation->rd_rel = &formDataPgClass;
+//
+//        Buffer buff = ReadBufferExtended(relation, (ForkNumber)_forknum, _blknum, RBM_NORMAL, NULL);
+//
+//        LockBuffer(buff, BUFFER_LOCK_SHARE);
+//        char* page;
+//        page = BufferGetPage(buff);
+//
+//        char tempPage[BLCKSZ];
+//        memcpy(tempPage, page, BLCKSZ);
+//
+//        _return.resize(BLCKSZ);
+//        _return.assign(tempPage, BLCKSZ);
+//
+//        UnlockReleaseBuffer(buff);
 
-//        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-        Buffer buff = ReadBufferExtended(relation, (ForkNumber)_forknum, _blknum, RBM_NORMAL, NULL);
-
-        LockBuffer(buff, BUFFER_LOCK_SHARE);
-        char* page;
-        page = BufferGetPage(buff);
-
-        char tempPage[BLCKSZ];
-        memcpy(tempPage, page, BLCKSZ);
-
-        _return.resize(BLCKSZ);
-        _return.assign(tempPage, BLCKSZ);
-
-        UnlockReleaseBuffer(buff);
-
-//        char page[BLCKSZ+16];
-//        mdread(smgrReln, (ForkNumber)_forknum, _blknum, page);
-//        _return.assign(page, BLCKSZ);
+        char page[BLCKSZ+16];
+        mdread(smgrReln, (ForkNumber)_forknum, _blknum, page);
+        _return.assign(page, BLCKSZ);
 
         printf("%s end\n", __func__ );
         fflush(stdout);

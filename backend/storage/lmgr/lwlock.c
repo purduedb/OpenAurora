@@ -87,11 +87,15 @@
 #include "storage/proclist.h"
 #include "storage/spin.h"
 #include "utils/memutils.h"
+#include <pthread.h>
+#include <tcop/storage_server.h>
 
 #ifdef LWLOCK_STATS
 #include "utils/hsearch.h"
 #endif
 
+pthread_mutex_t lwmutex = PTHREAD_MUTEX_INITIALIZER;
+extern int IsRpcServer;
 
 /* We use the ShmemLock spinlock to protect LWLockCounter */
 extern slock_t *ShmemLock;
@@ -411,6 +415,14 @@ get_lwlock_stats_entry(LWLock *lock)
 }
 #endif							/* LWLOCK_STATS */
 
+void LwMutexLock() {
+    if(IsRpcServer)
+        pthread_mutex_lock(&lwmutex);
+}
+void LwMutexUnlock() {
+    if(IsRpcServer)
+        pthread_mutex_unlock(&lwmutex);
+}
 
 /*
  * Compute number of LWLocks required by named tranches.  These will be
@@ -1356,9 +1368,11 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 
 	TRACE_POSTGRESQL_LWLOCK_ACQUIRE(T_NAME(lock), mode);
 
+    LwMutexLock();
 	/* Add lock to list of locks held by this backend */
 	held_lwlocks[num_held_lwlocks].lock = lock;
 	held_lwlocks[num_held_lwlocks++].mode = mode;
+    LwMutexUnlock();
 
 	/*
 	 * Fix the process wait semaphore's count for any absorbed wakeups.
@@ -1409,9 +1423,11 @@ LWLockConditionalAcquire(LWLock *lock, LWLockMode mode)
 	}
 	else
 	{
+        LwMutexLock();
 		/* Add lock to list of locks held by this backend */
 		held_lwlocks[num_held_lwlocks].lock = lock;
 		held_lwlocks[num_held_lwlocks++].mode = mode;
+        LwMutexUnlock();
 		TRACE_POSTGRESQL_LWLOCK_CONDACQUIRE(T_NAME(lock), mode);
 	}
 	return !mustwait;
@@ -1538,8 +1554,10 @@ LWLockAcquireOrWait(LWLock *lock, LWLockMode mode)
 	{
 		LOG_LWDEBUG("LWLockAcquireOrWait", lock, "succeeded");
 		/* Add lock to list of locks held by this backend */
+        LwMutexLock();
 		held_lwlocks[num_held_lwlocks].lock = lock;
 		held_lwlocks[num_held_lwlocks++].mode = mode;
+        LwMutexUnlock();
 		TRACE_POSTGRESQL_LWLOCK_ACQUIRE_OR_WAIT(T_NAME(lock), mode);
 	}
 
@@ -1820,6 +1838,7 @@ LWLockRelease(LWLock *lock)
 	 * Remove lock from list of locks held.  Usually, but not always, it will
 	 * be the latest-acquired lock; so search array backwards.
 	 */
+    LwMutexLock();
 	for (i = num_held_lwlocks; --i >= 0;)
 		if (lock == held_lwlocks[i].lock)
 			break;
@@ -1832,6 +1851,7 @@ LWLockRelease(LWLock *lock)
 	num_held_lwlocks--;
 	for (; i < num_held_lwlocks; i++)
 		held_lwlocks[i] = held_lwlocks[i + 1];
+    LwMutexUnlock();
 
 	PRINT_LWDEBUG("LWLockRelease", lock, mode);
 

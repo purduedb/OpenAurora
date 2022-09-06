@@ -24,6 +24,8 @@ extern "C" {
 #include "utils/relcache.h"
 #include "utils/snapmgr.h"
 
+#include "storage/smgr.h"
+
 typedef void *Block;
 
 /* Possible arguments for GetAccessStrategy() */
@@ -278,6 +280,10 @@ extern BufferAccessStrategy GetAccessStrategy(BufferAccessStrategyType btype);
 
 extern void FreeAccessStrategy(BufferAccessStrategy strategy);
 
+extern Buffer
+ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
+                  BlockNumber blockNum, ReadBufferMode mode,
+                  BufferAccessStrategy strategy, bool *hit);
 
 /* inline functions */
 
