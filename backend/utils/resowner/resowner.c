@@ -31,7 +31,7 @@
 #include "utils/resowner_private.h"
 #include "utils/snapmgr.h"
 
-
+#include <pthread.h>
 /*
  * All resource IDs managed by this code are required to fit into a Datum,
  * which is fine since they are generally pointers or integers.
@@ -182,6 +182,7 @@ static void PrintDSMLeakWarning(dsm_segment *seg);
  *****************************************************************************/
 
 
+pthread_mutex_t resArrMutex = PTHREAD_MUTEX_INITIALIZER;
 /*
  * Initialize a ResourceArray
  */
@@ -213,8 +214,11 @@ ResourceArrayEnlarge(ResourceArray *resarr)
 	Datum	   *olditemsarr;
 	Datum	   *newitemsarr;
 
-	if (resarr->nitems < resarr->maxitems)
-		return;					/* no work needed */
+    pthread_mutex_lock(&resArrMutex);
+	if (resarr->nitems < resarr->maxitems) {
+        pthread_mutex_unlock(&resArrMutex);
+        return;					/* no work needed */
+    }
 
 	olditemsarr = resarr->itemsarr;
 	oldcap = resarr->capacity;
@@ -252,6 +256,7 @@ ResourceArrayEnlarge(ResourceArray *resarr)
 	}
 
 	Assert(resarr->nitems < resarr->maxitems);
+    pthread_mutex_unlock(&resArrMutex);
 }
 
 /*

@@ -75,7 +75,8 @@ OBJS_COMMON = \
 	unicode_norm.o \
 	username.o \
 	wait_error.o \
-	wchar.o
+	wchar.o \
+	partition_lock.o
 
 ifeq ($(with_openssl),yes)
 OBJS_COMMON += \

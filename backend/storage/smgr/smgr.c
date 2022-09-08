@@ -26,7 +26,7 @@
 #include "storage/rpcclient.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
-
+#include "common/partition_lock.h"
 
 extern int IsRpcClient;
 /*
@@ -117,7 +117,7 @@ static dlist_head unowned_relns;
 /* local function prototypes */
 static void smgrshutdown(int code, Datum arg);
 
-
+extern PartitionMutex MdPartitionMutex;
 /*
  *	smgrinit(), smgrshutdown() -- Initialize or shut down storage
  *								  managers.
@@ -160,6 +160,12 @@ smgrshutdown(int code, Datum arg)
 		if (smgrsw[i].smgr_shutdown)
 			smgrsw[i].smgr_shutdown();
 	}
+
+    if(MdPartitionMutex != NULL) {
+        DestroyPartitionMutex(MdPartitionMutex);
+        MdPartitionMutex = NULL;
+    }
+
 }
 
 /*

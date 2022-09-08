@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <pthread.h>
 
 #include "access/xlog.h"
 #include "access/xlogutils.h"
@@ -41,6 +42,7 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "tcop/storage_server.h"
+#include "common/partition_lock.h"
 
 /*
  *	The magnetic disk storage manager keeps track of open file
@@ -140,7 +142,32 @@ static MdfdVec *_mdfd_getseg(SMgrRelation reln, ForkNumber forkno,
 							 BlockNumber blkno, bool skipFsync, int behavior);
 static BlockNumber _mdnblocks(SMgrRelation reln, ForkNumber forknum,
 							  MdfdVec *seg);
+
+static void _mdclose(SMgrRelation reln, ForkNumber forknum);
+
+static BlockNumber
+_mdnblocksExtend(SMgrRelation reln, ForkNumber forknum);
+
 extern int IsRpcServer;
+
+PartitionMutex MdPartitionMutex = NULL;
+
+struct ForkTagData{
+    RelFileNode relFileNode;
+    ForkNumber forkNumber;
+};
+
+typedef struct ForkTagData ForkTagData;
+
+static ForkTagData InitForkTagData(RelFileNode reln, ForkNumber forknum) {
+    ForkTagData forkTagData = {
+            reln,
+            forknum
+    };
+    return forkTagData;
+}
+
+#define TempPartationLock(A, B) PartitionLock(A, B, __func__);
 
 /*
  *	mdinit() -- Initialize private state for magnetic disk storage manager.
@@ -151,6 +178,8 @@ mdinit(void)
 	MdCxt = AllocSetContextCreate(TopMemoryContext,
 								  "MdSmgr",
 								  ALLOCSET_DEFAULT_SIZES);
+
+    InitializePartitionMutex(&MdPartitionMutex, 16, sizeof(ForkTagData));
 }
 
 /*
@@ -161,13 +190,18 @@ mdinit(void)
 bool
 mdexists(SMgrRelation reln, ForkNumber forkNum)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forkNum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
 	/*
 	 * Close it first, to ensure that we notice if the fork has been unlinked
 	 * since we opened it.
 	 */
-	mdclose(reln, forkNum);
+    _mdclose(reln, forkNum);
 
-	return (mdopenfork(reln, forkNum, EXTENSION_RETURN_NULL) != NULL);
+    MdfdVec* result = mdopenfork(reln, forkNum, EXTENSION_RETURN_NULL);
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+	return (result != NULL);
 }
 
 /*
@@ -178,12 +212,17 @@ mdexists(SMgrRelation reln, ForkNumber forkNum)
 void
 mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forkNum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	MdfdVec    *mdfd;
 	char	   *path;
 	File		fd;
 
-	if (isRedo && reln->md_num_open_segs[forkNum] > 0)
-		return;					/* created and opened already... */
+	if ((IsRpcServer||isRedo) && reln->md_num_open_segs[forkNum] > 0) {
+        PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+        return;					/* created and opened already... */
+    }
 
 	Assert(reln->md_num_open_segs[forkNum] == 0);
 
@@ -214,6 +253,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 		{
 			/* be sure to report the error reported by create, not open */
 			errno = save_errno;
+            PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 			ereport(ERROR,
 					(errcode_for_file_access(),
 					 errmsg("could not create file \"%s\": %m", path)));
@@ -226,6 +266,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	mdfd = &reln->md_seg_fds[forkNum][0];
 	mdfd->mdfd_vfd = fd;
 	mdfd->mdfd_segno = 0;
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -290,6 +331,9 @@ mdunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 static void
 mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 {
+    ForkTagData forkTagData = InitForkTagData(rnode.node, forkNum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	char	   *path;
 	int			ret;
 
@@ -373,6 +417,7 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 	}
 
 	pfree(path);
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -384,58 +429,64 @@ mdunlinkfork(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
  *		EOF).  Note that we assume writing a block beyond current EOF
  *		causes intervening file space to become filled with zeroes.
  */
+static void
+_mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
+         char *buffer, bool skipFsync) {
+
+    off_t		seekpos;
+    int			nbytes;
+    MdfdVec    *v;
+
+    /*
+     * If a relation manages to grow to 2^32-1 blocks, refuse to extend it any
+     * more --- we mustn't create a block whose number actually is
+     * InvalidBlockNumber.
+     */
+    if (blocknum == InvalidBlockNumber)
+        ereport(ERROR,
+                (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                        errmsg("cannot extend file \"%s\" beyond %u blocks",
+                               relpath(reln->smgr_rnode, forknum),
+                               InvalidBlockNumber)));
+
+    v = _mdfd_getseg(reln, forknum, blocknum, skipFsync, EXTENSION_CREATE);
+
+    seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
+
+    Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
+
+    if ((nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND)) != BLCKSZ)
+    {
+        if (nbytes < 0)
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not extend file \"%s\": %m",
+                                   FilePathName(v->mdfd_vfd)),
+                            errhint("Check free disk space.")));
+        /* short write: complain appropriately */
+        ereport(ERROR,
+                (errcode(ERRCODE_DISK_FULL),
+                        errmsg("could not extend file \"%s\": wrote only %d of %d bytes at block %u",
+                               FilePathName(v->mdfd_vfd),
+                               nbytes, BLCKSZ, blocknum),
+                        errhint("Check free disk space.")));
+    }
+
+    if (!skipFsync && !SmgrIsTemp(reln))
+        register_dirty_segment(reln, forknum, v);
+
+    Assert(_mdnblocks(reln, forknum, v) <= ((BlockNumber) RELSEG_SIZE));
+}
 void
 mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
-	off_t		seekpos;
-	int			nbytes;
-	MdfdVec    *v;
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
 
-	/* This assert is too expensive to have on normally ... */
-#ifdef CHECK_WRITE_VS_EXTEND
-	Assert(blocknum >= mdnblocks(reln, forknum));
-#endif
+    _mdextend(reln, forknum, blocknum, buffer, skipFsync);
 
-	/*
-	 * If a relation manages to grow to 2^32-1 blocks, refuse to extend it any
-	 * more --- we mustn't create a block whose number actually is
-	 * InvalidBlockNumber.
-	 */
-	if (blocknum == InvalidBlockNumber)
-		ereport(ERROR,
-				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-				 errmsg("cannot extend file \"%s\" beyond %u blocks",
-						relpath(reln->smgr_rnode, forknum),
-						InvalidBlockNumber)));
-
-	v = _mdfd_getseg(reln, forknum, blocknum, skipFsync, EXTENSION_CREATE);
-
-	seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
-
-	Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
-
-	if ((nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND)) != BLCKSZ)
-	{
-		if (nbytes < 0)
-			ereport(ERROR,
-					(errcode_for_file_access(),
-					 errmsg("could not extend file \"%s\": %m",
-							FilePathName(v->mdfd_vfd)),
-					 errhint("Check free disk space.")));
-		/* short write: complain appropriately */
-		ereport(ERROR,
-				(errcode(ERRCODE_DISK_FULL),
-				 errmsg("could not extend file \"%s\": wrote only %d of %d bytes at block %u",
-						FilePathName(v->mdfd_vfd),
-						nbytes, BLCKSZ, blocknum),
-				 errhint("Check free disk space.")));
-	}
-
-	if (!skipFsync && !SmgrIsTemp(reln))
-		register_dirty_segment(reln, forknum, v);
-
-	Assert(_mdnblocks(reln, forknum, v) <= ((BlockNumber) RELSEG_SIZE));
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -505,21 +556,31 @@ mdopen(SMgrRelation reln)
 void
 mdclose(SMgrRelation reln, ForkNumber forknum)
 {
-	int			nopensegs = reln->md_num_open_segs[forknum];
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
 
-	/* No work if already closed */
-	if (nopensegs == 0)
-		return;
+    _mdclose(reln, forknum);
 
-	/* close segments starting from the end */
-	while (nopensegs > 0)
-	{
-		MdfdVec    *v = &reln->md_seg_fds[forknum][nopensegs - 1];
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+}
 
-		FileClose(v->mdfd_vfd);
-		_fdvec_resize(reln, forknum, nopensegs - 1);
-		nopensegs--;
-	}
+static void
+_mdclose(SMgrRelation reln, ForkNumber forknum) {
+    int			nopensegs = reln->md_num_open_segs[forknum];
+
+    /* No work if already closed */
+    if (nopensegs == 0)
+        return;
+
+    /* close segments starting from the end */
+    while (nopensegs > 0)
+    {
+        MdfdVec    *v = &reln->md_seg_fds[forknum][nopensegs - 1];
+
+        FileClose(v->mdfd_vfd);
+        _fdvec_resize(reln, forknum, nopensegs - 1);
+        nopensegs--;
+    }
 }
 
 /*
@@ -528,6 +589,9 @@ mdclose(SMgrRelation reln, ForkNumber forknum)
 bool
 mdprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 #ifdef USE_PREFETCH
 	off_t		seekpos;
 	MdfdVec    *v;
@@ -544,6 +608,7 @@ mdprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 	(void) FilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
 #endif							/* USE_PREFETCH */
 
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 	return true;
 }
 
@@ -557,6 +622,9 @@ void
 mdwriteback(SMgrRelation reln, ForkNumber forknum,
 			BlockNumber blocknum, BlockNumber nblocks)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	/*
 	 * Issue flush requests in as few requests as possible; have to split at
 	 * segment boundaries though, since those are actually separate files.
@@ -576,8 +644,10 @@ mdwriteback(SMgrRelation reln, ForkNumber forknum,
 		 * We might be flushing buffers of already removed relations, that's
 		 * ok, just ignore that case.
 		 */
-		if (!v)
-			return;
+		if (!v) {
+            PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+            return;
+        }
 
 		/* compute offset inside the current segment */
 		segnum_start = blocknum / RELSEG_SIZE;
@@ -597,6 +667,8 @@ mdwriteback(SMgrRelation reln, ForkNumber forknum,
 		nblocks -= nflush;
 		blocknum += nflush;
 	}
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -606,6 +678,9 @@ void
 mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	   char *buffer)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -658,6 +733,8 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 							blocknum, FilePathName(v->mdfd_vfd),
 							nbytes, BLCKSZ)));
 	}
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -671,14 +748,12 @@ void
 mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		char *buffer, bool skipFsync)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
-
-	/* This assert is too expensive to have on normally ... */
-#ifdef CHECK_WRITE_VS_EXTEND
-	Assert(blocknum < mdnblocks(reln, forknum));
-#endif
 
 	TRACE_POSTGRESQL_SMGR_MD_WRITE_START(forknum, blocknum,
 										 reln->smgr_rnode.node.spcNode,
@@ -722,8 +797,61 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	if (!skipFsync && !SmgrIsTemp(reln))
 		register_dirty_segment(reln, forknum, v);
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
+static BlockNumber
+_mdnblocksExtend(SMgrRelation reln, ForkNumber forknum) {
+
+    MdfdVec    *v = mdopenfork(reln, forknum, EXTENSION_FAIL);
+    BlockNumber nblocks;
+    BlockNumber segno = 0;
+
+    /* mdopen has opened the first segment */
+    Assert(reln->md_num_open_segs[forknum] > 0);
+
+    /*
+     * Start from the last open segments, to avoid redundant seeks.  We have
+     * previously verified that these segments are exactly RELSEG_SIZE long,
+     * and it's useless to recheck that each time.
+     *
+     * NOTE: this assumption could only be wrong if another backend has
+     * truncated the relation.  We rely on higher code levels to handle that
+     * scenario by closing and re-opening the md fd, which is handled via
+     * relcache flush.  (Since the checkpointer doesn't participate in
+     * relcache flush, it could have segment entries for inactive segments;
+     * that's OK because the checkpointer never needs to compute relation
+     * size.)
+     */
+    segno = reln->md_num_open_segs[forknum] - 1;
+    v = &reln->md_seg_fds[forknum][segno];
+
+    for (;;)
+    {
+        nblocks = _mdnblocks(reln, forknum, v);
+        if (nblocks > ((BlockNumber) RELSEG_SIZE))
+            elog(FATAL, "segment too big");
+        if (nblocks < ((BlockNumber) RELSEG_SIZE))
+            return (segno * ((BlockNumber) RELSEG_SIZE)) + nblocks;
+
+        /*
+         * If segment is exactly RELSEG_SIZE, advance to next one.
+         */
+        segno++;
+
+        /*
+         * We used to pass O_CREAT here, but that has the disadvantage that it
+         * might create a segment which has vanished through some operating
+         * system misadventure.  In such a case, creating the segment here
+         * undermines _mdfd_getseg's attempts to notice and report an error
+         * upon access to a missing segment.
+         */
+        v = _mdfd_openseg(reln, forknum, segno, 0);
+        if (v == NULL)
+            return segno * ((BlockNumber) RELSEG_SIZE);
+    }
+}
 /*
  *	mdnblocks() -- Get the number of blocks stored in a relation.
  *
@@ -735,53 +863,14 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 BlockNumber
 mdnblocks(SMgrRelation reln, ForkNumber forknum)
 {
-	MdfdVec    *v = mdopenfork(reln, forknum, EXTENSION_FAIL);
-	BlockNumber nblocks;
-	BlockNumber segno = 0;
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
 
-	/* mdopen has opened the first segment */
-	Assert(reln->md_num_open_segs[forknum] > 0);
+    BlockNumber blockNumber = _mdnblocksExtend(reln, forknum);
 
-	/*
-	 * Start from the last open segments, to avoid redundant seeks.  We have
-	 * previously verified that these segments are exactly RELSEG_SIZE long,
-	 * and it's useless to recheck that each time.
-	 *
-	 * NOTE: this assumption could only be wrong if another backend has
-	 * truncated the relation.  We rely on higher code levels to handle that
-	 * scenario by closing and re-opening the md fd, which is handled via
-	 * relcache flush.  (Since the checkpointer doesn't participate in
-	 * relcache flush, it could have segment entries for inactive segments;
-	 * that's OK because the checkpointer never needs to compute relation
-	 * size.)
-	 */
-	segno = reln->md_num_open_segs[forknum] - 1;
-	v = &reln->md_seg_fds[forknum][segno];
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 
-	for (;;)
-	{
-		nblocks = _mdnblocks(reln, forknum, v);
-		if (nblocks > ((BlockNumber) RELSEG_SIZE))
-			elog(FATAL, "segment too big");
-		if (nblocks < ((BlockNumber) RELSEG_SIZE))
-			return (segno * ((BlockNumber) RELSEG_SIZE)) + nblocks;
-
-		/*
-		 * If segment is exactly RELSEG_SIZE, advance to next one.
-		 */
-		segno++;
-
-		/*
-		 * We used to pass O_CREAT here, but that has the disadvantage that it
-		 * might create a segment which has vanished through some operating
-		 * system misadventure.  In such a case, creating the segment here
-		 * undermines _mdfd_getseg's attempts to notice and report an error
-		 * upon access to a missing segment.
-		 */
-		v = _mdfd_openseg(reln, forknum, segno, 0);
-		if (v == NULL)
-			return segno * ((BlockNumber) RELSEG_SIZE);
-	}
+    return blockNumber;
 }
 
 /*
@@ -790,6 +879,9 @@ mdnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	BlockNumber curnblk;
 	BlockNumber priorblocks;
 	int			curopensegs;
@@ -798,19 +890,23 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 	 * NOTE: mdnblocks makes sure we have opened all active segments, so that
 	 * truncation loop will get them all!
 	 */
-	curnblk = mdnblocks(reln, forknum);
+	curnblk = _mdnblocksExtend(reln, forknum);
 	if (nblocks > curnblk)
 	{
 		/* Bogus request ... but no complaint if InRecovery */
-		if (InRecovery)
-			return;
+		if (InRecovery) {
+            PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+            return;
+        }
 		ereport(ERROR,
 				(errmsg("could not truncate file \"%s\" to %u blocks: it's only %u blocks now",
 						relpath(reln->smgr_rnode, forknum),
 						nblocks, curnblk)));
 	}
-	if (nblocks == curnblk)
-		return;					/* no work */
+	if (nblocks == curnblk) {
+        PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
+        return;					/* no work */
+    }
 
 	/*
 	 * Truncate segments, starting at the last one. Starting at the end makes
@@ -876,6 +972,8 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 		}
 		curopensegs--;
 	}
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
@@ -892,6 +990,9 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 void
 mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 {
+    ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
+    TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
+
 	int			segno;
 	int			min_inactive_seg;
 
@@ -899,7 +1000,7 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 	 * NOTE: mdnblocks makes sure we have opened all active segments, so that
 	 * fsync loop will get them all!
 	 */
-	mdnblocks(reln, forknum);
+	_mdnblocksExtend(reln, forknum);
 
 	min_inactive_seg = segno = reln->md_num_open_segs[forknum];
 
@@ -931,6 +1032,8 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 
 		segno--;
 	}
+
+    PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
 /*
