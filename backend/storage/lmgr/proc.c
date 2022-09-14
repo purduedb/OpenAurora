@@ -34,6 +34,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include "access/transam.h"
 #include "access/twophase.h"
@@ -303,7 +304,6 @@ InitProcGlobal(void)
 void
 InitProcess(void)
 {
-    printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
 	PGPROC	   *volatile *procgloballist;
 
 	/*
@@ -313,8 +313,8 @@ InitProcess(void)
 	if (ProcGlobal == NULL)
 		elog(PANIC, "proc header uninitialized");
 
-	if (MyProc != NULL)
-		elog(ERROR, "you already exist");
+//	if (MyProc != NULL)
+//		elog(ERROR, "you already exist");
 
 	/* Decide which list should supply our PGPROC. */
 	if (IsAnyAutoVacuumProcess())
@@ -525,8 +525,8 @@ InitAuxiliaryProcess(void)
 	if (ProcGlobal == NULL || AuxiliaryProcs == NULL)
 		elog(PANIC, "proc header uninitialized");
 
-	if (MyProc != NULL)
-		elog(ERROR, "you already exist");
+//	if (MyProc != NULL)
+//		elog(ERROR, "you already exist");
 
 	/*
 	 * We use the ProcStructLock to protect assignment and releasing of

@@ -34,9 +34,12 @@ class DataPageAccessIf {
    * field lists in struct or exception definitions.
    * 
    * @param _reln
+   * @param _relpersistence
    * @param _forknum
    * @param _blknum
+   * @param _readBufferMode
    */
+  virtual void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) = 0;
   virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) = 0;
   virtual int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) = 0;
   virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) = 0;
@@ -78,6 +81,9 @@ class DataPageAccessIfSingletonFactory : virtual public DataPageAccessIfFactory 
 class DataPageAccessNull : virtual public DataPageAccessIf {
  public:
   virtual ~DataPageAccessNull() {}
+  void ReadBufferCommon(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _relpersistence */, const int32_t /* _forknum */, const int32_t /* _blknum */, const int32_t /* _readBufferMode */) {
+    return;
+  }
   void RpcMdRead(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _blknum */) {
     return;
   }
@@ -98,6 +104,138 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
   void zip() {
     return;
   }
+};
+
+typedef struct _DataPageAccess_ReadBufferCommon_args__isset {
+  _DataPageAccess_ReadBufferCommon_args__isset() : _reln(false), _relpersistence(false), _forknum(false), _blknum(false), _readBufferMode(false) {}
+  bool _reln :1;
+  bool _relpersistence :1;
+  bool _forknum :1;
+  bool _blknum :1;
+  bool _readBufferMode :1;
+} _DataPageAccess_ReadBufferCommon_args__isset;
+
+class DataPageAccess_ReadBufferCommon_args {
+ public:
+
+  DataPageAccess_ReadBufferCommon_args(const DataPageAccess_ReadBufferCommon_args&);
+  DataPageAccess_ReadBufferCommon_args& operator=(const DataPageAccess_ReadBufferCommon_args&);
+  DataPageAccess_ReadBufferCommon_args() : _relpersistence(0), _forknum(0), _blknum(0), _readBufferMode(0) {
+  }
+
+  virtual ~DataPageAccess_ReadBufferCommon_args() noexcept;
+  _Smgr_Relation _reln;
+  int32_t _relpersistence;
+  int32_t _forknum;
+  int32_t _blknum;
+  int32_t _readBufferMode;
+
+  _DataPageAccess_ReadBufferCommon_args__isset __isset;
+
+  void __set__reln(const _Smgr_Relation& val);
+
+  void __set__relpersistence(const int32_t val);
+
+  void __set__forknum(const int32_t val);
+
+  void __set__blknum(const int32_t val);
+
+  void __set__readBufferMode(const int32_t val);
+
+  bool operator == (const DataPageAccess_ReadBufferCommon_args & rhs) const
+  {
+    if (!(_reln == rhs._reln))
+      return false;
+    if (!(_relpersistence == rhs._relpersistence))
+      return false;
+    if (!(_forknum == rhs._forknum))
+      return false;
+    if (!(_blknum == rhs._blknum))
+      return false;
+    if (!(_readBufferMode == rhs._readBufferMode))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_ReadBufferCommon_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_ReadBufferCommon_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_ReadBufferCommon_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_ReadBufferCommon_pargs() noexcept;
+  const _Smgr_Relation* _reln;
+  const int32_t* _relpersistence;
+  const int32_t* _forknum;
+  const int32_t* _blknum;
+  const int32_t* _readBufferMode;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_ReadBufferCommon_result__isset {
+  _DataPageAccess_ReadBufferCommon_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_ReadBufferCommon_result__isset;
+
+class DataPageAccess_ReadBufferCommon_result {
+ public:
+
+  DataPageAccess_ReadBufferCommon_result(const DataPageAccess_ReadBufferCommon_result&);
+  DataPageAccess_ReadBufferCommon_result& operator=(const DataPageAccess_ReadBufferCommon_result&);
+  DataPageAccess_ReadBufferCommon_result() : success() {
+  }
+
+  virtual ~DataPageAccess_ReadBufferCommon_result() noexcept;
+  _Page success;
+
+  _DataPageAccess_ReadBufferCommon_result__isset __isset;
+
+  void __set_success(const _Page& val);
+
+  bool operator == (const DataPageAccess_ReadBufferCommon_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_ReadBufferCommon_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_ReadBufferCommon_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_ReadBufferCommon_presult__isset {
+  _DataPageAccess_ReadBufferCommon_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_ReadBufferCommon_presult__isset;
+
+class DataPageAccess_ReadBufferCommon_presult {
+ public:
+
+
+  virtual ~DataPageAccess_ReadBufferCommon_presult() noexcept;
+  _Page* success;
+
+  _DataPageAccess_ReadBufferCommon_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
 };
 
 typedef struct _DataPageAccess_RpcMdRead_args__isset {
@@ -723,9 +861,14 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
    * field lists in struct or exception definitions.
    * 
    * @param _reln
+   * @param _relpersistence
    * @param _forknum
    * @param _blknum
+   * @param _readBufferMode
    */
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  void send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  void recv_ReadBufferCommon(_Page& _return);
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
   void send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
   void recv_RpcMdRead(_Page& _return);
@@ -763,6 +906,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   typedef  void (DataPageAccessProcessor::*ProcessFunction)(int32_t, ::apache::thrift::protocol::TProtocol*, ::apache::thrift::protocol::TProtocol*, void*);
   typedef std::map<std::string, ProcessFunction> ProcessMap;
   ProcessMap processMap_;
+  void process_ReadBufferCommon(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdNblocks(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdExists(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -772,6 +916,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
     iface_(iface) {
+    processMap_["ReadBufferCommon"] = &DataPageAccessProcessor::process_ReadBufferCommon;
     processMap_["RpcMdRead"] = &DataPageAccessProcessor::process_RpcMdRead;
     processMap_["RpcMdNblocks"] = &DataPageAccessProcessor::process_RpcMdNblocks;
     processMap_["RpcMdExists"] = &DataPageAccessProcessor::process_RpcMdExists;
@@ -813,9 +958,21 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
    * field lists in struct or exception definitions.
    * 
    * @param _reln
+   * @param _relpersistence
    * @param _forknum
    * @param _blknum
+   * @param _readBufferMode
    */
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+    }
+    ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+    return;
+  }
+
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
     size_t sz = ifaces_.size();
     size_t i = 0;
@@ -915,9 +1072,14 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
    * field lists in struct or exception definitions.
    * 
    * @param _reln
+   * @param _relpersistence
    * @param _forknum
    * @param _blknum
+   * @param _readBufferMode
    */
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  int32_t send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  void recv_ReadBufferCommon(_Page& _return, const int32_t seqid);
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
   int32_t send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
   void recv_RpcMdRead(_Page& _return, const int32_t seqid);

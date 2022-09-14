@@ -60,6 +60,7 @@
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "tcop/storage_server.h"
 
 
 /*----------
@@ -160,6 +161,7 @@ static double ckpt_cached_elapsed;
 static pg_time_t last_checkpoint_time;
 static pg_time_t last_xlog_switch_time;
 
+extern int IsRpcServer;
 /* Prototypes for private functions */
 
 static void HandleCheckpointerInterrupts(void);
@@ -902,6 +904,9 @@ CheckpointerShmemInit(void)
 void
 RequestCheckpoint(int flags)
 {
+    //In storage node, there is no checkpointer process running
+    if(IsRpcServer)
+        return;
 	int			ntries;
 	int			old_failed,
 				old_started;
@@ -911,6 +916,8 @@ RequestCheckpoint(int flags)
 	 */
 	if (!IsPostmasterEnvironment)
 	{
+	    printf("%s %d \n", __func__ , __LINE__);
+	    fflush(stdout);
 		/*
 		 * There's no point in doing slow checkpoints in a standalone backend,
 		 * because there's no other backends the checkpoint could disrupt.

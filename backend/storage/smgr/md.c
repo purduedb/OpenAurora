@@ -40,6 +40,7 @@
 #include "storage/sync.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
+#include "tcop/storage_server.h"
 
 /*
  *	The magnetic disk storage manager keeps track of open file
@@ -140,6 +141,7 @@ static MdfdVec *_mdfd_getseg(SMgrRelation reln, ForkNumber forkno,
 static BlockNumber _mdnblocks(SMgrRelation reln, ForkNumber forknum,
 							  MdfdVec *seg);
 
+extern int IsRpcServer;
 
 /*
  *	mdinit() -- Initialize private state for magnetic disk storage manager.
@@ -181,7 +183,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	char	   *path;
 	File		fd;
 
-	if (isRedo && reln->md_num_open_segs[forkNum] > 0)
+	if ((isRedo || IsRpcServer) && reln->md_num_open_segs[forkNum] > 0)
 		return;					/* created and opened already... */
 
 	Assert(reln->md_num_open_segs[forkNum] == 0);
@@ -207,7 +209,7 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	{
 		int			save_errno = errno;
 
-		if (isRedo)
+		if (isRedo||IsRpcServer)
 			fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
 		if (fd < 0)
 		{

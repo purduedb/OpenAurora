@@ -53,6 +53,7 @@
 #include "utils/rel.h"
 #include "utils/resowner_private.h"
 #include "utils/timestamp.h"
+#include "storage/rpcclient.h"
 
 
 /* Note: these two macros only work on shared buffers, not local ones! */
@@ -77,6 +78,8 @@ typedef struct PrivateRefCountEntry
 
 /* 64 bytes, about the size of a cache line on common systems */
 #define REFCOUNT_ARRAY_ENTRIES 8
+
+extern int IsRpcClient;
 
 /*
  * Status of buffers to checkpoint for a particular tablespace, used
@@ -448,10 +451,6 @@ ForgetPrivateRefCountEntry(PrivateRefCountEntry *ref)
 )
 
 
-static Buffer ReadBuffer_common(SMgrRelation reln, char relpersistence,
-								ForkNumber forkNum, BlockNumber blockNum,
-								ReadBufferMode mode, BufferAccessStrategy strategy,
-								bool *hit);
 static bool PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy);
 static void PinBuffer_Locked(BufferDesc *buf);
 static void UnpinBuffer(BufferDesc *buf, bool fixOwner);
@@ -711,7 +710,7 @@ ReadBufferWithoutRelcache(RelFileNode rnode, ForkNumber forkNum,
  *
  * *hit is set to true if the request was satisfied from shared buffer cache.
  */
-static Buffer
+Buffer
 ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				  BlockNumber blockNum, ReadBufferMode mode,
 				  BufferAccessStrategy strategy, bool *hit)
@@ -727,7 +726,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	/* Make sure we will have room to remember the buffer pin */
 	ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
 
-	isExtend = (blockNum == P_NEW);
+    isExtend = (blockNum == P_NEW);
 
 	TRACE_POSTGRESQL_BUFFER_READ_START(forkNum, blockNum,
 									   smgr->smgr_rnode.node.spcNode,
@@ -905,7 +904,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			if (track_io_timing)
 				INSTR_TIME_SET_CURRENT(io_start);
 
-			smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
+			if(IsRpcClient)
+                RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+			else
+			    smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
 
 			if (track_io_timing)
 			{
@@ -1718,8 +1720,9 @@ UnpinBuffer(BufferDesc *buf, bool fixOwner)
 	ref = GetPrivateRefCountEntry(b, false);
 	Assert(ref != NULL);
 
-	if (fixOwner)
-		ResourceOwnerForgetBuffer(CurrentResourceOwner, b);
+	if (fixOwner) {
+        ResourceOwnerForgetBuffer(CurrentResourceOwner, b);
+    }
 
 	Assert(ref->refcount > 0);
 	ref->refcount--;

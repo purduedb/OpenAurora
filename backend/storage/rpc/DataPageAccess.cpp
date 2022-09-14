@@ -9,6 +9,257 @@
 namespace tutorial {
 
 
+DataPageAccess_ReadBufferCommon_args::~DataPageAccess_ReadBufferCommon_args() noexcept {
+}
+
+
+uint32_t DataPageAccess_ReadBufferCommon_args::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += this->_reln.read(iprot);
+          this->__isset._reln = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_relpersistence);
+          this->__isset._relpersistence = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 3:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_forknum);
+          this->__isset._forknum = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_blknum);
+          this->__isset._blknum = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 5:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_readBufferMode);
+          this->__isset._readBufferMode = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_ReadBufferCommon_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_ReadBufferCommon_args");
+
+  xfer += oprot->writeFieldBegin("_reln", ::apache::thrift::protocol::T_STRUCT, 1);
+  xfer += this->_reln.write(oprot);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_relpersistence", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32(this->_relpersistence);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeI32(this->_forknum);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeI32(this->_blknum);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_readBufferMode", ::apache::thrift::protocol::T_I32, 5);
+  xfer += oprot->writeI32(this->_readBufferMode);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_ReadBufferCommon_pargs::~DataPageAccess_ReadBufferCommon_pargs() noexcept {
+}
+
+
+uint32_t DataPageAccess_ReadBufferCommon_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_ReadBufferCommon_pargs");
+
+  xfer += oprot->writeFieldBegin("_reln", ::apache::thrift::protocol::T_STRUCT, 1);
+  xfer += (*(this->_reln)).write(oprot);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_relpersistence", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32((*(this->_relpersistence)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeI32((*(this->_forknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeI32((*(this->_blknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_readBufferMode", ::apache::thrift::protocol::T_I32, 5);
+  xfer += oprot->writeI32((*(this->_readBufferMode)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_ReadBufferCommon_result::~DataPageAccess_ReadBufferCommon_result() noexcept {
+}
+
+
+uint32_t DataPageAccess_ReadBufferCommon_result::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_STRING) {
+          xfer += iprot->readBinary(this->success);
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_ReadBufferCommon_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
+
+  uint32_t xfer = 0;
+
+  xfer += oprot->writeStructBegin("DataPageAccess_ReadBufferCommon_result");
+
+  if (this->__isset.success) {
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_STRING, 0);
+    xfer += oprot->writeBinary(this->success);
+    xfer += oprot->writeFieldEnd();
+  }
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_ReadBufferCommon_presult::~DataPageAccess_ReadBufferCommon_presult() noexcept {
+}
+
+
+uint32_t DataPageAccess_ReadBufferCommon_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_STRING) {
+          xfer += iprot->readBinary((*(this->success)));
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+
 DataPageAccess_RpcMdRead_args::~DataPageAccess_RpcMdRead_args() noexcept {
 }
 
@@ -1099,6 +1350,68 @@ uint32_t DataPageAccess_zip_pargs::write(::apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
+void DataPageAccessClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+{
+  send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+  recv_ReadBufferCommon(_return);
+}
+
+void DataPageAccessClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+{
+  int32_t cseqid = 0;
+  oprot_->writeMessageBegin("ReadBufferCommon", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_ReadBufferCommon_pargs args;
+  args._reln = &_reln;
+  args._relpersistence = &_relpersistence;
+  args._forknum = &_forknum;
+  args._blknum = &_blknum;
+  args._readBufferMode = &_readBufferMode;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+}
+
+void DataPageAccessClient::recv_ReadBufferCommon(_Page& _return)
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  iprot_->readMessageBegin(fname, mtype, rseqid);
+  if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+    ::apache::thrift::TApplicationException x;
+    x.read(iprot_);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+    throw x;
+  }
+  if (mtype != ::apache::thrift::protocol::T_REPLY) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  if (fname.compare("ReadBufferCommon") != 0) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  DataPageAccess_ReadBufferCommon_presult result;
+  result.success = &_return;
+  result.read(iprot_);
+  iprot_->readMessageEnd();
+  iprot_->getTransport()->readEnd();
+
+  if (result.__isset.success) {
+    // _return pointer has now been filled
+    return;
+  }
+  throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "ReadBufferCommon failed: unknown result");
+}
+
 void DataPageAccessClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
 {
   send_RpcMdRead(_reln, _forknum, _blknum);
@@ -1426,6 +1739,60 @@ bool DataPageAccessProcessor::dispatchCall(::apache::thrift::protocol::TProtocol
   return true;
 }
 
+void DataPageAccessProcessor::process_ReadBufferCommon(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
+{
+  void* ctx = nullptr;
+  if (this->eventHandler_.get() != nullptr) {
+    ctx = this->eventHandler_->getContext("DataPageAccess.ReadBufferCommon", callContext);
+  }
+  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "DataPageAccess.ReadBufferCommon");
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preRead(ctx, "DataPageAccess.ReadBufferCommon");
+  }
+
+  DataPageAccess_ReadBufferCommon_args args;
+  args.read(iprot);
+  iprot->readMessageEnd();
+  uint32_t bytes = iprot->getTransport()->readEnd();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postRead(ctx, "DataPageAccess.ReadBufferCommon", bytes);
+  }
+
+  DataPageAccess_ReadBufferCommon_result result;
+  try {
+    iface_->ReadBufferCommon(result.success, args._reln, args._relpersistence, args._forknum, args._blknum, args._readBufferMode);
+    result.__isset.success = true;
+  } catch (const std::exception& e) {
+    if (this->eventHandler_.get() != nullptr) {
+      this->eventHandler_->handlerError(ctx, "DataPageAccess.ReadBufferCommon");
+    }
+
+    ::apache::thrift::TApplicationException x(e.what());
+    oprot->writeMessageBegin("ReadBufferCommon", ::apache::thrift::protocol::T_EXCEPTION, seqid);
+    x.write(oprot);
+    oprot->writeMessageEnd();
+    oprot->getTransport()->writeEnd();
+    oprot->getTransport()->flush();
+    return;
+  }
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preWrite(ctx, "DataPageAccess.ReadBufferCommon");
+  }
+
+  oprot->writeMessageBegin("ReadBufferCommon", ::apache::thrift::protocol::T_REPLY, seqid);
+  result.write(oprot);
+  oprot->writeMessageEnd();
+  bytes = oprot->getTransport()->writeEnd();
+  oprot->getTransport()->flush();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postWrite(ctx, "DataPageAccess.ReadBufferCommon", bytes);
+  }
+}
+
 void DataPageAccessProcessor::process_RpcMdRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
 {
   void* ctx = nullptr;
@@ -1736,6 +2103,94 @@ void DataPageAccessProcessor::process_zip(int32_t, ::apache::thrift::protocol::T
   ::std::shared_ptr< DataPageAccessIf > handler(handlerFactory_->getHandler(connInfo), cleanup);
   ::std::shared_ptr< ::apache::thrift::TProcessor > processor(new DataPageAccessProcessor(handler));
   return processor;
+}
+
+void DataPageAccessConcurrentClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+{
+  int32_t seqid = send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+  recv_ReadBufferCommon(_return, seqid);
+}
+
+int32_t DataPageAccessConcurrentClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+{
+  int32_t cseqid = this->sync_->generateSeqId();
+  ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
+  oprot_->writeMessageBegin("ReadBufferCommon", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_ReadBufferCommon_pargs args;
+  args._reln = &_reln;
+  args._relpersistence = &_relpersistence;
+  args._forknum = &_forknum;
+  args._blknum = &_blknum;
+  args._readBufferMode = &_readBufferMode;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+
+  sentry.commit();
+  return cseqid;
+}
+
+void DataPageAccessConcurrentClient::recv_ReadBufferCommon(_Page& _return, const int32_t seqid)
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  // the read mutex gets dropped and reacquired as part of waitForWork()
+  // The destructor of this sentry wakes up other clients
+  ::apache::thrift::async::TConcurrentRecvSentry sentry(this->sync_.get(), seqid);
+
+  while(true) {
+    if(!this->sync_->getPending(fname, mtype, rseqid)) {
+      iprot_->readMessageBegin(fname, mtype, rseqid);
+    }
+    if(seqid == rseqid) {
+      if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+        ::apache::thrift::TApplicationException x;
+        x.read(iprot_);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+        sentry.commit();
+        throw x;
+      }
+      if (mtype != ::apache::thrift::protocol::T_REPLY) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+      }
+      if (fname.compare("ReadBufferCommon") != 0) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+
+        // in a bad state, don't commit
+        using ::apache::thrift::protocol::TProtocolException;
+        throw TProtocolException(TProtocolException::INVALID_DATA);
+      }
+      DataPageAccess_ReadBufferCommon_presult result;
+      result.success = &_return;
+      result.read(iprot_);
+      iprot_->readMessageEnd();
+      iprot_->getTransport()->readEnd();
+
+      if (result.__isset.success) {
+        // _return pointer has now been filled
+        sentry.commit();
+        return;
+      }
+      // in a bad state, don't commit
+      throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "ReadBufferCommon failed: unknown result");
+    }
+    // seqid != rseqid
+    this->sync_->updatePending(fname, mtype, rseqid);
+
+    // this will temporarily unlock the readMutex, and let other clients get work done
+    this->sync_->waitForWork(seqid);
+  } // end while(true)
 }
 
 void DataPageAccessConcurrentClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
