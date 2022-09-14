@@ -1219,6 +1219,8 @@ LWLockDequeueSelf(LWLock *lock)
 bool
 LWLockAcquire(LWLock *lock, LWLockMode mode)
 {
+//    printf("%s %d, tname=%s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//    fflush(stdout);
 	PGPROC	   *proc = MyProc;
 	bool		result = true;
 	int			extraWaits = 0;
@@ -1282,7 +1284,9 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 		 * Try to grab the lock the first time, we're not in the waitqueue
 		 * yet/anymore.
 		 */
+        LwMutexLock();
 		mustwait = LWLockAttemptLock(lock, mode);
+        LwMutexUnlock();
 
 		if (!mustwait)
 		{
@@ -1302,17 +1306,23 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 		 */
 
 		/* add to the queue */
+        LwMutexLock();
 		LWLockQueueSelf(lock, mode);
+        LwMutexUnlock();
 
 		/* we're now guaranteed to be woken up if necessary */
+        LwMutexLock();
 		mustwait = LWLockAttemptLock(lock, mode);
+        LwMutexUnlock();
 
 		/* ok, grabbed the lock the second time round, need to undo queueing */
 		if (!mustwait)
 		{
 			LOG_LWDEBUG("LWLockAcquire", lock, "acquired, undoing queue");
 
+            LwMutexLock();
 			LWLockDequeueSelf(lock);
+            LwMutexUnlock();
 			break;
 		}
 
@@ -1380,6 +1390,8 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 	while (extraWaits-- > 0)
 		PGSemaphoreUnlock(proc->sem);
 
+//    printf("%s %d, tname = %s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//    fflush(stdout);
 	return result;
 }
 
@@ -1829,6 +1841,8 @@ LWLockUpdateVar(LWLock *lock, uint64 *valptr, uint64 val)
 void
 LWLockRelease(LWLock *lock)
 {
+//    printf("%s %d tname = %s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//    fflush(stdout);
 	LWLockMode	mode;
 	uint32		oldstate;
 	bool		check_waiters;
@@ -1853,6 +1867,8 @@ LWLockRelease(LWLock *lock)
 		held_lwlocks[i] = held_lwlocks[i + 1];
     LwMutexUnlock();
 
+//    printf("%s %d tname = %s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//    fflush(stdout);
 	PRINT_LWDEBUG("LWLockRelease", lock, mode);
 
 	/*
@@ -1885,17 +1901,23 @@ LWLockRelease(LWLock *lock)
 	 */
 	if (check_waiters)
 	{
+//        printf("%s %d tname = %s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//        fflush(stdout);
 		/* XXX: remove before commit? */
 		LOG_LWDEBUG("LWLockRelease", lock, "releasing waiters");
+        LwMutexLock();
 		LWLockWakeup(lock);
+        LwMutexUnlock();
 	}
 
 	TRACE_POSTGRESQL_LWLOCK_RELEASE(T_NAME(lock));
 
-	/*
-	 * Now okay to allow cancel/die interrupts.
-	 */
+    /*
+     * Now okay to allow cancel/die interrupts.
+     */
 	RESUME_INTERRUPTS();
+//    printf("%s %d tname = %s, tid = %d\n", __func__ , __LINE__, T_NAME(lock), gettid());
+//    fflush(stdout);
 }
 
 /*

@@ -190,6 +190,7 @@ mdinit(void)
 bool
 mdexists(SMgrRelation reln, ForkNumber forkNum)
 {
+    Assert(reln->smgr_rnode != NULL);
     ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forkNum);
     TempPartationLock(MdPartitionMutex, (void*)&forkTagData);
 	/*
@@ -204,6 +205,7 @@ mdexists(SMgrRelation reln, ForkNumber forkNum)
 	return (result != NULL);
 }
 
+pthread_mutex_t pgDataDirMutex = PTHREAD_MUTEX_INITIALIZER;
 /*
  *	mdcreate() -- Create a new relation on magnetic disk.
  *
@@ -235,9 +237,13 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	 * should be here and not in commands/tablespace.c?  But that would imply
 	 * importing a lot of stuff that smgr.c oughtn't know, either.
 	 */
+    pthread_mutex_lock(&pgDataDirMutex);
+
 	TablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
 							reln->smgr_rnode.node.dbNode,
 							isRedo);
+
+    pthread_mutex_unlock(&pgDataDirMutex);
 
 	path = relpath(reln->smgr_rnode, forkNum);
 

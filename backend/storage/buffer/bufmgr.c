@@ -32,6 +32,7 @@
 
 #include <sys/file.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "access/tableam.h"
 #include "access/xlog.h"
@@ -158,6 +159,7 @@ static bool IsForInput;
 /* local state for LockBufferForCleanup */
 static BufferDesc *PinCountWaitBuf = NULL;
 
+pthread_mutex_t pinMutex = PTHREAD_MUTEX_INITIALIZER;
 /*
  * Backend-Private refcount management:
  *
@@ -342,6 +344,7 @@ GetPrivateRefCountEntry(Buffer buffer, bool do_move)
 	}
 	else
 	{
+        pthread_mutex_lock(&pinMutex);
 		/* move buffer from hashtable into the free array slot */
 		bool		found;
 		PrivateRefCountEntry *free;
@@ -367,6 +370,7 @@ GetPrivateRefCountEntry(Buffer buffer, bool do_move)
 		Assert(found);
 		Assert(PrivateRefCountOverflowed > 0);
 		PrivateRefCountOverflowed--;
+        pthread_mutex_unlock(&pinMutex);
 
 		return free;
 	}
@@ -726,7 +730,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	/* Make sure we will have room to remember the buffer pin */
 	ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
 
-	isExtend = (blockNum == P_NEW);
+    isExtend = (blockNum == P_NEW);
 
 	TRACE_POSTGRESQL_BUFFER_READ_START(forkNum, blockNum,
 									   smgr->smgr_rnode.node.spcNode,
@@ -1598,6 +1602,7 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 
 	if (ref == NULL)
 	{
+        pthread_mutex_lock(&pinMutex);
 		uint32		buf_state;
 		uint32		old_buf_state;
 
@@ -1638,6 +1643,7 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 				break;
 			}
 		}
+        pthread_mutex_unlock(&pinMutex);
 	}
 	else
 	{
@@ -1720,8 +1726,11 @@ UnpinBuffer(BufferDesc *buf, bool fixOwner)
 	ref = GetPrivateRefCountEntry(b, false);
 	Assert(ref != NULL);
 
-	if (fixOwner)
-		ResourceOwnerForgetBuffer(CurrentResourceOwner, b);
+	if (fixOwner) {
+        pthread_mutex_lock(&pinMutex);
+        ResourceOwnerForgetBuffer(CurrentResourceOwner, b);
+        pthread_mutex_unlock(&pinMutex);
+    }
 
 	Assert(ref->refcount > 0);
 	ref->refcount--;

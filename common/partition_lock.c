@@ -7,8 +7,8 @@
 #include <stdlib.h>
 
 void InitializePartitionMutex(PartitionMutex* partitionMutexPtr, int slotNum, size_t keySize) {
-    printf("%s %s %d, keySize = %ld\n", __func__ , __FILE__ , __LINE__, keySize);
-    fflush(stdout);
+//    printf("%s %s %d, keySize = %ld\n", __func__ , __FILE__ , __LINE__, keySize);
+//    fflush(stdout);
     *partitionMutexPtr = (PartitionMutex) malloc(sizeof(struct PartitionMutexData)) ;
 
 
@@ -22,27 +22,27 @@ void InitializePartitionMutex(PartitionMutex* partitionMutexPtr, int slotNum, si
 }
 
 void DestroyPartitionMutex(PartitionMutex partitionMutex) {
-    printf("%s %s %d\n", __func__ , __FILE__ , __LINE__);
-    fflush(stdout);
+//    printf("%s %s %d tid=%d\n", __func__ , __FILE__ , __LINE__, gettid());
+//    fflush(stdout);
     for(int i = 0; i < partitionMutex->slot_num; i++) {
         pthread_mutex_destroy(&partitionMutex->mutex_list[i]);
     }
     free(partitionMutex->mutex_list);
     free(partitionMutex);
-    printf("%s %s %d\n", __func__ , __FILE__ , __LINE__);
-    fflush(stdout);
+//    printf("%s %s %d tid=%d\n", __func__ , __FILE__ , __LINE__, gettid());
+//    fflush(stdout);
 }
 
 void PartitionLock(PartitionMutex partitionMutex, void* tag, char* funcName) {
-//    printf("%s tid = %d caller = %s\n", __func__ , gettid(), funcName);
+//    printf("Try to lock tid = %d caller = %s\n", gettid(), funcName);
 //    fflush(stdout);
 
     uint32 lockPos = tag_hash(tag, partitionMutex->key_size) % partitionMutex->slot_num;
 
-    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
-    pthread_mutex_lock(&targetMutex);
+//    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
+    pthread_mutex_lock(&(partitionMutex->mutex_list[lockPos]));
 
-//    printf("%s tid = %d succeed\n", __func__ , gettid());
+//    printf("%s tid = %d caller = %s succeed, pos = %d\n", __func__ , gettid(), funcName, lockPos);
 //    fflush(stdout);
 
 }
@@ -53,6 +53,6 @@ void PartitionUnlock(PartitionMutex partitionMutex, void* tag) {
 
     uint32 lockPos = tag_hash(tag, partitionMutex->key_size) % partitionMutex->slot_num;
 
-    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
-    pthread_mutex_lock(&targetMutex);
+//    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
+    pthread_mutex_unlock(&(partitionMutex->mutex_list[lockPos]));
 }
