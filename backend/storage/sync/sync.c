@@ -31,6 +31,8 @@
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 #include "utils/memutils.h"
+#include "tcop/wal_redo.h"
+#include "tcop/storage_server.h"
 
 static MemoryContext pendingOpsCxt; /* context for the pending ops state  */
 
@@ -79,6 +81,9 @@ static CycleCtr checkpoint_cycle_ctr = 0;
 #define FSYNCS_PER_ABSORB		10
 #define UNLINKS_PER_ABSORB		10
 
+// If it's wal_redo process, don't forward to checkpoint process
+extern bool		am_wal_redo_postgres;
+extern bool IsRpcServer;
 /*
  * Function pointers for handling sync and unlink requests.
  */
@@ -534,6 +539,8 @@ RegisterSyncRequest(const FileTag *ftag, SyncRequestType type,
 {
 	bool		ret;
 
+    if(am_wal_redo_postgres || IsRpcServer)
+        return true;
 	if (pendingOps != NULL)
 	{
 		/* standalone backend or startup process: fsync state is local */
@@ -543,6 +550,9 @@ RegisterSyncRequest(const FileTag *ftag, SyncRequestType type,
 
 	for (;;)
 	{
+		//todo: Add IsRpcServer???
+        if(IsRpcServer)
+            break;
 		/*
 		 * Notify the checkpointer about it.  If we fail to queue a message in
 		 * retryOnError mode, we have to sleep and try again ... ugly, but
@@ -554,7 +564,11 @@ RegisterSyncRequest(const FileTag *ftag, SyncRequestType type,
 		 * I'm inclined to assume that the checkpointer will always empty the
 		 * queue soon.
 		 */
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 		ret = ForwardSyncRequest(ftag, type);
+        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 
 		/*
 		 * If we are successful in queueing the request, or we failed and were

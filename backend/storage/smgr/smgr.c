@@ -26,6 +26,7 @@
 #include "storage/rpcclient.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
+#include <pthread.h>
 
 
 extern int IsRpcClient;
@@ -167,9 +168,11 @@ smgrshutdown(int code, Datum arg)
  *
  *		This does not attempt to actually open the underlying file.
  */
+pthread_mutex_t smgr_open_mutex = PTHREAD_MUTEX_INITIALIZER;
 SMgrRelation
 smgropen(RelFileNode rnode, BackendId backend)
 {
+    pthread_mutex_lock(&smgr_open_mutex);
 	RelFileNodeBackend brnode;
 	SMgrRelation reln;
 	bool		found;
@@ -215,6 +218,7 @@ smgropen(RelFileNode rnode, BackendId backend)
 		dlist_push_tail(&unowned_relns, &reln->node);
 	}
 
+    pthread_mutex_unlock(&smgr_open_mutex);
 	return reln;
 }
 
@@ -437,12 +441,16 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 			smgrsw[which].smgr_close(rels[i], forknum);
 	}
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	/*
 	 * Get rid of any remaining buffers for the relations.  bufmgr will just
 	 * drop them without bothering to write the contents.
 	 */
 	DropRelFileNodesAllBuffers(rnodes, nrels);
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	/*
 	 * It'd be nice to tell the stats collector to forget them immediately,
 	 * too. But we can't because we don't know the OIDs.
@@ -459,6 +467,8 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 	for (i = 0; i < nrels; i++)
 		CacheInvalidateSmgr(rnodes[i]);
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	/*
 	 * Delete the physical file(s).
 	 *
@@ -475,6 +485,8 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 			smgrsw[which].smgr_unlink(rnodes[i], forknum, isRedo);
 	}
 
+    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	pfree(rnodes);
 }
 

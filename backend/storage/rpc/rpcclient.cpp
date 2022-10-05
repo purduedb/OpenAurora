@@ -69,6 +69,9 @@ pid_t MyPid = 0;
 
 void RpcInit()
 {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     int myPid = getpid();
     if(myPid == MyPid)
         return;
@@ -77,7 +80,20 @@ void RpcInit()
     rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
     client = new DataPageAccessClient(rpcprotocol);
     rpctransport->open();
+
+    printf("%s transport created\n", __func__ );
+    fflush(stdout);
+
     MyPid = myPid;
+}
+
+void RpcClose() {
+    int myPid = getpid();
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+    // Only close transport created by itself
+    if(myPid == MyPid)
+        rpctransport->close();
 }
 
 _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {

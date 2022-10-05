@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
     void RpcInit(void);
+    void RpcClose(void);
     void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum);
     int32_t RpcMdExists(SMgrRelation reln, int32_t forknum);
     int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum);

@@ -63,6 +63,7 @@ OBJS_COMMON = \
 	kwlookup.o \
 	link-canary.o \
 	md5.o \
+	partition_lock.o \
 	pg_lzcompress.o \
 	pgfnames.o \
 	psprintf.o \

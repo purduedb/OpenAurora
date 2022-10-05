@@ -585,9 +585,6 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 	targetPageOff = XLogSegmentOffset(pageptr, state->segcxt.ws_segsize);
 
 	/* check whether we have all the requested data already */
-	if (targetSegNo == state->seg.ws_segno &&
-		targetPageOff == state->segoff && reqLen <= state->readLen)
-		return state->readLen;
 
 	/*
 	 * Data is not in our buffer.

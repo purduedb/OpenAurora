@@ -30,6 +30,7 @@
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "tcop/tcopprot.h"
+#include "storage/rpcclient.h"
 
 
 /*
@@ -103,6 +104,9 @@ static int	on_proc_exit_index,
 void
 proc_exit(int code)
 {
+    printf("%s Start, pid = %d\n", __func__ , getpid());
+    fflush(stdout);
+    RpcClose();
 	/* Clean up everything that must be cleaned up */
 	proc_exit_prepare(code);
 

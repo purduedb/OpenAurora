@@ -11,7 +11,9 @@
 #include <thrift/server/TSimpleServer.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <thrift/server/TThreadPoolServer.h>
 #include <thrift/server/TThreadedServer.h>
+#include <thrift/concurrency/ThreadManager.h>
 #include "storage/fd.h"
 #include "commands/tablespace.h"
 #include "pgstat.h"
@@ -24,6 +26,7 @@
 #include "utils/relcache.h"
 #include "storage/smgr.h"
 #include "utils/rel.h"
+#include "tcop/storage_server.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -46,37 +49,54 @@ public:
      * @param _fd
      */
     void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
-        printf("%s %s %d\n", __func__, __FILE__, __LINE__);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
+        fflush(stdout);
         // Your implementation goes here
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
-        char relpersistence = (char) _relpersistence;
-        bool hit;
-        char* page;
+        char buff[BLCKSZ];
+        GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
+        _return.assign(buff, BLCKSZ);
 
-        Buffer buff = ReadBuffer_common(smgrReln, relpersistence, (ForkNumber)_forknum, (BlockNumber)_blknum, (ReadBufferMode)_readBufferMode, NULL, &hit);
-        LockBuffer(buff, BUFFER_LOCK_SHARE);
-        page = BufferGetPage(buff);
-//        _return.resize(BLCKSZ);
-        _return.assign(page, BLCKSZ);
-
-        UnlockReleaseBuffer(buff);
+        if(PageIsNew(buff)) {
+            printf("%s found page is new\n", __func__ );
+            fflush(stdout);
+        }
+        printf("%s End\n", __func__ );
+//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+//
+//        char relpersistence = (char) _relpersistence;
+//        bool hit;
+//        char* page;
+//
+//        Buffer buff = ReadBuffer_common(smgrReln, relpersistence, (ForkNumber)_forknum, (BlockNumber)_blknum, (ReadBufferMode)_readBufferMode, NULL, &hit);
+//        LockBuffer(buff, BUFFER_LOCK_SHARE);
+//        page = BufferGetPage(buff);
+//        _return.assign(page, BLCKSZ);
+//
+//        UnlockReleaseBuffer(buff);
     }
 
     void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
-//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %ld\n", __func__ , __FILE__, __LINE__,
-//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
-//        fflush(stdout);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %ld\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
+        fflush(stdout);
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
+
+        char buff[BLCKSZ];
+        GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
+        _return.assign(buff, BLCKSZ);
+
+        printf("%s End\n", __func__ );
 //        RelationData relationData;
 //        memset(&relationData, 0, sizeof(RelationData));
 //        Relation relation = &relationData;
@@ -101,35 +121,39 @@ public:
 //
 //        UnlockReleaseBuffer(buff);
 
-        char page[BLCKSZ+16];
-        mdread(smgrReln, (ForkNumber)_forknum, _blknum, page);
-        _return.assign(page, BLCKSZ);
-
-        printf("%s end\n", __func__ );
-        fflush(stdout);
+//        char page[BLCKSZ+16];
+//        mdread(smgrReln, (ForkNumber)_forknum, _blknum, page);
+//        _return.assign(page, BLCKSZ);
+//
+//        printf("%s end\n", __func__ );
+//        fflush(stdout);
     }
 
     int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
-//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d\n", __func__ , __FILE__, __LINE__,
-//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
-//        fflush(stdout);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+        fflush(stdout);
         // Your implementation goes here
+//        SyncReplayProcess();
+
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
-        int32_t result = mdnblocks(smgrReln, (ForkNumber)_forknum);
-//        printf("%s result = %d end\n", __func__, result);
-//        fflush(stdout);
+        BlockNumber result = mdnblocks(smgrReln, (ForkNumber)_forknum);
+        printf("%s result = %u end\n", __func__, result);
+        fflush(stdout);
         return result;
     }
 
     int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) {
-//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d\n", __func__ , __FILE__, __LINE__,
-//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
-//        fflush(stdout);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+        fflush(stdout);
+
+//        SyncReplayProcess();
 
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
@@ -137,15 +161,17 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
         int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
-//        printf("%s result = %d end\n", __func__, result);
-//        fflush(stdout);
+        printf("%s result = %d end\n", __func__, result);
+        fflush(stdout);
         return result;
     }
 
     void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) {
-//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d\n", __func__ , __FILE__, __LINE__,
-//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
-//        fflush(stdout);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+        fflush(stdout);
+
+//        SyncReplayProcess();
 
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
@@ -153,14 +179,17 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
         mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
-//        printf("%s end\n", __func__);
-//        fflush(stdout);
+        printf("%s end\n", __func__);
+        fflush(stdout);
     }
 
     void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) {
-//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d\n", __func__ , __FILE__, __LINE__,
-//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
-//        fflush(stdout);
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+        fflush(stdout);
+
+//        SyncReplayProcess();
+
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
@@ -172,8 +201,8 @@ public:
 
         mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
 //        free(extendPage);
-//        printf("%s end\n", __func__);
-//        fflush(stdout);
+        printf("%s end\n", __func__);
+        fflush(stdout);
     }
     /**
      * This method has a oneway modifier. That means the client only makes
@@ -192,12 +221,33 @@ void
 RpcServerLoop(void){
     int port = 9090;
 
+    std::shared_ptr<concurrency::ThreadFactory> threadFactory = std::make_shared<concurrency::ThreadFactory>(new concurrency::ThreadFactory());
+//    std::shared_ptr<concurrency::ThreadManager> threadManager = concurrency::ThreadManager::newThreadManager();
+    std::shared_ptr<concurrency::ThreadManager> threadManager = concurrency::ThreadManager::newSimpleThreadManager(50);
+    threadManager->threadFactory(threadFactory);
+    threadManager->start();
+
+
 //    TSimpleServer server(
-    TThreadedServer server(
+//    TThreadedServer server(
+    std::shared_ptr<server::TServer> server;
+    server.reset ( new TThreadPoolServer(
             std::make_shared<DataPageAccessProcessor>(std::make_shared<DataPageAccessHandler>()),
             std::make_shared<TServerSocket>(port), //port
             std::make_shared<TBufferedTransportFactory>(),
-            std::make_shared<TBinaryProtocolFactory>());
+            std::make_shared<TBinaryProtocolFactory>(),
+            threadManager
+            ) );
 
-    server.serve();
+    concurrency::ThreadFactory factory;
+    factory.setDetached(false);
+    std::shared_ptr<apache::thrift::concurrency::Runnable> serverThreadRunner(server);
+    std::shared_ptr<apache::thrift::concurrency::Thread> thread = factory.newThread(serverThreadRunner);
+    thread->start();
+    concurrency::Monitor gMonitor;
+    gMonitor.waitForever();
+
+    server->stop();
+    thread->join();
+    server.reset();
 }

@@ -3,6 +3,7 @@
 //
 
 #include <signal.h>
+#include <unistd.h>
 
 #include "c.h"
 #include "postgres.h"
@@ -34,6 +35,9 @@
 #include "postmaster/fork_process.h"
 #include "bootstrap/bootstrap.h"
 #include "storage/sync.h"
+#include "tcop/wal_redo.h"
+#include "replication/walreceiver.h"
+#include "storage/md.h"
 
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
@@ -203,6 +207,223 @@ static void
 proc_die(SIGNAL_ARGS) {
    exit(0);
 }
+
+int serverPipe[2];
+int computePipe[2];
+
+static void
+StartWalRedoProcess(int argc, char *argv[],
+                    const char *dbname,
+                    const char *username) {
+
+    if(pipe(serverPipe) == -1)
+        printf("Error on pipe\n");
+
+    if(pipe(computePipe) == -1)
+        printf("Error on pipe\n");
+
+    __pid_t pid = fork();
+    if(pid > 0) {
+        close(computePipe[1]); // Close comp's write pipe
+        close(serverPipe[0]); //Close server's read pipe
+
+        //todo: should close at the end
+        //close(serverPipe[1]);
+        //close(computePipe[0]);
+    } else if (pid == 0) {
+        close(computePipe[0]); //Close comp's read pipe
+        close(serverPipe[1]); //Close server's write pipe
+
+//        if(computePipe[1] != STDOUT_FILENO) {
+//            if(dup2(computePipe[1], STDOUT_FILENO) == -1)
+//                exit(1);
+//            if(close(computePipe[1]) == -1)
+//                exit(2);
+//        }
+//
+//        if(serverPipe[0] != STDIN_FILENO) {
+//            if(dup2(serverPipe[0], STDIN_FILENO) == -1)
+//                exit(3);
+//            if(close(serverPipe[0]) == -1)
+//                exit(4);
+//        }
+
+
+        InitPostmasterChild();
+
+        /* Close the postmaster's sockets */
+        ClosePostmasterPorts(false);
+
+        WalRedoMain(argc, argv, dbname, username);
+
+        close(computePipe[1]);
+        close(serverPipe[0]);
+        exit(0);
+    }
+
+}
+
+pthread_mutex_t replayProcessMutex = PTHREAD_MUTEX_INITIALIZER;
+
+void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* buffer) {
+
+
+    pthread_mutex_lock(&replayProcessMutex);
+
+    // ------- Send "ApplyRecordUntil" request to replay process ------
+    char requestBuffer[1024];
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'U'; // Request function "ApplyRecordUntil"
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(lsn);  // Add parameter $lsn length
+    msgLen = pg_hton32(msgLen);
+
+
+    //todo temporary
+    if(WalRcv != NULL) {
+        lsn = WalRcv->flushedUpto;
+        printf("read lsn from writtenUpto, lsn = %ld\n", lsn);
+    }
+    lsn = pg_hton64(lsn);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+sizeof(msgLen)], &lsn, sizeof(lsn));
+
+
+    int targetMsgLen = 1+4+sizeof(lsn);
+
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+
+        sendLen+=writeLen;
+    }
+
+
+    // ------- Send "GetPage" request to replay process ------
+    requestBuffer[0] = 'G';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen += 4; // $blknum
+    msgLen = pg_hton32(msgLen);
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+    blockNumber = pg_hton32(blockNumber);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+4], &forkNumber, sizeof(unsigned char));
+    memcpy(&requestBuffer[1+4+1], &relFileNode.spcNode, 4);
+    memcpy(&requestBuffer[1+4+1+4], &relFileNode.dbNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4], &relFileNode.relNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4+4], &blockNumber, 4);
+
+    targetMsgLen = 1+4+1+4+4+4+4;
+    sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    while (recvLen < BLCKSZ) {
+        int readLen = read(computePipe[0], &buffer[recvLen], BLCKSZ - recvLen);
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    Assert(recvLen == BLCKSZ);
+    pthread_mutex_unlock(&replayProcessMutex);
+}
+
+void SyncReplayProcess() {
+
+    pthread_mutex_lock(&replayProcessMutex);
+
+    // ------- Send "ApplyRecordUntil" request to replay process ------
+    XLogRecPtr lsn = 0;
+    char requestBuffer[1024];
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'U'; // Request function "ApplyRecordUntil"
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(lsn);  // Add parameter $lsn length
+    msgLen = pg_hton32(msgLen);
+
+    //todo temporary
+    if(WalRcv != NULL) {
+        lsn = WalRcv->flushedUpto;
+        printf("read lsn from writtenUpto, lsn = %ld\n", lsn);
+    }
+    lsn = pg_hton64(lsn);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+sizeof(msgLen)], &lsn, sizeof(lsn));
+
+    int targetMsgLen = 1+4+sizeof(lsn);
+
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+    // -------- Send "SyncLsnReplay" request to replay process ---------
+    requestBuffer[0] = 'S'; // Request function "SyncLsnReplay"
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(lsn);  // Add parameter $lsn length
+    msgLen = pg_hton32(msgLen);
+
+    lsn = pg_hton64(lsn);
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+sizeof(msgLen)], &lsn, sizeof(lsn));
+
+    targetMsgLen = 1+4+sizeof(lsn);
+
+    sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+
+    // --------- Receive "ok" flag from replay process ----------
+    char buffer[8];
+    int recvLen = 0;
+    while (recvLen < 2) {
+        printf("%s Start reading\n", __func__ );
+        fflush(stdout);
+        int readLen = read(computePipe[0], &buffer[recvLen], 2 - recvLen);
+        if(readLen <= 0) {
+            printf("%s read pipe line error, readLen = %d\n", __func__ , readLen);
+            exit(0);
+        }
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    if(recvLen != 2) {
+        printf("%s, Error reply, expected len 2, received len %d\n", __func__ , recvLen);
+        exit(1);
+    }
+
+
+    pthread_mutex_unlock(&replayProcessMutex);
+}
+
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
@@ -217,7 +438,6 @@ RpcServerMain(int argc, char *argv[],
         printf("Set signal action failed \n");
     }
     /***************Clean register complete*********/
-
     IsRpcServer = 1;
 
     //Init pid to accept child process signals
@@ -232,6 +452,8 @@ RpcServerMain(int argc, char *argv[],
                                               "Postmaster",
                                               ALLOCSET_DEFAULT_SIZES);
     MemoryContextSwitchTo(PostmasterContext);
+    printf("LINE %d \n", __LINE__);
+    fflush(stdout);
 
     pqinitmask();
 //    PG_SETMASK(&BlockSig);
@@ -248,8 +470,6 @@ RpcServerMain(int argc, char *argv[],
     ChangeToDataDir();
     CreateDataDirLockFile(true);
 
-
-
     LocalProcessControlFile(false);
 
     process_shared_preload_libraries();
@@ -262,6 +482,8 @@ RpcServerMain(int argc, char *argv[],
     InitPostmasterDeathWatchHandle();
 
     StartupPid = StartChildProcess(StartupProcess);
+
+    StartWalRedoProcess(argc, argv, dbname, username);
 
     CreateAuxProcessResourceOwner();
 
@@ -278,9 +500,21 @@ RpcServerMain(int argc, char *argv[],
 
     InitProcess();
 
-//    while(1) {
-//        sleep(2);
+
+//    pthread_t threadID[200];
+//    for (int j = 0; j < 1000; ++j) {
+//        printf("000 %d \n", j);
+//        fflush(stdout);
+//        for(int i = 0; i < 200; i++) {
+//            pthread_create(&threadID[i], NULL, (void*)mdtest, NULL);
+//        }
+//        for(int i = 0; i < 20; i++) {
+//            pthread_join(threadID[i], NULL);
+//        }
 //    }
+
+
+
     RpcServerLoop();
     proc_exit(0);
 }

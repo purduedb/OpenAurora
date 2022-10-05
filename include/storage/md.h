@@ -23,6 +23,8 @@ extern "C" {
 #include "storage/smgr.h"
 #include "storage/sync.h"
 
+extern void mdtest(void);
+
 /* md storage manager functionality */
 extern void mdinit(void);
 

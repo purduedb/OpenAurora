@@ -79,11 +79,12 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 #include "tcop/storage_server.h"
+#include "tcop/wal_redo.h"
 
 extern uint32 bootstrap_data_checksum_version;
 
 extern int IsRpcServer;
-
+extern bool	am_wal_redo_postgres;
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
 #define RECOVERY_COMMAND_DONE	"recovery.done"
@@ -386,7 +387,7 @@ static XLogRecPtr RedoRecPtr;
 static bool doPageWrites;
 
 /* Has the recovery code requested a walreceiver wakeup? */
-static bool doRequestWalReceiverReply;
+bool doRequestWalReceiverReply;
 
 /*
  * RedoStartLSN points to the checkpoint's REDO location which is specified
@@ -914,8 +915,6 @@ static bool InstallXLogFileSegment(XLogSegNo *segno, char *tmppath,
 static int	XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 						 XLogSource source, bool notfoundOk);
 static int	XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source);
-static int	XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
-						 int reqLen, XLogRecPtr targetRecPtr, char *readBuf);
 static bool WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 										bool fetching_ckpt, XLogRecPtr tliRecPtr);
 static int	emode_for_corrupt_record(int emode, XLogRecPtr RecPtr);
@@ -3671,7 +3670,9 @@ static int
 XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 			 XLogSource source, bool notfoundOk)
 {
-	char		xlogfname[MAXFNAMELEN];
+    printf("pid=%d, %s %s %d, source = %d\n", getpid(), __func__ , __FILE__, __LINE__, source );
+    fflush(stdout);
+    char		xlogfname[MAXFNAMELEN];
 	char		activitymsg[MAXFNAMELEN + 16];
 	char		path[MAXPGPATH];
 	int			fd;
@@ -3704,10 +3705,12 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 			elog(ERROR, "invalid XLogFileRead source %d", source);
 	}
 
-	/*
-	 * If the segment was fetched from archival storage, replace the existing
-	 * xlog segment (if any) with the archival version.
-	 */
+    printf("pid=%d, %s %s %d, path = %s\n", getpid(), __func__ , __FILE__, __LINE__, path);
+    fflush(stdout);
+    /*
+     * If the segment was fetched from archival storage, replace the existing
+     * xlog segment (if any) with the archival version.
+     */
 	if (source == XLOG_FROM_ARCHIVE)
 	{
 		KeepFileRestoredFromArchive(path, xlogfname);
@@ -3753,6 +3756,9 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 static int
 XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 {
+    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+    fflush(stdout);
+
 	char		path[MAXPGPATH];
 	ListCell   *cell;
 	int			fd;
@@ -3781,10 +3787,15 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 	else
 		tles = readTimeLineHistory(recoveryTargetTLI);
 
+    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+    fflush(stdout);
 	foreach(cell, tles)
 	{
 		TimeLineHistoryEntry *hent = (TimeLineHistoryEntry *) lfirst(cell);
 		TimeLineID	tli = hent->tli;
+
+        printf("pid=%d, %s %s %d, timelineID = %d\n", getpid(), __func__ , __FILE__, __LINE__, tli);
+        fflush(stdout);
 
 		if (tli < curFileTLI)
 			break;				/* don't bother looking at too-old TLIs */
@@ -3828,6 +3839,8 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 
 		if (source == XLOG_FROM_ANY || source == XLOG_FROM_PG_WAL)
 		{
+            printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+            fflush(stdout);
 			fd = XLogFileRead(segno, emode, tli,
 							  XLOG_FROM_PG_WAL, true);
 			if (fd != -1)
@@ -3839,7 +3852,9 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 		}
 	}
 
-	/* Couldn't find it.  For simplicity, complain about front timeline */
+    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+    fflush(stdout);
+    /* Couldn't find it.  For simplicity, complain about front timeline */
 	XLogFilePath(path, recoveryTargetTLI, segno, wal_segment_size);
 	errno = ENOENT;
 	ereport(emode,
@@ -4331,6 +4346,9 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
 	XLogRecord *record;
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
 
@@ -5086,6 +5104,7 @@ XLOGShmemSize(void)
 void
 XLOGShmemInit(void)
 {
+    printf("%s start\n", __func__ );
 	bool		foundCFile,
 				foundXLog;
 	char	   *allocptr;
@@ -5118,6 +5137,7 @@ XLOGShmemInit(void)
 
 	if (foundCFile || foundXLog)
 	{
+	    printf("%s, checkpoint=%ld\n", __func__ , ControlFile->checkPoint);
 		/* both should be present or neither */
 		Assert(foundCFile && foundXLog);
 
@@ -5136,10 +5156,12 @@ XLOGShmemInit(void)
 	 */
 	if (localControlFile)
 	{
+	    printf("%s, localControlFile, checkpoint =%ld\n", __func__ , localControlFile->checkPoint);
 		memcpy(ControlFile, localControlFile, sizeof(ControlFileData));
 		pfree(localControlFile);
 	}
 
+	printf("%s, SetControl checkpoint finished\n", __func__ );
 	/*
 	 * Since XLogCtlData contains XLogRecPtr fields, its sizeof should be a
 	 * multiple of the alignment for same, so no extra alignment padding is
@@ -6347,6 +6369,7 @@ StartupXLOG(void)
 	if (!XRecOffIsValid(ControlFile->checkPoint))
 		ereport(FATAL,
 				(errmsg("control file contains invalid checkpoint location")));
+	printf("%s checkPoint = %ld\n", __func__ , ControlFile->checkPoint);
 
 	switch (ControlFile->state)
 	{
@@ -6444,6 +6467,8 @@ StartupXLOG(void)
 	else
 		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/*
 	 * Check for signal files, and if so set up state for offline recovery
 	 */
@@ -6502,6 +6527,8 @@ StartupXLOG(void)
 				 errdetail("Failed while allocating a WAL reading processor.")));
 	xlogreader->system_identifier = ControlFile->system_identifier;
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/*
 	 * Allocate two page buffers dedicated to WAL consistency checks.  We do
 	 * it this way, rather than just making static arrays, for two reasons:
@@ -6530,6 +6557,8 @@ StartupXLOG(void)
 		 * When a backup_label file is present, we want to roll forward from
 		 * the checkpoint it identifies, rather than using pg_control.
 		 */
+		printf("%s %d, checkPointLoc = %ld\n", __func__ , __LINE__, checkPointLoc);
+		fflush(stdout);
 		record = ReadCheckpointRecord(xlogreader, checkPointLoc, 0, true);
 		if (record != NULL)
 		{
@@ -6548,6 +6577,7 @@ StartupXLOG(void)
 			 */
 			if (checkPoint.redo < checkPointLoc)
 			{
+			    printf("%s %d, checkpoint.redo = %ld\n", __func__ , __LINE__, checkPoint.redo);
 				XLogBeginRead(xlogreader, checkPoint.redo);
 				if (!ReadRecord(xlogreader, LOG, false))
 					ereport(FATAL,
@@ -6665,6 +6695,7 @@ StartupXLOG(void)
 		/* Get the last valid checkpoint record. */
 		checkPointLoc = ControlFile->checkPoint;
 		RedoStartLSN = ControlFile->checkPointCopy.redo;
+		printf("%s %d, redoStartLSN = %ld\n", __func__ , __LINE__, RedoStartLSN);
 		record = ReadCheckpointRecord(xlogreader, checkPointLoc, 1, true);
 		if (record != NULL)
 		{
@@ -6687,6 +6718,8 @@ StartupXLOG(void)
 		wasShutdown = ((record->xl_info & ~XLR_INFO_MASK) == XLOG_CHECKPOINT_SHUTDOWN);
 	}
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/*
 	 * Clear out any old relcache cache files.  This is *necessary* if we do
 	 * any WAL replay, since that would probably result in the cache files
@@ -6729,6 +6762,8 @@ StartupXLOG(void)
 						   (uint32) switchpoint)));
 	}
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/*
 	 * The min recovery point should be part of the requested timeline's
 	 * history, too.
@@ -6743,7 +6778,11 @@ StartupXLOG(void)
 						(uint32) ControlFile->minRecoveryPoint,
 						ControlFile->minRecoveryPointTLI)));
 
+	printf("%s %d, LastRec = %ld\n",__func__ , __LINE__, LastRec);
 	LastRec = RecPtr = checkPointLoc;
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
 	ereport(DEBUG1,
 			(errmsg_internal("redo record is at %X/%X; shutdown %s",
@@ -7330,7 +7369,26 @@ StartupXLOG(void)
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
 				/* Now apply the WAL record itself */
-				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+//				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                //For the page related xlog, replay process will deal with them
+//                switch (record->xl_rmid) {
+//                    case RM_XLOG_ID:
+//                    case RM_SMGR_ID:
+//                    case RM_HEAP2_ID:
+//                    case RM_HEAP_ID:
+//                    case RM_BTREE_ID:
+//                    case RM_HASH_ID:
+//                    case RM_GIN_ID:
+//                    case RM_GIST_ID:
+//                    case RM_SEQ_ID:
+//                    case RM_SPGIST_ID:
+//                    case RM_BRIN_ID:
+//                    case RM_GENERIC_ID:
+//                        break;
+//                    default:
+//                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+//                        break;
+//                }
 
 				/*
 				 * After redo, check whether the backup pages associated with
@@ -7338,11 +7396,11 @@ StartupXLOG(void)
 				 * check is done only if consistency check is enabled for this
 				 * record.
 				 */
-				if ((record->xl_info & XLR_CHECK_CONSISTENCY) != 0)
-					checkXLogConsistency(xlogreader);
+//				if ((record->xl_info & XLR_CHECK_CONSISTENCY) != 0)
+//					checkXLogConsistency(xlogreader);
 
 				/* Pop the error context stack */
-				error_context_stack = errcallback.previous;
+//				error_context_stack = errcallback.previous;
 
 				/*
 				 * Update lastReplayedEndRecPtr after this record has been
@@ -7358,42 +7416,43 @@ StartupXLOG(void)
 				 * up the receiver so that it notices the updated
 				 * lastReplayedEndRecPtr and sends a reply to the master.
 				 */
-				if (doRequestWalReceiverReply)
-				{
-					doRequestWalReceiverReply = false;
-					WalRcvForceReply();
-				}
+//                printf("pid =%d, %s, doRequestWalReceiverReplay =%d\n", getpid(), __func__ , doRequestWalReceiverReply);
+//				if (doRequestWalReceiverReply)
+//				{
+//					doRequestWalReceiverReply = false;
+//					WalRcvForceReply();
+//				}
 
 				/* Remember this record as the last-applied one */
 				LastRec = ReadRecPtr;
 
 				/* Allow read-only connections if we're consistent now */
-				CheckRecoveryConsistency();
+//				CheckRecoveryConsistency();
 
 				/* Is this a timeline switch? */
-				if (switchedTLI)
-				{
+//				if (switchedTLI)
+//				{
 					/*
 					 * Before we continue on the new timeline, clean up any
 					 * (possibly bogus) future WAL segments on the old
 					 * timeline.
 					 */
-					RemoveNonParentXlogFiles(EndRecPtr, ThisTimeLineID);
+//					RemoveNonParentXlogFiles(EndRecPtr, ThisTimeLineID);
 
 					/*
 					 * Wake up any walsenders to notice that we are on a new
 					 * timeline.
 					 */
-					if (switchedTLI && AllowCascadeReplication())
-						WalSndWakeup();
-				}
+//					if (switchedTLI && AllowCascadeReplication())
+//						WalSndWakeup();
+//				}
 
 				/* Exit loop if we reached inclusive recovery target */
-				if (recoveryStopsAfter(xlogreader))
-				{
-					reachedRecoveryTarget = true;
-					break;
-				}
+//				if (recoveryStopsAfter(xlogreader))
+//				{
+//					reachedRecoveryTarget = true;
+//					break;
+//				}
 
 				/* Else, try to fetch the next WAL record */
 				record = ReadRecord(xlogreader, LOG, false);
@@ -8264,6 +8323,8 @@ ReadCheckpointRecord(XLogReaderState *xlogreader, XLogRecPtr RecPtr,
 	XLogBeginRead(xlogreader, RecPtr);
 	record = ReadRecord(xlogreader, LOG, true);
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	if (record == NULL)
 	{
 		if (!report)
@@ -11885,10 +11946,13 @@ CancelBackup(void)
  * XLogPageRead() to try fetching the record from another source, or to
  * sleep and retry.
  */
-static int
+int
 XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr, int reqLen,
 			 XLogRecPtr targetRecPtr, char *readBuf)
 {
+    printf("%s Start %s %d, pid=%d\n", __func__ , __FILE__, __LINE__, getpid());
+    fflush(stdout);
+
 	XLogPageReadPrivate *private =
 	(XLogPageReadPrivate *) xlogreader->private_data;
 	int			emode = private->emode;
@@ -11981,6 +12045,9 @@ retry:
 		char		fname[MAXFNAMELEN];
 		int			save_errno = errno;
 
+        printf("%s %s %d, read BLCKSZ xlog failed\n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
+
 		pgstat_report_wait_end();
 		XLogFileName(fname, curFileTLI, readSegNo, wal_segment_size);
 		if (r < 0)
@@ -12034,6 +12101,8 @@ retry:
 	 */
 	if (!XLogReaderValidatePageHeader(xlogreader, targetPagePtr, readBuf))
 	{
+        printf("%s %s %d, page header is invalid\n", __func__ , __FILE__, __LINE__);
+        fflush(stdout);
 		/* reset any error XLogReaderValidatePageHeader() might have set */
 		xlogreader->errormsg_buf[0] = '\0';
 		goto next_record_is_invalid;
@@ -12087,6 +12156,9 @@ static bool
 WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 							bool fetching_ckpt, XLogRecPtr tliRecPtr)
 {
+	printf("%s Start\n", __func__ );
+	fflush(stdout);
+
 	static TimestampTz last_fail_time = 0;
 	TimestampTz now;
 	bool		streaming_reply_sent = false;
@@ -12126,6 +12198,9 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		currentSource = XLOG_FROM_ARCHIVE;
 	}
 
+	printf("pid=%d, %s current source is %d, StandbyMode flag is %d\n", getpid() ,__func__ , currentSource, StandbyMode);
+	fflush(stdout);
+
 	for (;;)
 	{
 		XLogSource	oldSource = currentSource;
@@ -12137,7 +12212,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		 * happened outside this function, e.g when a CRC check fails on a
 		 * record, or within this loop.
 		 */
-		if (lastSourceFailed)
+        //If this process is replay process, keep reading from xlog
+		if (lastSourceFailed && !am_wal_redo_postgres)
 		{
 			switch (currentSource)
 			{
@@ -12262,6 +12338,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				currentSource = XLOG_FROM_ARCHIVE;
 		}
 
+
+		printf("%s ready to read xlog, current source is %d, pid = %d\n", __func__ , currentSource, getpid());
+		fflush(stdout);
+
 		if (currentSource != oldSource)
 			elog(DEBUG2, "switched WAL source from %s to %s after %s",
 				 xlogSourceNames[oldSource], xlogSourceNames[currentSource],
@@ -12272,17 +12352,25 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		 * source.
 		 */
 		lastSourceFailed = false;
+        printf("hhhhhhhhhhhhhhhhhhhhh, pid = %d\n", getpid());
 
 		switch (currentSource)
 		{
 			case XLOG_FROM_ARCHIVE:
 			case XLOG_FROM_PG_WAL:
 
+				printf("pid=%d, %s asserting\n",  getpid(), __func__ );
+                fflush(stdout);
 				/*
 				 * WAL receiver must not be running when reading WAL from
 				 * archive or pg_wal.
 				 */
+                printf("Streaming? %d\n", WalRcvStreaming());
+                fflush(stdout);
+
 				Assert(!WalRcvStreaming());
+				printf("pid=%d, %s passed asserting\n", getpid(), __func__ );
+                fflush(stdout);
 
 				/* Close any old file we might have open. */
 				if (readFile >= 0)
@@ -12301,6 +12389,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2,
 											  currentSource == XLOG_FROM_ARCHIVE ? XLOG_FROM_ANY :
 											  currentSource);
+                printf("%s %d pid=%d\n", __func__ , __LINE__, getpid());
 				if (readFile >= 0)
 					return true;	/* success! */
 

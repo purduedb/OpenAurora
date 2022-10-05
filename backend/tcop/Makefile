@@ -19,6 +19,7 @@ OBJS = \
 	postgres.o \
 	pquery.o \
 	utility.o \
-	storage_server.o
+	storage_server.o \
+	wal_redo.o
 
 include $(top_srcdir)/src/backend/common.mk
