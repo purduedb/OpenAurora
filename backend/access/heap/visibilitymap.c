@@ -99,24 +99,6 @@
 
 /*#define TRACE_VISIBILITYMAP */
 
-/*
- * Size of the bitmap on each visibility map page, in bytes. There's no
- * extra headers, so the whole page minus the standard page header is
- * used for the bitmap.
- */
-#define MAPSIZE (BLCKSZ - MAXALIGN(SizeOfPageHeaderData))
-
-/* Number of heap blocks we can represent in one byte */
-#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / BITS_PER_HEAPBLOCK)
-
-/* Number of heap blocks we can represent in one visibility map page. */
-#define HEAPBLOCKS_PER_PAGE (MAPSIZE * HEAPBLOCKS_PER_BYTE)
-
-/* Mapping from heap block number to the right bit in the visibility map */
-#define HEAPBLK_TO_MAPBLOCK(x) ((x) / HEAPBLOCKS_PER_PAGE)
-#define HEAPBLK_TO_MAPBYTE(x) (((x) % HEAPBLOCKS_PER_PAGE) / HEAPBLOCKS_PER_BYTE)
-#define HEAPBLK_TO_OFFSET(x) (((x) % HEAPBLOCKS_PER_BYTE) * BITS_PER_HEAPBLOCK)
-
 /* Masks for counting subsets of bits in the visibility map. */
 #define VISIBLE_MASK64	UINT64CONST(0x5555555555555555) /* The lower bit of each
 														 * bit pair */
@@ -305,6 +287,34 @@ visibilitymap_set(Relation rel, BlockNumber heapBlk, Buffer heapBuf,
 	}
 
 	LockBuffer(vmBuf, BUFFER_LOCK_UNLOCK);
+}
+
+void
+polar_visibilitymap_set(BlockNumber heapBlk, Buffer vmBuf, uint8 flags)
+{
+    BlockNumber mapBlock = HEAPBLK_TO_MAPBLOCK(heapBlk);
+    uint32		mapByte = HEAPBLK_TO_MAPBYTE(heapBlk);
+    uint8		mapOffset = HEAPBLK_TO_OFFSET(heapBlk);
+    Page		page;
+    uint8	   *map;
+
+    Assert(flags & VISIBILITYMAP_VALID_BITS);
+
+    /* Check that we have the right VM page pinned */
+    if (!BufferIsValid(vmBuf) || BufferGetBlockNumber(vmBuf) != mapBlock)
+        elog(ERROR, "wrong VM buffer passed to visibilitymap_set");
+
+    page = BufferGetPage(vmBuf);
+    map = (uint8 *) PageGetContents(page);
+
+    if (flags != (map[mapByte] >> mapOffset & VISIBILITYMAP_VALID_BITS))
+    {
+        START_CRIT_SECTION();
+
+        map[mapByte] |= (flags << mapOffset);
+
+        END_CRIT_SECTION();
+    }
 }
 
 /*

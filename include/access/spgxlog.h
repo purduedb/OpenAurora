@@ -14,6 +14,7 @@
 #define SPGXLOG_H
 
 #include "access/xlogreader.h"
+#include "access/spgist_private.h"
 #include "lib/stringinfo.h"
 #include "storage/off.h"
 
@@ -254,4 +255,6 @@ extern void spg_xlog_startup(void);
 extern void spg_xlog_cleanup(void);
 extern void spg_mask(char *pagedata, BlockNumber blkno);
 
+extern void addOrReplaceTuple(Page page, Item tuple, int size, OffsetNumber offset);
+extern void fillFakeState(SpGistState *state, spgxlogState stateSrc);
 #endif							/* SPGXLOG_H */

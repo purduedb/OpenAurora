@@ -24,7 +24,6 @@
 #ifndef POLAR_LOG_INDEX_H
 #define POLAR_LOG_INDEX_H
 
-#include "access/polar_log.h"
 #include "access/rmgr.h"
 #include "access/xlogdefs.h"
 #include "access/xlogreader.h"
@@ -41,10 +40,20 @@ typedef uint64  log_range_id_t;
 #define LOG_INDEX_SUPPORT_NO_PREVIOUS_LSN
 #define POLAR_MAX_SHMEM_NAME (128)
 
-#define POLAR_DATA_DIR() (POLAR_FILE_IN_SHARED_STORAGE() ? polar_datadir : DataDir)
+//#define POLAR_DATA_DIR() (POLAR_FILE_IN_SHARED_STORAGE() ? polar_datadir : DataDir)
 
-#define POLAR_FILE_PATH(path, orign) \
-	snprintf((path), MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), (orign));
+//#define POLAR_FILE_PATH(path, orign) \
+//	snprintf((path), MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), (orign));
+
+#define POLAR_READ_BUFFER_FOR_REDO(record, block_id, buffer) \
+	XLogReadBufferForRedoExtended((record), (block_id),\
+								  RBM_NORMAL, false, (buffer))
+
+
+#define POLAR_INIT_BUFFER_FOR_REDO(record, block_id, buffer) \
+	do { \
+		*(buffer) = (!BufferIsValid(*buffer)) ? XLogInitBufferForRedo(record, block_id) : *(buffer); \
+	} while (0)
 
 struct log_mem_table_t;
 struct log_index_iter_data_t;
@@ -72,18 +81,23 @@ typedef enum
 
 extern Size polar_logindex_shmem_size(uint64 logindex_mem_tbl_size, int bloom_blocks);
 
+
+extern void polar_logindex_shmem_init(uint64 logindex_mem_tbl_size, int bloom_blocks);
 extern logindex_snapshot_t polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_size,
 															  int bloom_blocks, int tranche_id_begin, int tranche_id_end, logindex_table_flushable table_flushable, void *extra_data);
 
 extern uint64 polar_logindex_convert_mem_tbl_size(uint64 mem_size);
 extern void polar_logindex_create_local_cache(logindex_snapshot_t logindex_snapshot, const char *cache_name, uint32 max_segments);
 
+
+extern MemoryContext polar_get_redo_context(void);
+
 extern MemoryContext polar_logindex_memory_context(void);
 extern uint64 polar_logindex_mem_tbl_size(logindex_snapshot_t logindex_snapshot);
 extern uint64 polar_logindex_used_mem_tbl_size(logindex_snapshot_t logindex_snapshot);
 extern void polar_logindex_set_start_lsn(logindex_snapshot_t logindex_snapshot, XLogRecPtr start_lsn);
-extern XLogRecPtr polar_logindex_snapshot_init(logindex_snapshot_t logindex_snapshot, XLogRecPtr checkpoint_lsn, bool read_only);
-extern void polar_logindex_add_lsn(logindex_snapshot_t logindex_snapshot, BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn);
+extern XLogRecPtr polar_logindex_snapshot_init();
+extern void polar_logindex_add_lsn(BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn);
 extern bool polar_logindex_write_table(logindex_snapshot_t logindex_snapshot, struct log_mem_table_t *table);
 extern bool polar_logindex_bg_write(logindex_snapshot_t logindex_snapshot);
 extern XLogRecPtr polar_logindex_start_lsn(logindex_snapshot_t logindex_snapshot);
@@ -129,7 +143,7 @@ extern bool polar_logindex_check_state(logindex_snapshot_t logindex_snapshot, ui
 
 #define POLAR_LOG_INDEX_ADD_LSN(logindex_snapshot, state, tag) \
 	do { \
-		polar_logindex_add_lsn((logindex_snapshot), (tag), InvalidXLogRecPtr, (state)->ReadRecPtr); \
+		polar_logindex_add_lsn((tag), InvalidXLogRecPtr, (state)->ReadRecPtr); \
 	} while (0)
 
 #define POLAR_GET_LOG_TAG(state, tag, block_id) \

@@ -31,7 +31,6 @@
 #include "storage/buf_internals.h"
 #include "storage/latch.h"
 #include "storage/lwlock.h"
-#include "storage/polar_fd.h"
 #include "storage/shmem.h"
 #include "storage/spin.h"
 #include "utils/guc.h"
@@ -43,8 +42,8 @@
 #define LOG_INDEX_VERSION               (0x0002)
 
 
-#define LOG_INDEX_FILE_TABLE_NAME(path, seg) \
-	snprintf((path), MAXPGPATH, "%s/%s/%04lX.tbl", POLAR_DATA_DIR(), logindex_snapshot->dir, seg);
+//#define LOG_INDEX_FILE_TABLE_NAME(path, seg) \
+//	snprintf((path), MAXPGPATH, "%s/%s/%04lX.tbl", POLAR_DATA_DIR(), logindex_snapshot->dir, seg);
 
 /* check polar_logindex_local_cache_scan_callback if modify name pattern */
 #define LOG_INDEX_LOCAL_CACHE_SEG_NAME(path, seg) \
@@ -371,7 +370,7 @@ typedef struct log_index_snapshot_t
 	log_index_promoted_info_t   promoted_info;
 	log_index_meta_t            meta;
 	uint64                      max_allocated_seg_no;
-	polar_local_cache           segment_cache;
+//	polar_local_cache           segment_cache;
 	struct Latch                *bg_worker_latch;
 	char                        trache_name[LOG_INDEX_MAX_TRACHE][NAMEDATALEN];
 	log_mem_table_t             mem_table[FLEXIBLE_ARRAY_MEMBER];
@@ -480,7 +479,7 @@ log_index_item_head(log_idx_table_data_t *table, log_seg_id_t head)
 {
 	if (head > LOG_INDEX_MEM_TBL_SEG_NUM)
 	{
-		POLAR_LOG_LOGINDEX_TABLE_INFO(table);
+//		POLAR_LOG_LOGINDEX_TABLE_INFO(table);
 		elog(PANIC, "Incorrect head=%u to get logindex item head", head);
 	}
 
@@ -493,7 +492,7 @@ log_index_item_seg(log_idx_table_data_t *table, log_seg_id_t seg)
 {
 	if (seg > LOG_INDEX_MEM_TBL_SEG_NUM)
 	{
-		POLAR_LOG_LOGINDEX_TABLE_INFO(table);
+//		POLAR_LOG_LOGINDEX_TABLE_INFO(table);
 		elog(PANIC, "Incorrect seg=%u to get logindex segment", seg);
 	}
 

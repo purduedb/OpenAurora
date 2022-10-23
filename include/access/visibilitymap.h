@@ -19,6 +19,24 @@
 #include "storage/buf.h"
 #include "utils/relcache.h"
 
+/*
+ * Size of the bitmap on each visibility map page, in bytes. There's no
+ * extra headers, so the whole page minus the standard page header is
+ * used for the bitmap.
+ */
+#define MAPSIZE (BLCKSZ - MAXALIGN(SizeOfPageHeaderData))
+
+/* Mapping from heap block number to the right bit in the visibility map */
+#define HEAPBLK_TO_MAPBLOCK(x) ((x) / HEAPBLOCKS_PER_PAGE)
+#define HEAPBLK_TO_MAPBYTE(x) (((x) % HEAPBLOCKS_PER_PAGE) / HEAPBLOCKS_PER_BYTE)
+#define HEAPBLK_TO_OFFSET(x) (((x) % HEAPBLOCKS_PER_BYTE) * BITS_PER_HEAPBLOCK)
+
+/* Number of heap blocks we can represent in one visibility map page. */
+#define HEAPBLOCKS_PER_PAGE (MAPSIZE * HEAPBLOCKS_PER_BYTE)
+
+/* Number of heap blocks we can represent in one byte */
+#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / BITS_PER_HEAPBLOCK)
+
 /* Number of bits for one heap page */
 #define BITS_PER_HEAPBLOCK 2
 
@@ -46,5 +64,9 @@ extern uint8 visibilitymap_get_status(Relation rel, BlockNumber heapBlk, Buffer 
 extern void visibilitymap_count(Relation rel, BlockNumber *all_visible, BlockNumber *all_frozen);
 extern BlockNumber visibilitymap_prepare_truncate(Relation rel,
 												  BlockNumber nheapblocks);
+
+extern void visibilitymap_set(Relation rel, BlockNumber heapBlk, Buffer heapBuf,
+                  XLogRecPtr recptr, Buffer vmBuf, TransactionId cutoff_xid,
+                  uint8 flags);
 
 #endif							/* VISIBILITYMAP_H */

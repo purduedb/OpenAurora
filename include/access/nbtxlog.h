@@ -332,4 +332,6 @@ extern void btree_xlog_startup(void);
 extern void btree_xlog_cleanup(void);
 extern void btree_mask(char *pagedata, BlockNumber blkno);
 
+extern void _bt_restore_page(Page page, char *from, int len);
+
 #endif							/* NBTXLOG_H */

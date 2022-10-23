@@ -225,7 +225,7 @@ gistRedoDeleteRecord(XLogReaderState *record)
 /*
  * Returns an array of index pointers.
  */
-static IndexTuple *
+IndexTuple *
 decodePageSplitRecord(char *begin, int len, int *n)
 {
 	char	   *ptr;

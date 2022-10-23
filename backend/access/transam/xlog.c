@@ -6333,6 +6333,7 @@ StartupXLOG(void)
 {
     if(IsRpcServer)
         sleep(5);
+    printf("%s Start\n", __func__ );
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
 	bool		wasShutdown;

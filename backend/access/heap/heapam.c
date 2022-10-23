@@ -7972,7 +7972,7 @@ heap_xlog_freeze_page(XLogReaderState *record)
  *
  * (This is the reverse of compute_infobits).
  */
-static void
+void
 fix_infomask_from_infobits(uint8 infobits, uint16 *infomask, uint16 *infomask2)
 {
 	*infomask &= ~(HEAP_XMAX_IS_MULTI | HEAP_XMAX_LOCK_ONLY |

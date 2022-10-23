@@ -36,14 +36,43 @@
 #include "port/atomics.h"
 #include "port/pg_crc32c.h"
 #include "postmaster/startup.h"
-#include "utils/hashutils.h"
+#include "storage/ipc.h"
 #include "utils/memutils.h"
 
 static log_index_io_err_t       logindex_io_err = 0;
 static int                      logindex_errno = 0;
+logindex_snapshot_t logindexSnapShot;
 
 static void log_index_insert_new_item(log_index_lsn_t *lsn_info, log_mem_table_t *table, uint32 key, log_seg_id_t new_item_id);
 static void log_index_insert_new_seg(log_mem_table_t *table, log_seg_id_t head, log_seg_id_t seg_id, log_index_lsn_t *lsn_info);
+
+
+static MemoryContext polar_redo_context = NULL;
+
+static void
+polar_clean_redo_context(int code, Datum arg)
+{
+    if (polar_redo_context)
+    {
+        MemoryContextDelete(polar_redo_context);
+        polar_redo_context = NULL;
+    }
+}
+
+MemoryContext
+polar_get_redo_context(void)
+{
+    if (polar_redo_context == NULL)
+    {
+        polar_redo_context = AllocSetContextCreate(CurrentMemoryContext,
+                                                   "polar working context",
+                                                   ALLOCSET_DEFAULT_SIZES);
+
+        before_shmem_exit(polar_clean_redo_context, 0);
+    }
+
+    return polar_redo_context;
+}
 
 // Xi: check whether snapshot has this state
 // States includes: POLAR_LOGINDEX_STATE_INITIALIZED,
@@ -121,7 +150,7 @@ polar_logindex_shmem_size(uint64 logindex_mem_tbl_size, int bloom_blocks)
 
 	size = add_size(size, log_index_mem_tbl_shmem_size(logindex_mem_tbl_size));
 
-	size = add_size(size, log_index_bloom_shmem_size(bloom_blocks));
+//	size = add_size(size, log_index_bloom_shmem_size(bloom_blocks));
 
 	size = add_size(size, log_index_lwlock_shmem_size(logindex_mem_tbl_size));
 
@@ -141,31 +170,33 @@ log_index_init_lwlock(log_index_snapshot_t *logindex_snapshot, int offset, int s
 static XLogRecPtr
 polar_logindex_snapshot_base_init(log_index_snapshot_t *logindex_snapshot, XLogRecPtr checkpoint_lsn)
 {
-	log_index_meta_t *meta = &logindex_snapshot->meta;
-	XLogRecPtr start_lsn = checkpoint_lsn;
-
-	Assert(!polar_logindex_check_state(logindex_snapshot, POLAR_LOGINDEX_STATE_INITIALIZED));
-	Assert(!XLogRecPtrIsInvalid(checkpoint_lsn));
+//	log_index_meta_t *meta = &logindex_snapshot->meta;
+	XLogRecPtr start_lsn = InvalidXLogRecPtr;
+//
+//	Assert(!polar_logindex_check_state(logindex_snapshot, POLAR_LOGINDEX_STATE_INITIALIZED));
+//	Assert(!XLogRecPtrIsInvalid(checkpoint_lsn));
 
 	LWLockAcquire(LOG_INDEX_IO_LOCK, LW_EXCLUSIVE);
 
 	/*
 	 * Reset logindex when we can not get correct logindex meta from storage
 	 */
-	if (!log_index_get_meta(logindex_snapshot, meta))
-	{
-		polar_logindex_snapshot_remove_data(logindex_snapshot);
-		MemSet(meta, 0, sizeof(log_index_meta_t));
-	}
+//	if (!log_index_get_meta(logindex_snapshot, meta))
+//	{
+//		polar_logindex_snapshot_remove_data(logindex_snapshot);
+//		MemSet(meta, 0, sizeof(log_index_meta_t));
+//	}
 
-	POLAR_LOG_LOGINDEX_META_INFO(meta);
+//	POLAR_LOG_LOGINDEX_META_INFO(meta);
 
     //XI: there are max_idx_table_id tables created, and the tables will be set inactive in mem_tbl_size size
-	logindex_snapshot_init_promoted_info(logindex_snapshot);
-	logindex_snapshot->max_idx_table_id = meta->max_idx_table_id;
-	LOG_INDEX_MEM_TBL_ACTIVE_ID = meta->max_idx_table_id % logindex_snapshot->mem_tbl_size;
+//	logindex_snapshot_init_promoted_info(logindex_snapshot);
+//	logindex_snapshot->max_idx_table_id = meta->max_idx_table_id;
+//	LOG_INDEX_MEM_TBL_ACTIVE_ID = meta->max_idx_table_id % logindex_snapshot->mem_tbl_size;
+    logindex_snapshot->max_idx_table_id = 0;
+    LOG_INDEX_MEM_TBL_ACTIVE_ID = 0;
 
-	logindex_snapshot->max_lsn = meta->max_lsn;
+	logindex_snapshot->max_lsn = 0;
 	MemSet(logindex_snapshot->mem_table, 0,
 		   sizeof(log_mem_table_t) * logindex_snapshot->mem_tbl_size);
 
@@ -176,15 +207,15 @@ polar_logindex_snapshot_base_init(log_index_snapshot_t *logindex_snapshot, XLogR
 	 * This will make ro and rw to create logindex from the same checkpoint.
 	 */
 
-	if (!XLogRecPtrIsInvalid(meta->start_lsn)
-			&& meta->start_lsn < checkpoint_lsn)
-		start_lsn = meta->start_lsn;
+//	if (!XLogRecPtrIsInvalid(meta->start_lsn)
+//			&& meta->start_lsn < checkpoint_lsn)
+//		start_lsn = meta->start_lsn;
 
 	/*
 	 * When we start to truncate lsn , latest_page_number may not be set up; insert a
 	 * suitable value to bypass the sanity test in SimpleLruTruncate.
 	 */
-	logindex_snapshot->bloom_ctl.shared->latest_page_number = UINT32_MAX;
+//	logindex_snapshot->bloom_ctl.shared->latest_page_number = UINT32_MAX;
 
 	LWLockRelease(LOG_INDEX_IO_LOCK);
 
@@ -193,7 +224,7 @@ polar_logindex_snapshot_base_init(log_index_snapshot_t *logindex_snapshot, XLogR
 	 * When first insert lsn to memory table, need to check whether it already exists
 	 * in previous table
 	 */
-	polar_load_logindex_snapshot_from_storage(logindex_snapshot, checkpoint_lsn);
+//	polar_load_logindex_snapshot_from_storage(logindex_snapshot, checkpoint_lsn);
 
 	pg_atomic_fetch_or_u32(&logindex_snapshot->state, POLAR_LOGINDEX_STATE_INITIALIZED);
 
@@ -201,22 +232,22 @@ polar_logindex_snapshot_base_init(log_index_snapshot_t *logindex_snapshot, XLogR
 }
 
 XLogRecPtr
-polar_logindex_snapshot_init(logindex_snapshot_t logindex_snapshot, XLogRecPtr checkpoint_lsn, bool read_only)
+polar_logindex_snapshot_init()
 {
 	XLogRecPtr start_lsn = InvalidXLogRecPtr;
 
-	if (!read_only)
-	{
-		char dir[MAXPGPATH];
-		snprintf(dir, MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir);
-		polar_validate_dir(dir);
+//	if (!read_only)
+//	{
+//		char dir[MAXPGPATH];
+//		snprintf(dir, MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir);
+//		polar_validate_dir(dir);
+//
+//		pg_atomic_fetch_or_u32(&logindex_snapshot->state, POLAR_LOGINDEX_STATE_WRITABLE);
+//	}
 
-		pg_atomic_fetch_or_u32(&logindex_snapshot->state, POLAR_LOGINDEX_STATE_WRITABLE);
-	}
+	start_lsn = polar_logindex_snapshot_base_init(logindexSnapShot, start_lsn);
 
-	start_lsn = polar_logindex_snapshot_base_init(logindex_snapshot, checkpoint_lsn);
-
-	ereport(LOG, (errmsg("Init %s succeed", logindex_snapshot->dir)));
+	ereport(LOG, (errmsg("Init %s succeed", logindexSnapShot->dir)));
 
 	return start_lsn;
 }
@@ -312,7 +343,7 @@ polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_siz
 		SpinLockInit(LOG_INDEX_SNAPSHOT_LOCK);
 
 		StrNCpy(logindex_snapshot->dir, name, NAMEDATALEN);
-		logindex_snapshot->segment_cache = NULL;
+//		logindex_snapshot->segment_cache = NULL;
 	}
 	else
 		Assert(found_snapshot && found_locks);
@@ -324,11 +355,18 @@ polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_siz
 	 * Notice: When define tranche id for logindex, the last one is used for logindex bloom.
 	 * See the definition between LWTRANCE_WAL_LOGINDEX_BEGIN and LWTRANCE_WAL_LOGINDEX_END
 	 */
-	SimpleLruInit(&logindex_snapshot->bloom_ctl, item_name,
-				  bloom_blocks, 0,
-				  LOG_INDEX_BLOOM_LRU_LOCK, name,
-				  tranche_id_end, true);
+//	SimpleLruInit(&logindex_snapshot->bloom_ctl, item_name,
+//				  bloom_blocks, 0,
+//				  LOG_INDEX_BLOOM_LRU_LOCK, name,
+//				  tranche_id_end, true);
 	return logindex_snapshot;
+}
+
+
+void
+polar_logindex_shmem_init(uint64 logindex_mem_tbl_size, int bloom_blocks) {
+    logindexSnapShot = polar_logindex_snapshot_shmem_init("pg_logindex", logindex_mem_tbl_size, bloom_blocks, LWTRANCHE_WAL_LOGINDEX_BEGIN, LWTRANCHE_WAL_LOGINDEX_END,
+                                                          NULL, NULL);
 }
 
 static bool
@@ -345,68 +383,68 @@ log_index_handle_update_v1_to_v2(log_index_meta_t *meta)
 bool
 log_index_get_meta(log_index_snapshot_t *logindex_snapshot, log_index_meta_t *meta)
 {
-	int         r;
-	char        meta_path[MAXPGPATH];
-	pg_crc32    crc;
-	int fd;
-
-	MemSet(meta, 0, sizeof(log_index_meta_t));
-
-	snprintf(meta_path, MAXPGPATH, "%s/%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir, LOG_INDEX_META_FILE);
-
-	if ((fd = PathNameOpenFile(meta_path, O_RDONLY | PG_BINARY, true)) < 0)
-		return false;
-
-
-	r = polar_file_pread(fd, (char *)meta, sizeof(log_index_meta_t), 0, WAIT_EVENT_LOGINDEX_META_READ);
-	logindex_errno = errno;
-
-	FileClose(fd);
-
-	if (r != sizeof(log_index_meta_t))
-	{
-		ereport(WARNING,
-				(errmsg("could not read file \"%s\": read %d of %d and errno=%d",
-						meta_path, r, (int) sizeof(log_index_meta_t), logindex_errno)));
-
-		return false;
-	}
-
-	crc = meta->crc;
-
-	if (meta->magic != LOG_INDEX_MAGIC)
-	{
-		POLAR_LOG_LOGINDEX_META_INFO(meta);
-		ereport(WARNING,
-				(errmsg("The magic number of meta file is incorrect, got %d, expect %d",
-						meta->magic, LOG_INDEX_MAGIC)));
-
-		return false;
-	}
-
-	meta->crc = 0;
-	meta->crc = log_index_calc_crc((unsigned char *)meta, sizeof(log_index_meta_t));
-
-	if (crc != meta->crc)
-	{
-		POLAR_LOG_LOGINDEX_META_INFO(meta);
-		ereport(WARNING,
-				(errmsg("The crc of file %s is incorrect, got %d but expect %d", meta_path,
-						crc, meta->crc)));
-
-		return false;
-	}
-
-	if (meta->version != LOG_INDEX_VERSION
-			&& !log_index_data_compatible(meta))
-	{
-		POLAR_LOG_LOGINDEX_META_INFO(meta);
-		ereport(WARNING,
-				(errmsg("The version is incorrect and incompatible, got %d, expect %d",
-						meta->version, LOG_INDEX_VERSION)));
-
-		return false;
-	}
+//	int         r;
+//	char        meta_path[MAXPGPATH];
+//	pg_crc32    crc;
+//	int fd;
+//
+//	MemSet(meta, 0, sizeof(log_index_meta_t));
+//
+//	snprintf(meta_path, MAXPGPATH, "%s/%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir, LOG_INDEX_META_FILE);
+//
+//	if ((fd = PathNameOpenFile(meta_path, O_RDONLY | PG_BINARY, true)) < 0)
+//		return false;
+//
+//
+//	r = polar_file_pread(fd, (char *)meta, sizeof(log_index_meta_t), 0, WAIT_EVENT_LOGINDEX_META_READ);
+//	logindex_errno = errno;
+//
+//	FileClose(fd);
+//
+//	if (r != sizeof(log_index_meta_t))
+//	{
+//		ereport(WARNING,
+//				(errmsg("could not read file \"%s\": read %d of %d and errno=%d",
+//						meta_path, r, (int) sizeof(log_index_meta_t), logindex_errno)));
+//
+//		return false;
+//	}
+//
+//	crc = meta->crc;
+//
+//	if (meta->magic != LOG_INDEX_MAGIC)
+//	{
+//		POLAR_LOG_LOGINDEX_META_INFO(meta);
+//		ereport(WARNING,
+//				(errmsg("The magic number of meta file is incorrect, got %d, expect %d",
+//						meta->magic, LOG_INDEX_MAGIC)));
+//
+//		return false;
+//	}
+//
+//	meta->crc = 0;
+//	meta->crc = log_index_calc_crc((unsigned char *)meta, sizeof(log_index_meta_t));
+//
+//	if (crc != meta->crc)
+//	{
+//		POLAR_LOG_LOGINDEX_META_INFO(meta);
+//		ereport(WARNING,
+//				(errmsg("The crc of file %s is incorrect, got %d but expect %d", meta_path,
+//						crc, meta->crc)));
+//
+//		return false;
+//	}
+//
+//	if (meta->version != LOG_INDEX_VERSION
+//			&& !log_index_data_compatible(meta))
+//	{
+//		POLAR_LOG_LOGINDEX_META_INFO(meta);
+//		ereport(WARNING,
+//				(errmsg("The version is incorrect and incompatible, got %d, expect %d",
+//						meta->version, LOG_INDEX_VERSION)));
+//
+//		return false;
+//	}
 
 	return true;
 }
@@ -544,7 +582,7 @@ log_index_insert_new_seg(log_mem_table_t *table, log_seg_id_t head,
 
 		if (pre_seg == NULL)
 		{
-			POLAR_LOG_LOGINDEX_MEM_TABLE_INFO(table);
+//			POLAR_LOG_LOGINDEX_MEM_TABLE_INFO(table);
 			ereport(PANIC, (errmsg("The log index table is corrupted, the segment %d is NULL;head=%d, seg_id=%d",
 								   item->tail_seg, head, seg_id)));
 		}
@@ -661,9 +699,9 @@ log_index_next_free_seg(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn,
 			NOTIFY_LOGINDEX_BG_WORKER(logindex_snapshot->bg_worker_latch);
 		}
 
-		pgstat_report_wait_start(WAIT_EVENT_LOGINDEX_WAIT_ACTIVE);
-		log_index_wait_active(logindex_snapshot, active, lsn);
-		pgstat_report_wait_end();
+//		pgstat_report_wait_start(WAIT_EVENT_LOGINDEX_WAIT_ACTIVE);
+//		log_index_wait_active(logindex_snapshot, active, lsn);
+//		pgstat_report_wait_end();
 
 		if (next_mem_id != -1)
 		{
@@ -698,7 +736,7 @@ log_index_update_min_segment(log_index_snapshot_t *logindex_snapshot)
 
 		if (log_index_read_table_data(logindex_snapshot, table, min_seg->max_idx_table_id, polar_trace_logindex(DEBUG4)) == false)
 		{
-			POLAR_LOG_LOGINDEX_META_INFO(meta);
+//			POLAR_LOG_LOGINDEX_META_INFO(meta);
 			ereport(PANIC,
 					(errmsg("Failed to read log index which tid=%ld when truncate logindex",
 							min_seg->max_idx_table_id)));
@@ -710,7 +748,7 @@ log_index_update_min_segment(log_index_snapshot_t *logindex_snapshot)
 	}
 
 
-	polar_log_index_write_meta(logindex_snapshot, &logindex_snapshot->meta, true);
+//	polar_log_index_write_meta(logindex_snapshot, &logindex_snapshot->meta, true);
 }
 
 static bool
@@ -761,12 +799,12 @@ log_index_truncate(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn)
 
 	SimpleLruTruncate(&logindex_snapshot->bloom_ctl, bloom_page);
 
-	if (max_segment_no - min_segment_no < polar_max_logindex_files)
-	{
-		/* Rename unused file for next segment */
-		if (log_index_rename_segment_file(logindex_snapshot, path))
-			return true;
-	}
+//	if (max_segment_no - min_segment_no < polar_max_logindex_files)
+//	{
+//		/* Rename unused file for next segment */
+//		if (log_index_rename_segment_file(logindex_snapshot, path))
+//			return true;
+//	}
 
 	durable_unlink(path, LOG);
 
@@ -777,36 +815,36 @@ log_index_truncate(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn)
 static bool
 log_index_exists_in_saved_table(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *lsn_info)
 {
-	uint32 mid;
-	log_mem_table_t *table;
-	uint32 i;
-	BufferTag      tag;
-	log_index_lsn_t saved_lsn;
-
-    //XI: Change to the previous active table in the mem_table list
-	SpinLockAcquire(LOG_INDEX_SNAPSHOT_LOCK);
-	mid = LOG_INDEX_MEM_TBL_PREV_ID(LOG_INDEX_MEM_TBL_ACTIVE_ID);
-	SpinLockRelease(LOG_INDEX_SNAPSHOT_LOCK);
-
-	table = LOG_INDEX_MEM_TBL(mid);
-
-	if (LOG_INDEX_MEM_TBL_STATE(table) != LOG_INDEX_MEM_TBL_STATE_FLUSHED)
-		return false;
-
-	CLEAR_BUFFERTAG(tag);
-
-	saved_lsn.tag = &tag;
-
-	for (i = table->data.last_order; i > 0; i--)
-	{
-        //XI: if the table's order[i-1]'s LSN is not what we expected, return false
-		if (log_index_get_order_lsn(&table->data, i - 1, &saved_lsn) != lsn_info->lsn)
-			return false;
-
-        //XI: if the LSN is we expected and the tags matches
-		if (BUFFERTAGS_EQUAL(*(lsn_info->tag), *(saved_lsn.tag)))
-			return true;
-	}
+//	uint32 mid;
+//	log_mem_table_t *table;
+//	uint32 i;
+//	BufferTag      tag;
+//	log_index_lsn_t saved_lsn;
+//
+//    //XI: Change to the previous active table in the mem_table list
+//	SpinLockAcquire(LOG_INDEX_SNAPSHOT_LOCK);
+//	mid = LOG_INDEX_MEM_TBL_PREV_ID(LOG_INDEX_MEM_TBL_ACTIVE_ID);
+//	SpinLockRelease(LOG_INDEX_SNAPSHOT_LOCK);
+//
+//	table = LOG_INDEX_MEM_TBL(mid);
+//
+//	if (LOG_INDEX_MEM_TBL_STATE(table) != LOG_INDEX_MEM_TBL_STATE_FLUSHED)
+//		return false;
+//
+//	CLEAR_BUFFERTAG(tag);
+//
+//	saved_lsn.tag = &tag;
+//
+//	for (i = table->data.last_order; i > 0; i--)
+//	{
+//        //XI: if the table's order[i-1]'s LSN is not what we expected, return false
+//		if (log_index_get_order_lsn(&table->data, i - 1, &saved_lsn) != lsn_info->lsn)
+//			return false;
+//
+//        //XI: if the LSN is we expected and the tags matches
+//		if (BUFFERTAGS_EQUAL(*(lsn_info->tag), *(saved_lsn.tag)))
+//			return true;
+//	}
 
 	return false;
 }
@@ -887,35 +925,33 @@ log_index_insert_lsn(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *l
 }
 
 void
-polar_logindex_add_lsn(log_index_snapshot_t *logindex_snapshot, BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn)
+polar_logindex_add_lsn(BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn)
 {
 	uint32      key = LOG_INDEX_MEM_TBL_HASH_PAGE(tag);
-	log_index_meta_t *meta = NULL;
 	log_index_lsn_t lsn_info;
 
 	Assert(tag != NULL);
 	Assert(lsn > prev);
 
-	meta = &logindex_snapshot->meta;
 
 	lsn_info.tag = tag;
 	lsn_info.lsn = lsn;
 	lsn_info.prev_lsn = prev;
 
     //XI: if the state is not ADDING, maybe INITIALIZED??
-	if (unlikely(!polar_logindex_check_state(logindex_snapshot, POLAR_LOGINDEX_STATE_ADDING)))
+	if (unlikely(!polar_logindex_check_state(logindexSnapShot, POLAR_LOGINDEX_STATE_ADDING)))
 	{
 		/* Insert logindex from meta->start_lsn, so We don't save logindex which lsn is less then meta->start_lsn */
-		if (lsn < meta->start_lsn)
-			return;
+//		if (lsn < meta->start_lsn)
+//			return;
 
 		/*
 		 * If log index initialization is not finished
 		 * we don't save lsn if it's less than max saved lsn,
 		 * which means it's already in saved table
 		 */
-		if (lsn < meta->max_lsn)
-			return;
+//		if (lsn < meta->max_lsn)
+//			return;
 
 		/*
 		 * If lsn is equal to max saved lsn then
@@ -923,39 +959,21 @@ polar_logindex_add_lsn(log_index_snapshot_t *logindex_snapshot, BufferTag *tag, 
 		 */
         //XI: this function check whether previous table (active_id-1)'s the last record
         //      if what we want (LSN matches and page_tag matches).
-		if (meta->max_lsn == lsn
-				&& log_index_exists_in_saved_table(logindex_snapshot, &lsn_info))
-			return;
+//		if (meta->max_lsn == lsn
+//				&& log_index_exists_in_saved_table(logindex_snapshot, &lsn_info))
+//			return;
 
 		/*
 		 * If we come here which means complete to check lsn overlap
 		 * then we can save lsn to logindex memory table
 		 */
-		pg_atomic_fetch_or_u32(&logindex_snapshot->state, POLAR_LOGINDEX_STATE_ADDING);
-		elog(LOG, "%s log index is insert from %lx", logindex_snapshot->dir, lsn);
+		pg_atomic_fetch_or_u32(&logindexSnapShot->state, POLAR_LOGINDEX_STATE_ADDING);
+		elog(LOG, "%s log index is insert from %lx", logindexSnapShot->dir, lsn);
 	}
 
     //XI: Insert a new segment to active table (or append lsn to not full node),
     //      this process may include changing active table.
-	log_index_insert_lsn(logindex_snapshot, &lsn_info, key);
-
-	if (unlikely(polar_trace_logindex_messages <= DEBUG4))
-	{
-		log_mem_table_t *active = LOG_INDEX_MEM_TBL_ACTIVE();
-		uint32 last_order = active->data.last_order;
-
-		ereport(LOG, (errmsg("%s add %lX, t=%ld, o=%d, i=%d, f=%d, s=%d " POLAR_LOG_BUFFER_TAG_FORMAT,
-							 logindex_snapshot->dir,
-							 lsn,
-							 active->data.idx_table_id,
-							 last_order,
-							 active->data.idx_order[last_order - 1],
-							 active->free_head,
-							 pg_atomic_read_u32(&active->state),
-							 POLAR_LOG_BUFFER_TAG(tag)),
-					  errhidestmt(true),
-					  errhidecontext(true)));
-	}
+	log_index_insert_lsn(logindexSnapShot, &lsn_info, key);
 }
 
 //XI: Find a page in $table.
@@ -1021,28 +1039,28 @@ polar_logindex_convert_mem_tbl_size(uint64 mem_size)
 XLogRecPtr
 polar_logindex_check_valid_start_lsn(logindex_snapshot_t logindex_snapshot)
 {
-	log_index_meta_t *meta = &logindex_snapshot->meta;
+//	log_index_meta_t *meta = &logindex_snapshot->meta;
 	XLogRecPtr start_lsn = InvalidXLogRecPtr;
 
-	LWLockAcquire(LOG_INDEX_IO_LOCK, LW_EXCLUSIVE);
-
-	if (!XLogRecPtrIsInvalid(meta->start_lsn))
-		start_lsn = meta->start_lsn;
-	else if (InRecovery && reachedConsistency)
-	{
-		/*
-		 * When reach consistency in replica node, read meta from storage is meta start lsn is invalid
-		 */
-		if (!polar_logindex_check_state(logindex_snapshot, POLAR_LOGINDEX_STATE_WRITABLE))
-		{
-			if (log_index_get_meta(logindex_snapshot, meta))
-				start_lsn = meta->start_lsn;
-			else
-				elog(FATAL, "Failed to read logindex meta from shared storage");
-		}
-	}
-
-	LWLockRelease(LOG_INDEX_IO_LOCK);
+//	LWLockAcquire(LOG_INDEX_IO_LOCK, LW_EXCLUSIVE);
+//
+//	if (!XLogRecPtrIsInvalid(meta->start_lsn))
+//		start_lsn = meta->start_lsn;
+//	else if (InRecovery)
+//	{
+//		/*
+//		 * When reach consistency in replica node, read meta from storage is meta start lsn is invalid
+//		 */
+//		if (!polar_logindex_check_state(logindex_snapshot, POLAR_LOGINDEX_STATE_WRITABLE))
+//		{
+//			if (log_index_get_meta(logindex_snapshot, meta))
+//				start_lsn = meta->start_lsn;
+//			else
+//				elog(FATAL, "Failed to read logindex meta from shared storage");
+//		}
+//	}
+//
+//	LWLockRelease(LOG_INDEX_IO_LOCK);
 
 	return start_lsn;
 }
@@ -1057,7 +1075,7 @@ polar_logindex_set_start_lsn(logindex_snapshot_t logindex_snapshot, XLogRecPtr s
 
 	LWLockAcquire(LOG_INDEX_IO_LOCK, LW_EXCLUSIVE);
 	meta->start_lsn = start_lsn;
-	polar_log_index_write_meta(logindex_snapshot, meta, false);
+//	polar_log_index_write_meta(logindex_snapshot, meta, false);
 	LWLockRelease(LOG_INDEX_IO_LOCK);
 }
 

@@ -26,6 +26,7 @@
 #include "replication/walsender.h"
 #include "storage/pmsignal.h"
 #include "storage/shmem.h"
+#include "tcop/storage_server.h"
 
 
 /*
@@ -74,6 +75,8 @@ struct PMSignalData
 };
 
 NON_EXEC_STATIC volatile PMSignalData *PMSignalState = NULL;
+
+extern int IsRpcServer;
 
 /*
  * Signal handler to be notified if postmaster dies.
@@ -145,8 +148,9 @@ PMSignalShmemInit(void)
 void
 SendPostmasterSignal(PMSignalReason reason)
 {
+    printf("Called Postmaster\n");
 	/* If called in a standalone backend, do nothing */
-	if (!IsUnderPostmaster)
+	if (!IsUnderPostmaster && !IsRpcServer)
 		return;
 	/* Atomically set the proper flag */
 	PMSignalState->PMSignalFlags[reason] = true;

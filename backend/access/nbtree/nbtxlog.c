@@ -34,7 +34,7 @@ static MemoryContext opCtx;		/* working memory for operations */
  * tuples had been added to the page in item-number order, and therefore
  * the one with highest item number appears first (lowest on the page).
  */
-static void
+void
 _bt_restore_page(Page page, char *from, int len)
 {
 	IndexTupleData itupdata;

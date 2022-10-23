@@ -55,15 +55,7 @@
  */
 #define SEQ_LOG_VALS	32
 
-/*
- * The "special area" of a sequence's buffer page looks like this.
- */
-#define SEQ_MAGIC	  0x1717
 
-typedef struct sequence_magic
-{
-	uint32		magic;
-} sequence_magic;
 
 /*
  * We store a SeqTable item for every sequence we have touched in the current

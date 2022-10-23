@@ -424,6 +424,7 @@ void SyncReplayProcess() {
     pthread_mutex_unlock(&replayProcessMutex);
 }
 
+pthread_t XlogStartupTid2 = 0;
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
@@ -478,10 +479,16 @@ RpcServerMain(int argc, char *argv[],
     InitializeMaxBackends();
 
     //Create shared memory before start child process
-    CreateSharedMemoryAndSemaphores();
+//    CreateSharedMemoryAndSemaphores();
     InitPostmasterDeathWatchHandle();
+    BaseInit();
 
-    StartupPid = StartChildProcess(StartupProcess);
+    InitBufferPoolBackend();
+    InitProcess();
+    InitializeLatchSupport();
+
+//    StartupPid = StartChildProcess(StartupProcess);
+    pthread_create(&XlogStartupTid2, NULL, (void*)StartupXLOG, NULL);
 
     StartWalRedoProcess(argc, argv, dbname, username);
 
@@ -490,12 +497,12 @@ RpcServerMain(int argc, char *argv[],
     /*************************BaseInit**********************************/
     //Here is the content of BaseInit(). We move the CreateSharedMemoryAndSemaphores to ahead
     //The RpcServer will call ReadBuffer, BaseInit() will prepare the environment
-    DebugFileOpen();
+//    DebugFileOpen();
     /* Do local initialization of file, storage and buffer managers */
-    InitFileAccess();
-    InitSync();
-    smgrinit();
-    InitBufferPoolAccess();
+//    InitFileAccess();
+//    InitSync();
+//    smgrinit();
+//    InitBufferPoolAccess();
     /************************End BaseInit**************************************/
 
     InitProcess();

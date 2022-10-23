@@ -22,6 +22,16 @@
 #include "storage/relfilenode.h"
 
 
+/*
+ * The "special area" of a sequence's buffer page looks like this.
+ */
+#define SEQ_MAGIC	  0x1717
+
+typedef struct sequence_magic
+{
+    uint32		magic;
+} sequence_magic;
+
 typedef struct FormData_pg_sequence_data
 {
 	int64		last_value;

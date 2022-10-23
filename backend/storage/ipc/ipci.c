@@ -45,6 +45,7 @@
 #include "storage/sinvaladt.h"
 #include "storage/spin.h"
 #include "utils/snapmgr.h"
+#include "access/polar_logindex.h"
 
 /* GUCs */
 int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
@@ -97,6 +98,8 @@ CreateSharedMemoryAndSemaphores(void)
 
 	if (!IsUnderPostmaster)
 	{
+	    printf("%s %d\n", __func__ , __LINE__);
+	    fflush(stdout);
 		PGShmemHeader *seghdr;
 		Size		size;
 		int			numSemas;
@@ -147,6 +150,8 @@ CreateSharedMemoryAndSemaphores(void)
 		size = add_size(size, BTreeShmemSize());
 		size = add_size(size, SyncScanShmemSize());
 		size = add_size(size, AsyncShmemSize());
+
+		size = add_size(size, polar_logindex_shmem_size(24, 0));
 #ifdef EXEC_BACKEND
 		size = add_size(size, ShmemBackendArraySize());
 #endif
@@ -218,6 +223,7 @@ CreateSharedMemoryAndSemaphores(void)
 	MultiXactShmemInit();
 	InitBufferPool();
 
+    polar_logindex_shmem_init(24, 0);
 	/*
 	 * Set up lock manager
 	 */
