@@ -104,6 +104,7 @@ static ssize_t buffered_read(void *buf, size_t count);
 static void SetBeginRead(StringInfo input_message);
 static void ApplyXlogUntil(StringInfo input_message);
 static void SyncLsnReplay(StringInfo input_message);
+static void GetRelSize(StringInfo input_message);
 
 static BufferTag target_redo_tag;
 
@@ -389,6 +390,10 @@ WalRedoMain(int argc, char *argv[],
         firstchar = ReadRedoCommand(&input_message);
         switch (firstchar)
         {
+            case 'M':
+                GetRelSize(&input_message);
+                break;
+
             case 'B':			/* BeginRedoForBlock */
                 BeginRedoForBlock(&input_message);
                 break;
@@ -902,6 +907,64 @@ redo_block_filter(XLogReaderState *record, uint8 block_id)
     return !BUFFERTAGS_EQUAL(target_tag, target_redo_tag);
 }
 
+static void
+GetRelSize(StringInfo input_message) {
+    printf("%s start, pid=%d\n", __func__ , getpid());
+    fflush(stdout);
+
+    RelFileNode rnode;
+    ForkNumber forknum;
+    Buffer		buf;
+    int         pageNum;
+    int			tot_written;
+
+    /*
+     * message format:
+     *
+     * spcNode
+     * dbNode
+     * relNode
+     * ForkNumber
+     */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+    printf("%s  forknum = %d, spc=%ld, db=%ld, rel=%ld\n", __func__ ,forknum, rnode.spcNode, rnode.dbNode, rnode.relNode);
+    fflush(stdout);
+
+    SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+
+    bool relExists = smgrexists(smgrReln, forknum);
+    if(relExists == false) {
+        pageNum = -1;
+    } else { // If relation exists, get page number
+        pageNum = smgrnblocks(smgrReln, forknum);
+    }
+
+    printf("%s block number is %d\n", __func__ , pageNum);
+    fflush(stdout);
+    /* Response: relation size */
+    tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        char * tempP = (char*) &pageNum;
+        rc = write(computePipe[1], &(tempP[tot_written]), sizeof(int) - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < sizeof(int));
+
+    printf("%s write %d bytes to RPC_SERVER\n", __func__ , tot_written);
+    fflush(stdout);
+}
 /*
  * Get a page image back from buffer cache.
  *

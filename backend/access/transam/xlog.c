@@ -37,6 +37,7 @@
 #include "access/xloginsert.h"
 #include "access/xlogreader.h"
 #include "access/xlogutils.h"
+#include "access/logindex_hashmap.h"
 #include "catalog/catversion.h"
 #include "catalog/pg_control.h"
 #include "catalog/pg_database.h"
@@ -6510,8 +6511,11 @@ StartupXLOG(void)
 	 * Take ownership of the wakeup latch if we're going to sleep during
 	 * recovery.
 	 */
-	if (ArchiveRecoveryRequested)
-		OwnLatch(&XLogCtl->recoveryWakeupLatch);
+	if (ArchiveRecoveryRequested) {
+        printf("%s OwnLatch\n", __func__ );
+        OwnLatch(&XLogCtl->recoveryWakeupLatch);
+
+    }
 
 	/* Set up XLOG reader facility */
 	MemSet(&private, 0, sizeof(XLogPageReadPrivate));
@@ -7372,24 +7376,55 @@ StartupXLOG(void)
 				/* Now apply the WAL record itself */
 //				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                 //For the page related xlog, replay process will deal with them
-//                switch (record->xl_rmid) {
-//                    case RM_XLOG_ID:
-//                    case RM_SMGR_ID:
-//                    case RM_HEAP2_ID:
-//                    case RM_HEAP_ID:
-//                    case RM_BTREE_ID:
-//                    case RM_HASH_ID:
-//                    case RM_GIN_ID:
-//                    case RM_GIST_ID:
-//                    case RM_SEQ_ID:
-//                    case RM_SPGIST_ID:
-//                    case RM_BRIN_ID:
-//                    case RM_GENERIC_ID:
-//                        break;
-//                    default:
+                printf("%s starts to process xlog\n", __func__ );
+                switch (record->xl_rmid) {
+                    case RM_XLOG_ID:
+                    case RM_SMGR_ID:
+                    case RM_HEAP2_ID:
+                    case RM_HEAP_ID:
+                    case RM_BTREE_ID:
+                    case RM_HASH_ID:
+                    case RM_GIN_ID:
+                    case RM_GIST_ID:
+                    case RM_SEQ_ID:
+                    case RM_SPGIST_ID:
+                    case RM_BRIN_ID:
+                    case RM_GENERIC_ID:
+
+                        printf("%s max_block_id = %d\n", __func__ , xlogreader->max_block_id);
+                        if(xlogreader->max_block_id >= 0) {
+                            for(int i = 0; i <= xlogreader->max_block_id; i++) {
+                                if(!xlogreader->blocks[i].in_use)
+                                    continue;
+
+                                struct KeyType key;
+                                key.SpcID = xlogreader->blocks[i].rnode.spcNode;
+                                key.DbID = xlogreader->blocks[i].rnode.dbNode;
+                                key.RelID = xlogreader->blocks[i].rnode.relNode;
+                                key.ForkNum = xlogreader->blocks[i].forknum;
+                                printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
+                                       key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
+
+                                uint64_t foundLsn;
+                                int foundPageNum;
+
+                                int found = HashMapFindLowerBoundEntry(key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
+                                if(!found || foundPageNum<xlogreader->blocks[i].blkno) {
+                                    if (HashMapInsertKey(key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1) )
+                                        printf("%s HashMap insert succeed\n", __func__ );
+                                    else
+                                        printf("%s HashMap insert failed\n", __func__ );
+                                }
+
+                            }
+
+                        }
+
+                        break;
+                    default:
 //                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
-//                        break;
-//                }
+                        break;
+                }
 
 				/*
 				 * After redo, check whether the backup pages associated with
@@ -12204,6 +12239,9 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 
 	for (;;)
 	{
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+
 		XLogSource	oldSource = currentSource;
 		bool		startWalReceiver = false;
 
@@ -12221,6 +12259,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				case XLOG_FROM_ARCHIVE:
 				case XLOG_FROM_PG_WAL:
 
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
 					/*
 					 * Check to see if the trigger file exists. Note that we
 					 * do this only after failure, so when you create the
@@ -12246,10 +12286,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 */
 					currentSource = XLOG_FROM_STREAM;
 					startWalReceiver = true;
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
 					break;
 
 				case XLOG_FROM_STREAM:
 
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
 					/*
 					 * Failure while streaming. Most likely, we got here
 					 * because streaming replication was terminated, or
@@ -12312,16 +12356,21 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						wait_time = wal_retrieve_retry_interval -
 							(secs * 1000 + usecs / 1000);
 
+                        printf("%s %d, start waitlatch\n", __func__ , __LINE__);
 						(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 										 WL_LATCH_SET | WL_TIMEOUT |
 										 WL_EXIT_ON_PM_DEATH,
 										 wait_time,
 										 WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
+                        printf("%s %d, got latch\n", __func__ , __LINE__);
 						ResetLatch(&XLogCtl->recoveryWakeupLatch);
 						now = GetCurrentTimestamp();
 					}
 					last_fail_time = now;
 					currentSource = XLOG_FROM_ARCHIVE;
+
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
 					break;
 
 				default:
@@ -12330,11 +12379,13 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		}
 		else if (currentSource == XLOG_FROM_PG_WAL)
 		{
-			/*
-			 * We just successfully read a file in pg_wal. We prefer files in
-			 * the archive over ones in pg_wal, so try the next file again
-			 * from the archive first.
-			 */
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+            /*
+             * We just successfully read a file in pg_wal. We prefer files in
+             * the archive over ones in pg_wal, so try the next file again
+             * from the archive first.
+             */
 			if (InArchiveRecovery)
 				currentSource = XLOG_FROM_ARCHIVE;
 		}
@@ -12354,6 +12405,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		 */
 		lastSourceFailed = false;
         printf("hhhhhhhhhhhhhhhhhhhhh, pid = %d\n", getpid());
+        fflush(stdout);
 
 		switch (currentSource)
 		{
@@ -12581,10 +12633,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * to react to a trigger file promptly and to check if the
 					 * WAL receiver is still active.
 					 */
-					(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+                    printf("%s %d, start waitlatch\n", __func__ , __LINE__);
+                    fflush(stdout);
+                    (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 									 WL_LATCH_SET | WL_TIMEOUT |
 									 WL_EXIT_ON_PM_DEATH,
 									 5000L, WAIT_EVENT_RECOVERY_WAL_STREAM);
+                    printf("%s %d, got latch\n", __func__ , __LINE__);
+                    fflush(stdout);
 					ResetLatch(&XLogCtl->recoveryWakeupLatch);
 					break;
 				}
@@ -12780,6 +12836,9 @@ CheckPromoteSignal(void)
 void
 WakeupRecovery(void)
 {
+    printf("%s Wakeup Recovery\n", __func__ );
+    fflush(stdout);
+
 	SetLatch(&XLogCtl->recoveryWakeupLatch);
 }
 

@@ -16,6 +16,7 @@
 #include "access/xlogreader.h"
 #include "lib/stringinfo.h"
 #include "storage/off.h"
+#include "storage/bufpage.h"
 
 /*
  * XLOG records for btree operations

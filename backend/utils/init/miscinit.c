@@ -136,6 +136,44 @@ InitPostmasterChild(void)
 	PostmasterDeathSignalInit();
 }
 
+void
+InitPostmasterChild_Thread(void)
+{
+    IsUnderPostmaster = true;	/* we are a postmaster subprocess now */
+
+    /*
+     * Set reference point for stack-depth checking. We re-do that even in the
+     * !EXEC_BACKEND case, because there are some edge cases where processes
+     * are started with an alternative stack (e.g. starting bgworkers when
+     * running postgres using the rr debugger, as bgworkers are launched from
+     * signal handlers).
+     */
+    set_stack_base();
+
+    InitProcessGlobals();
+
+    /*
+     * make sure stderr is in binary mode before anything can possibly be
+     * written to it, in case it's actually the syslogger pipe, so the pipe
+     * chunking protocol isn't disturbed. Non-logpipe data gets translated on
+     * redirection (e.g. via pg_ctl -l) anyway.
+     */
+#ifdef WIN32
+    _setmode(fileno(stderr), _O_BINARY);
+#endif
+
+    /* We don't want the postmaster's proc_exit() handlers */
+    on_exit_reset();
+
+    /* Initialize process-local latch support */
+    InitializeLatchSupport();
+    MyLatch = &LocalLatchData;
+    InitLatch(MyLatch);
+
+    /* Request a signal if the postmaster dies, if possible. */
+    PostmasterDeathSignalInit();
+}
+
 /*
  * Initialize the basic environment for a standalone process.
  *

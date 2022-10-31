@@ -16,7 +16,6 @@
 #include <thrift/concurrency/ThreadManager.h>
 #include "storage/fd.h"
 #include "commands/tablespace.h"
-#include "pgstat.h"
 #include "storage/rpcserver.h"
 #include "storage/bufmgr.h"
 #include <sys/stat.h>
@@ -27,6 +26,8 @@
 #include "storage/smgr.h"
 #include "utils/rel.h"
 #include "tcop/storage_server.h"
+#include "access/logindex_hashmap.h"
+#include "replication/walreceiver.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -142,10 +143,34 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
-        BlockNumber result = mdnblocks(smgrReln, (ForkNumber)_forknum);
-        printf("%s result = %u end\n", __func__, result);
+        XLogRecPtr lsn = WalRcv->flushedUpto;
+        struct KeyType keyType;
+        keyType.SpcID = rnode.spcNode;
+        keyType.DbID = rnode.dbNode;
+        keyType.RelID = rnode.relNode;
+        keyType.ForkNum = _forknum;
+
+        uint64_t foundLsn;
+        int foundPageNum;
+
+        if ( HashMapFindLowerBoundEntry(keyType, lsn, &foundLsn, &foundPageNum) ) {
+            printf("%s cached, lsn = %lu, pageNum = %d\n", __func__ , foundLsn, foundPageNum);
+            return foundPageNum;
+        }
+
+        int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
+        printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
+        bool insertSucc = HashMapInsertKey(keyType, lsn, relSize);
+        if(insertSucc) {
+            printf("%s insert key successfully\n", __func__ );
+        } else {
+            printf("%s insert key failed\n", __func__ );
+        }
+
+//        BlockNumber result = mdnblocks(smgrReln, (ForkNumber)_forknum);
+        printf("%s end\n", __func__ );
         fflush(stdout);
-        return result;
+        return relSize;
     }
 
     int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) {
@@ -159,11 +184,38 @@ public:
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
-        printf("%s result = %d end\n", __func__, result);
+
+        struct KeyType key{};
+        key.SpcID = rnode.spcNode;
+        key.DbID = rnode.dbNode;
+        key.RelID = rnode.relNode;
+        key.ForkNum = _forknum;
+
+        uint64_t foundLsn;
+        int foundPageNum;
+        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        if(found) {
+            if(foundPageNum == -1)
+                return 0;
+            else
+                return 1;
+        }
+
+//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+//        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
+
+        int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, WalRcv->flushedUpto);
+        printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
+        bool insertSucc = HashMapInsertKey(key, WalRcv->flushedUpto, relSize);
+        if(insertSucc) {
+            printf("%s insert key successfully\n", __func__ );
+        } else {
+            printf("%s insert key failed\n", __func__ );
+        }
+
+        printf("%s result = %d end\n", __func__, relSize);
         fflush(stdout);
-        return result;
+        return (relSize>=0);
     }
 
     void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) {
@@ -177,8 +229,25 @@ public:
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
+
+        struct KeyType key{};
+        key.SpcID = rnode.spcNode;
+        key.DbID = rnode.dbNode;
+        key.RelID = rnode.relNode;
+        key.ForkNum = _forknum;
+
+        uint64_t foundLsn;
+        int foundPageNum;
+        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        if(!found || foundPageNum<0) {
+            if (HashMapInsertKey(key, WalRcv->flushedUpto, 0) )
+                printf("%s HashMap insert succeed\n", __func__ );
+            else
+                printf("%s HashMap insert failed\n", __func__ );
+        }
+
+//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+//        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
         printf("%s end\n", __func__);
         fflush(stdout);
     }
@@ -194,13 +263,28 @@ public:
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-//        char* extendPage = (char*)malloc(BLCKSZ);
-        char extendPage[BLCKSZ+16];
-        _buff.copy(extendPage, BLCKSZ);
 
-        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
-//        free(extendPage);
+        struct KeyType key{};
+        key.SpcID = rnode.spcNode;
+        key.DbID = rnode.dbNode;
+        key.RelID = rnode.relNode;
+        key.ForkNum = _forknum;
+
+        uint64_t foundLsn;
+        int foundPageNum;
+        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        if(!found || foundPageNum<_blknum+1) {
+            if (HashMapInsertKey(key, WalRcv->flushedUpto, _blknum+1) )
+                printf("%s HashMap insert succeed\n", __func__ );
+            else
+                printf("%s HashMap insert failed\n", __func__ );
+        }
+
+//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+//        char extendPage[BLCKSZ+16];
+//        _buff.copy(extendPage, BLCKSZ);
+//
+//        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
         printf("%s end\n", __func__);
         fflush(stdout);
     }

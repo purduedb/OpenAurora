@@ -444,6 +444,8 @@ InitCommunication(void)
 	 */
 	if (!IsUnderPostmaster)		/* postmaster already did this */
 	{
+        printf("%s CreateSharedMemoryAndSemaphores, pid = %d\n", __func__ , getpid());
+        fflush(stdout);
 		/*
 		 * We're running a postgres bootstrap process or a standalone backend,
 		 * so we need to set up shmem.

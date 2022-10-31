@@ -38,6 +38,7 @@
 #include "tcop/wal_redo.h"
 #include "replication/walreceiver.h"
 #include "storage/md.h"
+#include "access/logindex_hashmap.h"
 
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
@@ -265,6 +266,87 @@ StartWalRedoProcess(int argc, char *argv[],
 
 pthread_mutex_t replayProcessMutex = PTHREAD_MUTEX_INITIALIZER;
 
+int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr lsn) {
+    pthread_mutex_lock(&replayProcessMutex);
+
+    // ------- Send "ApplyRecordUntil" request to replay process ------
+    char requestBuffer[1024];
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'U'; // Request function "ApplyRecordUntil"
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(lsn);  // Add parameter $lsn length
+    msgLen = pg_hton32(msgLen);
+
+
+    //todo temporary
+    if(WalRcv != NULL) {
+        lsn = WalRcv->flushedUpto;
+        printf("read lsn from writtenUpto, lsn = %ld\n", lsn);
+    }
+    lsn = pg_hton64(lsn);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+sizeof(msgLen)], &lsn, sizeof(lsn));
+
+    int targetMsgLen = 1+4+sizeof(lsn);
+
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+
+        sendLen+=writeLen;
+    }
+    printf("%s sent U request to standalone PG process\n", __func__ );
+
+    // -------- Send "MdNblocks" request to replay process -------
+    requestBuffer[0] = 'M';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen = pg_hton32(msgLen);
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+4], &forkNumber, sizeof(unsigned char));
+    memcpy(&requestBuffer[1+4+1], &relFileNode.spcNode, 4);
+    memcpy(&requestBuffer[1+4+1+4], &relFileNode.dbNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4], &relFileNode.relNode, 4);
+
+    targetMsgLen = 1+4+1+4+4+4;
+    sendLen = 0;
+    printf("%s send M request to standalone PG process\n", __func__ );
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    int nblocks = 0;
+    while (recvLen < sizeof(int)) {
+        char* tempP = &nblocks;
+        int readLen = read(computePipe[0], &(tempP[recvLen]), sizeof(int) - recvLen);
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    Assert(recvLen == sizeof(int));
+    printf("%s, get page number = %d\n", __func__ , nblocks);
+    pthread_mutex_unlock(&replayProcessMutex);
+
+    return nblocks;
+
+}
+
 void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* buffer) {
 
 
@@ -430,6 +512,8 @@ RpcServerMain(int argc, char *argv[],
               const char *dbname,
               const char *username) {
 
+    HashMapInit(16);
+
     /***********Clean environment before exit********/
     struct sigaction catchTermSig;
     struct sigaction oldSigAction;
@@ -487,6 +571,9 @@ RpcServerMain(int argc, char *argv[],
     InitProcess();
     InitializeLatchSupport();
 
+    InitPostmasterChild_Thread();
+    InitAuxiliaryProcess();
+
 //    StartupPid = StartChildProcess(StartupProcess);
     pthread_create(&XlogStartupTid2, NULL, (void*)StartupXLOG, NULL);
 
@@ -506,7 +593,6 @@ RpcServerMain(int argc, char *argv[],
     /************************End BaseInit**************************************/
 
     InitProcess();
-
 
 //    pthread_t threadID[200];
 //    for (int j = 0; j < 1000; ++j) {

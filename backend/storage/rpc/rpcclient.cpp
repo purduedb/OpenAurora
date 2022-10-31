@@ -107,6 +107,9 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
 
     _Page _return;
@@ -121,9 +124,15 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
     client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode);
 
     _return.copy(buff, BLCKSZ);
+
+    printf("%s End\n", __func__ );
+    fflush(stdout);
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
     _Page _return;
     int32_t _forkNum, _blkNum;
@@ -136,20 +145,31 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 
     client->RpcMdRead(_return, _reln, _forkNum, _blkNum);
     _return.copy(buff, BLCKSZ);
+
+    printf("%s End\n", __func__ );
+    fflush(stdout);
     return;
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
 
     int32_t result = client->RpcMdExists(_reln, _forknum);
 
+    printf("%s End\n", __func__ );
+    fflush(stdout);
     return result;
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
 
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
@@ -157,10 +177,16 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
 
     int32_t result = client->RpcMdNblocks(_reln, _forknum);
 
+    printf("%s End\n", __func__ );
+    fflush(stdout);
+
     return result;
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
 
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
@@ -168,9 +194,14 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
     int32_t _isRedo = isRedo;
 
     client->RpcMdCreate(_reln, _forknum, _isRedo);
+    printf("%s End\n", __func__ );
+    fflush(stdout);
 }
 
 void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync) {
+    printf("%s Start\n", __func__ );
+    fflush(stdout);
+
     RpcInit();
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
@@ -181,6 +212,9 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
     _buff.assign(buff, BLCKSZ);
 
     client->RpcMdExtend(_reln, _forknum, _blknum, _buff, _skipFsync);
+
+    printf("%s End\n", __func__ );
+    fflush(stdout);
 }
 
 //void TryRpcInitFile(_Page& _return, _Path& _path)
