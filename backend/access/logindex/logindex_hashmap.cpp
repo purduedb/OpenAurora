@@ -77,13 +77,17 @@ void HashMapInit(int bucketNum) {
 uint32_t HashKey(struct KeyType key) {
 //    return tag_hash((void*) &key, sizeof(KeyType));
     uint32_t res = 0;
-    res |= key.SpcID&0xFF;
-    res <<= 8;
-    res |= key.DbID&0xFF;
-    res <<= 8;
-    res |= key.RelID&0xFF;
-    res <<= 8;
-    res |= key.ForkNum&0xFF;
+    res += (key.SpcID&0xFF) * 13 + 7;
+    res += (key.DbID&0xFF) * 17 + 5;
+    res += (key.RelID&0xFF) * 11 + 7;
+    res += (key.ForkNum&0xFF) * 3 + 29;
+//    res |= (key.SpcID&0xFF) * 13;
+//    res <<= 7;
+//    res |= (key.DbID&0xFF) * 17;
+//    res <<= 5;
+//    res |= (key.RelID&0xFF) * 11;
+//    res <<= 7;
+//    res |= (key.ForkNum&0xFF) * 3;
     return res;
 }
 
@@ -102,17 +106,21 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
     uint32_t bucketPos = hashValue % hashMap.bucketNum;
 
     printf("%s bucketPos = %u, hashValue = %u\n", __func__ , bucketPos, hashValue);
+    fflush(stdout);
     // Lock this slot
     // Maybe we won't add a new head, and only need a ReadLock
 //    WriterLock w_lock(hashMap.bucketList[bucketPos].bucketLock);
     pthread_rwlock_wrlock(&hashMap.bucketList[bucketPos].bucketLock);
 
     printf("%s get bucket lock\n", __func__ );
+    fflush(stdout);
 
     HashNodeHead* iter = hashMap.bucketList[bucketPos].nodeList;
     bool foundHead = false;
     while(iter != NULL) {
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         // If found matched key, break the loop
         if(iter->hashValue == hashValue
         && KeyMatch(iter->key, key)) {
@@ -122,6 +130,9 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
 
         iter = iter->nextHead;
     }
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     // If no head matches in this slot, crate a new head node
     if(!foundHead) {
@@ -158,19 +169,49 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
 //    WriterLock w_header_lock(iter->headLock);
     pthread_rwlock_rdlock(&iter->headLock);
     printf("%s Get header lock\n", __func__ );
+    fflush(stdout);
 
     // If this lsn is smaller than the maximum lsn, do nothing
-    if(iter->maxLsn >= lsn) {
+    if(iter->maxLsn > lsn) {
         printf("%s try to insert failed, logindex_maxLsn = %lu, parameter lsn = %lu\n", __func__ , iter->maxLsn, lsn);
+        fflush(stdout);
 
         pthread_rwlock_unlock(&hashMap.bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
         return false;
     }
 
+    // In the same transaction, RpcCreate, RpcExtend will update page number
+    // If this happened, just update the page number in place
+    if(iter->maxLsn == lsn) {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        // the maxLsn should always be the tail element in this head's list
+
+        // Check whether it's in the head
+        if(iter->entryNum <= HASH_HEAD_NUM && iter->nextEle == NULL) {
+            printf("%s %d, found in head entryPos = %d\n", __func__ , __LINE__, iter->entryNum-1);
+            fflush(stdout);
+
+            iter->lsnEntry[iter->entryNum-1].pageNum = pageNum;
+        } else { // Check the tail node in this head list
+            printf("%s %d, found in node entryPos = %d\n", __func__ , __LINE__, iter->tailEle->entryNum-1);
+            fflush(stdout);
+
+            iter->tailEle->lsnEntry[ iter->tailEle->entryNum -1 ].pageNum = pageNum;
+        }
+
+        pthread_rwlock_unlock(&hashMap.bucketList[bucketPos].bucketLock);
+        pthread_rwlock_unlock(&iter->headLock);
+        return true;
+    }
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
     // If head still has available space, add it to head
     if(iter->entryNum < HASH_HEAD_NUM) {
-//        printf("Add to head\n");
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         iter->lsnEntry[iter->entryNum].pageNum = pageNum;
         iter->lsnEntry[iter->entryNum].lsn = lsn;
         iter->entryNum++;
@@ -182,10 +223,14 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
         return true;
     }
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
     // If the tail node has available space, add this entry to tail node
     if(iter->tailEle
         && iter->tailEle->entryNum < HASH_ELEM_NUM) {
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
 //        printf("add into tail node\n");
         HashNodeEle *nodeEle = iter->tailEle;
         nodeEle->lsnEntry[nodeEle->entryNum].pageNum = pageNum;
@@ -202,6 +247,8 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
         return true;
     }
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
     // If the tail node doesn't have enough space or there is no element node
     // Add a new element node to the head list tail.
 
@@ -226,6 +273,8 @@ bool HashMapInsertKey(KeyType key, uint64_t lsn, int pageNum) {
 
     pthread_rwlock_unlock(&hashMap.bucketList[bucketPos].bucketLock);
     pthread_rwlock_unlock(&iter->headLock);
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
     return true;
 }
 
@@ -237,6 +286,9 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap.bucketNum;
 
+    printf("%s start, targetLsn = %lu, hashValue = %u, bucketPos = %u \n", __func__ , targetLsn, hashValue, bucketPos);
+    fflush(stdout);
+
     // Lock this slot
 //    ReaderLock r_lock(hashMap.bucketList[bucketPos].bucketLock);
     pthread_rwlock_rdlock(&hashMap.bucketList[bucketPos].bucketLock);
@@ -246,6 +298,8 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
     bool foundHead = false;
     while(iter != NULL) {
 
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
         // If found matched key, break the loop
         if(iter->hashValue == hashValue
            && KeyMatch(iter->key, key)) {
@@ -256,12 +310,16 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
         iter = iter->nextHead;
     }
 
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
     // If this relation doesn't exist in hash map, return false
     if(!foundHead) {
         pthread_rwlock_unlock(&hashMap.bucketList[bucketPos].bucketLock);
         return false;
     }
 
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
     // Lock this head
 //    ReaderLock r_head_lock(iter->headLock);
     pthread_rwlock_rdlock(&iter->headLock);
@@ -271,6 +329,8 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
     // If lsn is in this head
     // Iterate all the elements in the head
     if(iter->lsnEntry[iter->entryNum-1].lsn >= targetLsn) {
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
         for(int i = 0; i < iter->entryNum; i++) {
             if(iter->lsnEntry[i].lsn > targetLsn) {
                 break;
@@ -294,6 +354,8 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
             return true;
         }
     }
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
 
     // Iterate all following element nodes
 
@@ -303,6 +365,8 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
 
     HashNodeEle* eleIter = iter->nextEle;
     while(eleIter != NULL) {
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
         // fast skip
         if(eleIter->maxLsn < targetLsn) {
             currentLsn = eleIter->lsnEntry[eleIter->entryNum-1].lsn;
@@ -314,7 +378,8 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
 
         // targetEntry should be found in the list
         for(int i = 0; i < eleIter->entryNum; i++) {
-//            printf("Get in, comparedLsn = %lu\n", eleIter->lsnEntry[i].lsn);
+            printf("Get in, comparedLsn = %lu, pageNum = %d\n", eleIter->lsnEntry[i].lsn, eleIter->lsnEntry[i].pageNum);
+            fflush(stdout);
             if(eleIter->lsnEntry[i].lsn > targetLsn) {
                 break;
             } else {
@@ -327,11 +392,15 @@ bool HashMapFindLowerBoundEntry(KeyType key, uint64_t targetLsn, uint64_t* found
         break;
     }
 
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
     *foundLsn = currentLsn;
     *foundPageNum = currentPageNum;
 
     pthread_rwlock_unlock(&iter->headLock);
     pthread_rwlock_unlock(&hashMap.bucketList[bucketPos].bucketLock);
+    printf("%s end\n", __func__ );
+    fflush(stdout);
     return true;
 }
 

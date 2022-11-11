@@ -13,6 +13,7 @@
 #include "storage/freespace.h"
 #include "storage/standby.h"
 #include "access/polar_logindex.h"
+#include "storage/kv_interface.h"
 
 static XLogRedoAction
 polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
@@ -1149,6 +1150,136 @@ polar_heap_xlog_lock_updated(XLogReaderState *record, BufferTag *tag, Buffer *bu
     return action;
 }
 
+static void
+polar_heap_insert_save(XLogReaderState *record)
+{
+    xl_heap_insert *xlrec = (xl_heap_insert *)record->main_data;
+
+    if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_heap_delete_save(XLogReaderState *record)
+{
+    xl_heap_delete *xlrec = (xl_heap_delete *)record->main_data;
+
+    if (xlrec->flags & XLH_DELETE_ALL_VISIBLE_CLEARED)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_heap_xlog_update_save(XLogReaderState *record, bool hotupdate)
+{
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+    BlockNumber oldblk, newblk;
+    BufferTag old_cleared_vm, new_cleared_vm;
+    xl_heap_update *xlrec = (xl_heap_update *)(record->main_data);
+
+    CLEAR_BUFFERTAG(old_cleared_vm);
+    CLEAR_BUFFERTAG(new_cleared_vm);
+
+    XLogRecGetBlockTag(record, 0, NULL, NULL, &newblk);
+
+    if (XLogRecGetBlockTag(record, 1, NULL, NULL, &oldblk))
+    {
+        /* HOT updates are never done across pages */
+        Assert(!hotupdate);
+    }
+    else
+        oldblk = newblk;
+
+    if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
+    {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        uint8 vm_block = (oldblk == newblk) ? 2 : 3;
+        ParseXLogBlocksLsn(record, vm_block);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        POLAR_GET_LOG_TAG(record, old_cleared_vm, vm_block);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+    }
+
+    ParseXLogBlocksLsn(record, (oldblk == newblk) ? 0 : 1);
+
+    if (oldblk != newblk)
+    {
+        ParseXLogBlocksLsn(record, 0);
+
+        if (xlrec->flags & XLH_UPDATE_NEW_ALL_VISIBLE_CLEARED)
+        {
+            /* Avoid add the same vm page to logindex twice with the same lsn value */
+            POLAR_GET_LOG_TAG(record, new_cleared_vm, 2);
+
+            if (!BUFFERTAGS_EQUAL(old_cleared_vm, new_cleared_vm))
+                ParseXLogBlocksLsn(record, 2);
+        }
+    }
+}
+
+static void
+polar_heap_lock_save(XLogReaderState *record)
+{
+    xl_heap_lock *xlrec = (xl_heap_lock *)record->main_data;
+
+    if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+bool
+polar_heap_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP_INSERT:
+            polar_heap_insert_save(record);
+            break;
+
+        case XLOG_HEAP_DELETE:
+            polar_heap_delete_save(record);
+            break;
+
+        case XLOG_HEAP_UPDATE:
+            polar_heap_xlog_update_save(record, false);
+            break;
+
+        case XLOG_HEAP_TRUNCATE:
+            break;
+
+        case XLOG_HEAP_HOT_UPDATE:
+            polar_heap_xlog_update_save(record, true);
+            break;
+
+        case XLOG_HEAP_CONFIRM:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HEAP_LOCK:
+            polar_heap_lock_save(record);
+            break;
+
+        case XLOG_HEAP_INPLACE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        default:
+            elog(PANIC, "polar_heap_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
+
 XLogRedoAction
 polar_heap_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
@@ -1192,6 +1323,70 @@ polar_heap_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     }
 
     return BLK_NOTFOUND;
+}
+
+static void
+polar_heap_multi_insert_save(XLogReaderState *record)
+{
+    xl_heap_multi_insert *xlrec = (xl_heap_multi_insert *)record->main_data;
+
+    if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_heap_lock_update_save(XLogReaderState *record)
+{
+    xl_heap_lock_updated *xlrec = (xl_heap_lock_updated *)record->main_data;
+
+    if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+bool
+polar_heap2_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP2_CLEAN:
+        case XLOG_HEAP2_FREEZE_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HEAP2_CLEANUP_INFO:
+            /* don't modify buffer, nothing to do for parse, just do it */
+            break;
+
+        case XLOG_HEAP2_VISIBLE:
+            ParseXLogBlocksLsn(record, 1);
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HEAP2_MULTI_INSERT:
+            polar_heap_multi_insert_save(record);
+            break;
+
+        case XLOG_HEAP2_LOCK_UPDATED:
+            polar_heap_lock_update_save(record);
+            break;
+
+        case XLOG_HEAP2_NEW_CID:
+            break;
+
+        case XLOG_HEAP2_REWRITE:
+            break;
+
+        default:
+            elog(PANIC, "polar_heap2_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
 }
 
 

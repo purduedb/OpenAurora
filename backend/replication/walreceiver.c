@@ -871,11 +871,11 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 				walEnd = pq_getmsgint64(&incoming_message);
 				sendTime = pq_getmsgint64(&incoming_message);
 				ProcessWalSndrMessage(walEnd, sendTime);
-                printf("%s received a xlog, starts from %lu\n", __func__ , dataStart);
-                fflush(stdout);
 
 				buf += hdrlen;
 				len -= hdrlen;
+                printf("%s received a xlog, starts from %lu, len = %lu\n", __func__ , dataStart, len);
+                fflush(stdout);
 				XLogWalRcvWrite(buf, len, dataStart);
 				break;
 			}

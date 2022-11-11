@@ -19,6 +19,7 @@
 #include "catalog/pg_control.h"
 #include "miscadmin.h"
 #include "storage/buf_internals.h"
+#include "storage/kv_interface.h"
 
 static XLogRedoAction
 xlog_idx_fpi_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
@@ -56,30 +57,29 @@ xlog_idx_fpi_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 	return action;
 }
 
-//void
-//polar_xlog_idx_save(polar_logindex_redo_ctl_t instance, XLogReaderState *record)
-//{
-//	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
-//	uint8		block_id;
-//
-//	if (info != XLOG_FPI &&
-//			info != XLOG_FPI_FOR_HINT &&
-//			info != XLOG_FPSI)
-//		return;
-//
-//	switch (info)
-//	{
-//		case XLOG_FPI:
-//		case XLOG_FPI_FOR_HINT:
-//		case XLOG_FPSI:
-//			for (block_id = 0; block_id <= record->max_block_id; block_id++)
-//				polar_logindex_save_block(instance, record, block_id);
-//			break;
-//
-//		default:
-//			break;
-//	}
-//}
+bool
+polar_xlog_idx_save(XLogReaderState *record)
+{
+	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+	uint8		block_id;
+
+	if (info != XLOG_FPI &&
+			info != XLOG_FPI_FOR_HINT)
+		return false;
+
+	switch (info)
+	{
+		case XLOG_FPI:
+		case XLOG_FPI_FOR_HINT:
+			for (block_id = 0; block_id <= record->max_block_id; block_id++)
+                ParseXLogBlocksLsn(record, block_id);
+			break;
+
+		default:
+            return false;
+	}
+    return true;
+}
 
 //bool
 //polar_xlog_idx_parse(polar_logindex_redo_ctl_t instance, XLogReaderState *record)

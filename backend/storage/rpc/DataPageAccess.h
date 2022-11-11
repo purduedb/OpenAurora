@@ -45,6 +45,7 @@ class DataPageAccessIf {
   virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) = 0;
   virtual void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) = 0;
   virtual void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) = 0;
+  virtual void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -99,6 +100,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     return;
   }
   void RpcMdExtend(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */, const _Page& /* _buff */, const int32_t /* skipFsync */) {
+    return;
+  }
+  void RpcTruncate(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */) {
     return;
   }
   void zip() {
@@ -792,6 +796,106 @@ class DataPageAccess_RpcMdExtend_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcTruncate_args__isset {
+  _DataPageAccess_RpcTruncate_args__isset() : _reln(false), _forknum(false), _blknum(false) {}
+  bool _reln :1;
+  bool _forknum :1;
+  bool _blknum :1;
+} _DataPageAccess_RpcTruncate_args__isset;
+
+class DataPageAccess_RpcTruncate_args {
+ public:
+
+  DataPageAccess_RpcTruncate_args(const DataPageAccess_RpcTruncate_args&);
+  DataPageAccess_RpcTruncate_args& operator=(const DataPageAccess_RpcTruncate_args&);
+  DataPageAccess_RpcTruncate_args() : _forknum(0), _blknum(0) {
+  }
+
+  virtual ~DataPageAccess_RpcTruncate_args() noexcept;
+  _Smgr_Relation _reln;
+  int32_t _forknum;
+  int32_t _blknum;
+
+  _DataPageAccess_RpcTruncate_args__isset __isset;
+
+  void __set__reln(const _Smgr_Relation& val);
+
+  void __set__forknum(const int32_t val);
+
+  void __set__blknum(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcTruncate_args & rhs) const
+  {
+    if (!(_reln == rhs._reln))
+      return false;
+    if (!(_forknum == rhs._forknum))
+      return false;
+    if (!(_blknum == rhs._blknum))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcTruncate_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcTruncate_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcTruncate_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcTruncate_pargs() noexcept;
+  const _Smgr_Relation* _reln;
+  const int32_t* _forknum;
+  const int32_t* _blknum;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcTruncate_result {
+ public:
+
+  DataPageAccess_RpcTruncate_result(const DataPageAccess_RpcTruncate_result&);
+  DataPageAccess_RpcTruncate_result& operator=(const DataPageAccess_RpcTruncate_result&);
+  DataPageAccess_RpcTruncate_result() {
+  }
+
+  virtual ~DataPageAccess_RpcTruncate_result() noexcept;
+
+  bool operator == (const DataPageAccess_RpcTruncate_result & /* rhs */) const
+  {
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcTruncate_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcTruncate_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcTruncate_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcTruncate_presult() noexcept;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 
 class DataPageAccess_zip_args {
  public:
@@ -884,6 +988,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
   void send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
   void recv_RpcMdExtend();
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  void send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  void recv_RpcTruncate();
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -912,6 +1019,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcMdExists(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdCreate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdExtend(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcTruncate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_zip(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
@@ -922,6 +1030,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcMdExists"] = &DataPageAccessProcessor::process_RpcMdExists;
     processMap_["RpcMdCreate"] = &DataPageAccessProcessor::process_RpcMdCreate;
     processMap_["RpcMdExtend"] = &DataPageAccessProcessor::process_RpcMdExtend;
+    processMap_["RpcTruncate"] = &DataPageAccessProcessor::process_RpcTruncate;
     processMap_["zip"] = &DataPageAccessProcessor::process_zip;
   }
 
@@ -1019,6 +1128,15 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     ifaces_[i]->RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync);
   }
 
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum);
+    }
+    ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum);
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -1095,6 +1213,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
   int32_t send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
   void recv_RpcMdExtend(const int32_t seqid);
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  int32_t send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  void recv_RpcTruncate(const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

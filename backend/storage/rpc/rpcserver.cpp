@@ -28,6 +28,8 @@
 #include "tcop/storage_server.h"
 #include "access/logindex_hashmap.h"
 #include "replication/walreceiver.h"
+#include "storage/kv_interface.h"
+#include "storage/buf_internals.h"
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -49,37 +51,277 @@ public:
      *
      * @param _fd
      */
+     //! For we use WalRcv.flushedUpto as a temporary lsn, we shou
     void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
         fflush(stdout);
-        // Your implementation goes here
+
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        char buff[BLCKSZ];
-        GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
-        _return.assign(buff, BLCKSZ);
+        uint64_t *uintList;
+        int listSize;
+        BufferTag tag;
+        INIT_BUFFERTAG(tag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
 
-        if(PageIsNew(buff)) {
-            printf("%s found page is new\n", __func__ );
+        // Get relation size from in-memory hashmap
+        // If relation size is smaller than parameter request $_blknum, just return blank page (caused by RpcMdCreate, RpcMdExist)
+        /**********************************START IN MEMORY REL SIZE CACHE***************************************/
+//        char* blankPage = (char*) malloc(BLCKSZ);
+//        MemSet(blankPage, 0, BLCKSZ);
+//        struct KeyType key{};
+//        key.SpcID = rnode.spcNode;
+//        key.DbID = rnode.dbNode;
+//        key.RelID = rnode.relNode;
+//        key.ForkNum = _forknum;
+//
+//        uint64_t foundLsnInMemory;
+//        int foundPageNumInMemory;
+//        int foundInMemory = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsnInMemory, &foundPageNumInMemory);
+//        // If relation size not cached, read from standalone process
+//        if(!foundInMemory) {
+//            int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
+//            printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
+//            bool insertSucc = HashMapInsertKey(key, WalRcv->flushedUpto, relSize);
+//            if(insertSucc) {
+//                printf("%s insert key successfully\n", __func__ );
+//            } else {
+//                printf("%s insert key failed\n", __func__ );
+//            }
+//            // If existing relation is smaller than parameter, just return zero pages
+//            if(relSize < _blknum+1) {
+//                free(blankPage);
+//                _return.assign(blankPage, BLCKSZ);
+//                return;
+//            }
+//        } else { // Get relation size from cache
+//            printf("%s get cached relsize=%d\n", __func__ , foundPageNumInMemory);
+//            fflush(stdout);
+//            if(foundPageNumInMemory < _blknum+1) {
+//                free(blankPage);
+//                _return.assign(blankPage, BLCKSZ);
+//                return;
+//            }
+//        }
+//         free(blankPage);
+        /************************************END IN MEMORY REL SIZE CACHE***************************************/
+
+
+        int found = GetListFromRocksdb(tag, &uintList, &listSize);
+
+        printf("%s found = %d\n", __func__ , found);
+        fflush(stdout);
+        // If not found list, get the base page from standalone process
+        if(!found) {
+
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+
+            printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+
+            char* buff;
+            // Try to get RpcMdExtend page as BasePage
+            if(GetPageFromRocksdb(bufferTag, -1, &buff) == 0) {
+                // If not created by RpcMdExtend, get page from StandAlone process
+                buff = (char*) malloc(BLCKSZ);
+                GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
+            }
+            XLogRecPtr lsn = PageGetLSN(buff);
+
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
+            // Create new lsn list to Rocksdb
+            uint64_t lsnList[3];
+            lsnList[0] = 1; // length
+            lsnList[1] = 1; // current position is 1 rather than 0, since we have the first version already
+            lsnList[2] = lsn; // first lsn
+
+            // Put new list to Rocksdb
+            PutList2Rocksdb(bufferTag, lsnList, 3);
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+            // Put base page to Rocksdb
+            PutPage2Rocksdb(bufferTag, lsn, buff);
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
+            // Set return value from RPC client
+            _return.assign(buff, BLCKSZ);
+
+            free(buff);
+            free(uintList);
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+            return;
         }
-        printf("%s End\n", __func__ );
-//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+         printf("%s %d\n", __func__ , __LINE__);
+         fflush(stdout);
+
+         // Now we found the target lsn list
+
+        // If the lsn list $currPos is zero (no xlog was replayed)
+        // Then this list was created by replay process, which won't consist base page's lsn.
+        // So, we need to get base page from standalone process and insert it lsn as
+        // the first element of the list. Also, update $currPos to 1 (base page "replayed")
+        if(uintList[1] == 0) {
+            char* buff = (char*) malloc(BLCKSZ);
+            GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
+            XLogRecPtr lsn = PageGetLSN(buff);
+
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+
+            // Put page to Rocksdb
+            PutPage2Rocksdb(bufferTag, lsn, buff);
+
+            uint64_t* newList = (uint64_t*) malloc( sizeof(uint64_t)*(listSize+1) );
+            newList[0] = uintList[0]+1;
+            newList[1] = 1; // mark base page as replayed
+            newList[2] = lsn; // insert it as the first lsn
+
+            for(int i = 3; i < listSize+1; i++) {
+                newList[i] = uintList[i-1];
+            }
+
+            printf("%s LINE=%d \n", __func__ , __LINE__);
+            fflush(stdout);
+
+            free(uintList);
+            uintList = newList;
+            listSize++;
+
+            free(buff);
+            printf("%s LINE=%d \n", __func__ , __LINE__);
+            fflush(stdout);
+
+        }
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+
+         // For now, we got the lsn list and at least one version was replayed
+        uint64_t foundLsn;
+        uint64_t foundPos;
+        int foundBound = FindListLowerBound(uintList, WalRcv->flushedUpto, &foundLsn, &foundPos);
+        if(!foundBound) { // Every existed version is larger than this current lsn
+            // This shouldn't happen. (GOD BLESS)
+            // If it really happened, just use the base page
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+            uint64_t targetLsn = uintList[2];
+
+            char* basePage;
+            if(GetPageFromRocksdb(bufferTag, targetLsn, &basePage) == 0) {
+                printf("%s get base page failed \n", __func__ );
+            }
+
+            _return.assign(basePage, BLCKSZ);
+            free(uintList);
+            free(basePage);
+            return;
+        }
+
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+         // Unnecessary to replay any xlog
+        //      foundPos is the last element that <= targetLsn, so it needs to plus 1
+        //      uintList[1] is the address of sublist, so it needs to plus 2
+        if(foundPos+1 <= uintList[1]+2) { // first element that larger than targetLsn : first element hasn't been replayed
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+            uint64_t targetLsn = uintList[foundPos];
+
+            char* targetPage;
+            if(GetPageFromRocksdb(bufferTag, targetLsn, &targetPage) == 0) {
+                printf("%s get already replayed page from rocksdb failed\n", __func__ );
+            }
+
+            _return.assign(targetPage, BLCKSZ);
+            free(uintList);
+            free(targetPage);
+            return;
+        }
+
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+         // For now, we need to replay several xlogs until we get the expected version
+        // The xlog sublist we need to replay is [ uintList[1]+2 , foundPos ]
+
+        // Get the base page (uintList[1]-1) from the rocksdb
+        uint64_t basePageLsn = uintList[ uintList[1]-1 +2 ]; // +2 convert from sublist to full list
+        char* basePage;
+
+        BufferTag bufferTag;
+        INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+         if(GetPageFromRocksdb(bufferTag, basePageLsn, &basePage) == 0)
+            printf("%s get base page for replay failed \n", __func__ );
+
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+         char* page1 = (char*) malloc(BLCKSZ);
+        char* page2 = (char*) malloc(BLCKSZ);
+        char* tempPage;
+        memcpy(page1, basePage, BLCKSZ);
+        free(basePage);
+
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+         for(int i = (int)uintList[1]+2; i <= foundPos; i++) {
+             printf("%s LINE=%d \n", __func__ , __LINE__);
+             fflush(stdout);
+
+             uint64_t currLsn = uintList[i];
+            ApplyOneLsn(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, currLsn, page1, page2);
+             printf("%s LINE=%d \n", __func__ , __LINE__);
+             fflush(stdout);
+            // Now the page2 is replayed version, put it to rocksdb
+            PutPage2Rocksdb(bufferTag, currLsn, page2);
+            // Set the page2 as the input page for next round
+            tempPage = page1;
+            page1 = page2;
+            page2 = tempPage;
+        }
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+
+         // Update the list $currPos
+        uintList[1] = foundPos+1-2;
+
+        // Put the updated list to rocksdb
+        PutList2Rocksdb(bufferTag, uintList, listSize);
+
+        // Set the desired page version as return value
+        _return.assign(page1, BLCKSZ);
+
+        free(page1);
+        free(page2);
+        free(uintList);
+         printf("%s LINE=%d \n", __func__ , __LINE__);
+         fflush(stdout);
+
+//        char buff[BLCKSZ];
+//        GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
+//        _return.assign(buff, BLCKSZ);
 //
-//        char relpersistence = (char) _relpersistence;
-//        bool hit;
-//        char* page;
-//
-//        Buffer buff = ReadBuffer_common(smgrReln, relpersistence, (ForkNumber)_forknum, (BlockNumber)_blknum, (ReadBufferMode)_readBufferMode, NULL, &hit);
-//        LockBuffer(buff, BUFFER_LOCK_SHARE);
-//        page = BufferGetPage(buff);
-//        _return.assign(page, BLCKSZ);
-//
-//        UnlockReleaseBuffer(buff);
+//        if(PageIsNew(buff)) {
+//            printf("%s found page is new\n", __func__ );
+//            fflush(stdout);
+//        }
+//        printf("%s End\n", __func__ );
     }
 
     void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
@@ -155,6 +397,7 @@ public:
 
         if ( HashMapFindLowerBoundEntry(keyType, lsn, &foundLsn, &foundPageNum) ) {
             printf("%s cached, lsn = %lu, pageNum = %d\n", __func__ , foundLsn, foundPageNum);
+            fflush(stdout);
             return foundPageNum;
         }
 
@@ -248,13 +491,13 @@ public:
 
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
-        printf("%s end\n", __func__);
+//        printf("%s end\n", __func__);
         fflush(stdout);
     }
 
     void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, gettid());
         fflush(stdout);
 
 //        SyncReplayProcess();
@@ -273,18 +516,59 @@ public:
         uint64_t foundLsn;
         int foundPageNum;
         int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         if(!found || foundPageNum<_blknum+1) {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
             if (HashMapInsertKey(key, WalRcv->flushedUpto, _blknum+1) )
-                printf("%s HashMap insert succeed\n", __func__ );
+                printf("%s HashMap insert succeed, lsn=%lu, pageNum=%d\n", __func__, WalRcv->flushedUpto, _blknum+1 );
             else
                 printf("%s HashMap insert failed\n", __func__ );
         }
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        BufferTag tag;
+        INIT_BUFFERTAG(tag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+        char *extendPage = (char*) malloc(BLCKSZ);
+
+        _buff.copy(extendPage, BLCKSZ);
+        // Put version:-1 to RocksDB
+        PutPage2Rocksdb(tag, -1, extendPage);
+
+        free(extendPage);
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        char extendPage[BLCKSZ+16];
 //        _buff.copy(extendPage, BLCKSZ);
 //
 //        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
+        printf("%s end\n", __func__);
+        fflush(stdout);
+    }
+
+
+    void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, gettid());
+        fflush(stdout);
+
+        RelFileNode rnode;
+        rnode.spcNode = _reln._spc_node;
+        rnode.dbNode = _reln._db_node;
+        rnode.relNode = _reln._rel_node;
+
+        struct KeyType key{};
+        key.SpcID = rnode.spcNode;
+        key.DbID = rnode.dbNode;
+        key.RelID = rnode.relNode;
+        key.ForkNum = _forknum;
+
+        if (HashMapInsertKey(key, WalRcv->flushedUpto, _blknum) )
+            printf("%s HashMap insert succeed\n", __func__ );
+        else
+            printf("%s HashMap insert failed\n", __func__ );
+
         printf("%s end\n", __func__);
         fflush(stdout);
     }

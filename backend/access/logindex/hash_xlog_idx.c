@@ -8,6 +8,7 @@
 #include "storage/buf_internals.h"
 #include "storage/standby.h"
 #include "access/polar_logindex.h"
+#include "storage/kv_interface.h"
 
 //TODO: Here skip many parse functions for hash index
 
@@ -1188,4 +1189,140 @@ polar_hash_idx_redo(XLogReaderState *record,  BufferTag *tag, Buffer *buffer)
     }
 
     return BLK_NOTFOUND;
+}
+
+static void
+polar_hash_xlog_add_ovfl_page_save(XLogReaderState *record)
+{
+    ParseXLogBlocksLsn(record, 0);
+    ParseXLogBlocksLsn(record, 1);
+
+    if (XLogRecHasBlockRef(record, 2))
+        ParseXLogBlocksLsn(record, 2);
+
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+
+    ParseXLogBlocksLsn(record, 4);
+}
+
+static void
+polar_hash_xlog_move_page_contents_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 0))
+    {
+        ParseXLogBlocksLsn(record, 0);
+        ParseXLogBlocksLsn(record, 1);
+    }
+    else
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 2);
+}
+
+static void
+polar_hash_xlog_squeeze_page_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 0))
+    {
+        ParseXLogBlocksLsn(record, 0);
+        ParseXLogBlocksLsn(record, 1);
+    }
+    else
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 2);
+
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+
+    if (XLogRecHasBlockRef(record, 4))
+        ParseXLogBlocksLsn(record, 4);
+
+    ParseXLogBlocksLsn(record, 5);
+
+    if (XLogRecHasBlockRef(record, 6))
+        ParseXLogBlocksLsn(record, 6);
+}
+
+static void
+polar_hash_xlog_delete_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 0))
+    {
+        ParseXLogBlocksLsn(record, 0);
+        ParseXLogBlocksLsn(record, 1);
+    }
+    else
+        ParseXLogBlocksLsn(record, 1);
+}
+
+
+bool
+polar_hash_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info)
+    {
+        case XLOG_HASH_INIT_META_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HASH_INIT_BITMAP_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+
+        case XLOG_HASH_INSERT:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+
+        case XLOG_HASH_ADD_OVFL_PAGE:
+            polar_hash_xlog_add_ovfl_page_save(record);
+            break;
+
+        case XLOG_HASH_SPLIT_ALLOCATE_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            ParseXLogBlocksLsn(record, 2);
+            break;
+
+        case XLOG_HASH_SPLIT_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HASH_SPLIT_COMPLETE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+
+        case XLOG_HASH_MOVE_PAGE_CONTENTS:
+            polar_hash_xlog_move_page_contents_save(record);
+            break;
+
+        case XLOG_HASH_SQUEEZE_PAGE:
+            polar_hash_xlog_squeeze_page_save(record);
+            break;
+
+        case XLOG_HASH_DELETE:
+            polar_hash_xlog_delete_save(record);
+            break;
+
+        case XLOG_HASH_SPLIT_CLEANUP:
+        case XLOG_HASH_UPDATE_META_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_HASH_VACUUM_ONE_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+
+        default:
+            elog(PANIC, "polar_hash_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
 }

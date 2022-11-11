@@ -473,6 +473,8 @@ SetLatch(Latch *latch)
 	if (latch->is_set)
 		return;
 
+//    printf("%s pid = %d, latch->is_set=true\n", __func__ , getpid());
+//    fflush(stdout);
 	latch->is_set = true;
 
 #ifndef WIN32
@@ -499,16 +501,26 @@ SetLatch(Latch *latch)
 	 * not the top, so that they'll correctly process latch-setting events
 	 * that happen before they enter the loop.
 	 */
+//    printf("%s, MyProcPid = %d, is_shared = %d\n", __func__ , MyProcPid, latch->is_shared);
+//    fflush(stdout);
 	owner_pid = latch->owner_pid;
 	if (owner_pid == 0)
 		return;
 	else if (owner_pid == MyProcPid)
 	{
-		if (waiting)
+//		printf("%s owner_pid matches MyProcPid\n", __func__ );
+//		fflush(stdout);
+		if (waiting) {
+//			printf("%s sendMySelfPipeByte\n", __func__ );
+//			fflush(stdout);
 			sendSelfPipeByte();
+		}
 	}
-	else
-		kill(owner_pid, SIGUSR1);
+	else{
+//        printf("%s pid=%d send SIGUSR1 signal to pid=%d\n", __func__ , getpid(), owner_pid);
+//        fflush(stdout);
+        kill(owner_pid, SIGUSR1);
+    }
 #else
 
 	/*
@@ -1225,6 +1237,11 @@ WaitEventSetWait(WaitEventSet *set, long timeout,
 		 * ordering, so that we cannot miss seeing is_set if a notification
 		 * has already been queued.
 		 */
+//        if(getpid() == PostmasterPid) {
+//            printf("%s %d wait latch, is_set = %d\n", __func__ , getpid(), set->latch->is_set);
+//            fflush(stdout);
+//        }
+
 		if (set->latch && set->latch->is_set)
 		{
 			occurred_events->fd = PGINVALID_SOCKET;
@@ -1246,6 +1263,10 @@ WaitEventSetWait(WaitEventSet *set, long timeout,
 		rc = WaitEventSetWaitBlock(set, cur_timeout,
 								   occurred_events, nevents);
 
+//        if(getpid() == PostmasterPid) {
+//            printf("%s %d wait latch, rc = %d\n", __func__ , getpid(), rc);
+//            fflush(stdout);
+//        }
 		if (rc == -1)
 			break;				/* timeout occurred */
 		else

@@ -1491,8 +1491,11 @@ XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
 {
 	DecodedBkpBlock *bkpb;
 
-	if (!record->blocks[block_id].in_use)
-		return false;
+	if (!record->blocks[block_id].in_use) {
+        printf("%s parse block_id %d failed\n", __func__ , block_id);
+        fflush(stdout);
+        return false;
+    }
 
 	bkpb = &record->blocks[block_id];
 	if (rnode)

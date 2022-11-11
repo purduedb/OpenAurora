@@ -222,6 +222,7 @@ rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 rpcmdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+    return RpcMdTruncate(reln, forknum, nblocks);
 }
 
 void

@@ -23,6 +23,7 @@ extern "C" {
     void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync);
     void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode);
+    void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum);
 #ifdef __cplusplus
 }
 #endif

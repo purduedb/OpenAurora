@@ -19,6 +19,7 @@
 #include "access/xlog_internal.h"
 #include "commands/sequence.h"
 #include "storage/buf_internals.h"
+#include "storage/kv_interface.h"
 
 static XLogRedoAction
 polar_seq_xlog_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
@@ -72,22 +73,23 @@ polar_seq_xlog_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 	return BLK_NEEDS_REDO;
 }
 
-//void
-//polar_seq_idx_save( XLogReaderState *record)
-//{
-//	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
-//
-//	switch (info)
-//	{
-//		case XLOG_SEQ_LOG:
-//			polar_logindex_save_block(instance, record, 0);
-//			break;
-//
-//		default:
-//			elog(PANIC, "polar_seq_idx_save: unknown op code %u", info);
-//			break;
-//	}
-//}
+bool
+polar_seq_idx_save( XLogReaderState *record)
+{
+	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+	switch (info)
+	{
+		case XLOG_SEQ_LOG:
+            ParseXLogBlocksLsn(record, 0);
+			break;
+
+		default:
+			elog(PANIC, "polar_seq_idx_save: unknown op code %u", info);
+			break;
+	}
+    return true;
+}
 //
 //bool
 //polar_seq_idx_parse(polar_logindex_redo_ctl_t instance, XLogReaderState *record)

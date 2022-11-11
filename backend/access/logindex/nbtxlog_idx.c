@@ -9,6 +9,7 @@
 #include "miscadmin.h"
 #include "storage/buf_internals.h"
 #include "storage/standby.h"
+#include "storage/kv_interface.h"
 
 /*
  * _bt_clear_incomplete_split -- clear INCOMPLETE_SPLIT flag on a page
@@ -982,60 +983,182 @@ polar_btree_xlog_reuse_page_parse(XLogReaderState *record)
     }
 }
 
+static void
+polar_btree_xlog_insert_save(bool isleaf, bool ismeta, XLogReaderState *record)
+{
+    if (!isleaf)
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+
+    if (ismeta)
+        ParseXLogBlocksLsn(record, 2);
+}
+
+static void
+polar_btree_xlog_split_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+
+    ParseXLogBlocksLsn(record, 1);
+    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 2))
+        ParseXLogBlocksLsn(record, 2);
+}
+
+static void
+polar_btree_xlog_unlink_page_save(uint8 info, XLogReaderState *record)
+{
+    ParseXLogBlocksLsn(record, 2);
+
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+
+    if (info == XLOG_BTREE_UNLINK_PAGE_META)
+        ParseXLogBlocksLsn(record, 4);
+}
+
+static void
+polar_btree_xlog_newroot_save(XLogReaderState *record)
+{
+    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 2);
+}
+
+bool
+polar_btree_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info)
+    {
+        case XLOG_BTREE_INSERT_LEAF:
+            polar_btree_xlog_insert_save(true, false, record);
+            break;
+
+        case XLOG_BTREE_INSERT_UPPER:
+            polar_btree_xlog_insert_save(false, false, record);
+            break;
+
+        case XLOG_BTREE_INSERT_META:
+            polar_btree_xlog_insert_save(false, true, record);
+            break;
+
+        case XLOG_BTREE_SPLIT_L:
+        case XLOG_BTREE_SPLIT_R:
+            polar_btree_xlog_split_save(record);
+            break;
+
+        case XLOG_BTREE_INSERT_POST:
+            polar_btree_xlog_insert_save(true, false, record);
+            break;
+        case XLOG_BTREE_DEDUP:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_VACUUM:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_DELETE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_MARK_PAGE_HALFDEAD:
+            ParseXLogBlocksLsn(record, 1);
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_UNLINK_PAGE:
+        case XLOG_BTREE_UNLINK_PAGE_META:
+            polar_btree_xlog_unlink_page_save(info, record);
+            break;
+
+        case XLOG_BTREE_NEWROOT:
+            polar_btree_xlog_newroot_save(record);
+            break;
+
+        case XLOG_BTREE_REUSE_PAGE:
+            break;
+
+        case XLOG_BTREE_META_CLEANUP:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        default:
+            elog(PANIC, "polar_btree_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
+
 
 //todo , update parameters
-void
+XLogRedoAction
 polar_btree_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
     uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    XLogRedoAction action = BLK_NOTFOUND;
 
     //todo change context?
     switch (info)
     {
         case XLOG_BTREE_INSERT_LEAF:
-            polar_btree_xlog_insert(true, false, false, record, tag, buffer);
+            action = polar_btree_xlog_insert(true, false, false, record, tag, buffer);
             break;
         case XLOG_BTREE_INSERT_UPPER:
-            polar_btree_xlog_insert(false, false, false, record, tag, buffer);
+            action = polar_btree_xlog_insert(false, false, false, record, tag, buffer);
             break;
         case XLOG_BTREE_INSERT_META:
-            polar_btree_xlog_insert(false, true, false, record, tag, buffer);
+            action = polar_btree_xlog_insert(false, true, false, record, tag, buffer);
             break;
         case XLOG_BTREE_SPLIT_L:
-            polar_btree_xlog_split(true, record, tag, buffer);
+            action = polar_btree_xlog_split(true, record, tag, buffer);
             break;
         case XLOG_BTREE_SPLIT_R:
-            polar_btree_xlog_split(false, record, tag, buffer);
+            action = polar_btree_xlog_split(false, record, tag, buffer);
             break;
         case XLOG_BTREE_INSERT_POST:
-            polar_btree_xlog_insert(true, false, true, record, tag, buffer);
+            action = polar_btree_xlog_insert(true, false, true, record, tag, buffer);
             break;
         case XLOG_BTREE_DEDUP:
-            btree_xlog_dedup(record, tag, buffer);
+            action = btree_xlog_dedup(record, tag, buffer);
             break;
         case XLOG_BTREE_VACUUM:
-            polar_btree_xlog_vacuum(record, tag, buffer);
+            action = polar_btree_xlog_vacuum(record, tag, buffer);
             break;
         case XLOG_BTREE_DELETE:
-            polar_btree_xlog_delete(record, tag, buffer);
+            action = polar_btree_xlog_delete(record, tag, buffer);
             break;
         case XLOG_BTREE_MARK_PAGE_HALFDEAD:
-            polar_btree_xlog_mark_page_halfdead(record, tag, buffer);
+            action = polar_btree_xlog_mark_page_halfdead(record, tag, buffer);
             break;
         case XLOG_BTREE_UNLINK_PAGE:
         case XLOG_BTREE_UNLINK_PAGE_META:
-            polar_btree_xlog_unlink_page(info, record, tag, buffer);
+            action = polar_btree_xlog_unlink_page(info, record, tag, buffer);
             break;
         case XLOG_BTREE_NEWROOT:
-            polar_btree_xlog_newroot(record, tag, buffer);
+            action = polar_btree_xlog_newroot(record, tag, buffer);
             break;
         case XLOG_BTREE_REUSE_PAGE:
 //            polar_btree_xlog_reuse_page(record);
             break;
         case XLOG_BTREE_META_CLEANUP:
-            polar_bt_restore_meta(record, 0, buffer);
+            action = polar_bt_restore_meta(record, 0, buffer);
             break;
         default:
             elog(PANIC, "btree_redo: unknown op code %u", info);
     }
+    return action;
 }

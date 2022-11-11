@@ -10,6 +10,8 @@
 #include "access/xlog_internal.h"
 #include "storage/buf_internals.h"
 
+#include "storage/kv_interface.h"
+
 /*
  * xlog replay routines
  */
@@ -330,6 +332,48 @@ polar_brin_xlog_desummarize_page(XLogReaderState *record, BufferTag *tag, Buffer
     }
 
     return action;
+}
+
+bool
+polar_brin_idx_save(XLogReaderState *record) {
+    uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info & XLOG_BRIN_OPMASK)
+    {
+        case XLOG_BRIN_CREATE_INDEX:
+            ParseXLogBlocksLsn(record, 0);
+            return true;
+
+        case XLOG_BRIN_INSERT:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            return true;
+
+        case XLOG_BRIN_UPDATE:
+            ParseXLogBlocksLsn(record, 2);
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            return true;
+
+        case XLOG_BRIN_SAMEPAGE_UPDATE:
+            ParseXLogBlocksLsn(record, 0);
+            return true;
+
+        case XLOG_BRIN_REVMAP_EXTEND:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            return true;
+
+        case XLOG_BRIN_DESUMMARIZE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            return true;
+
+        default:
+            return false;
+            elog(PANIC, "polar_brin_idx_save: unknown op code %u", info);
+    }
+    return false;
 }
 
 XLogRedoAction

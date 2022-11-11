@@ -10,6 +10,7 @@
 #include "access/xlog_internal.h"
 #include "storage/buf_internals.h"
 #include "storage/standby.h"
+#include "storage/kv_interface.h"
 #include "utils/memutils.h"
 
 //static void
@@ -1123,59 +1124,90 @@ polar_spg_redo_vacuum_redirect(XLogReaderState *record, BufferTag *tag, Buffer *
     return action;
 }
 
-//void
-//polar_spg_idx_save(polar_logindex_redo_ctl_t instance, XLogReaderState *record)
-//{
-//    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
-//
-//    switch (info)
-//    {
+static void
+polar_spg_redo_add_node_save(XLogReaderState *record)
+{
+    if (!XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 0);
+    else
+    {
+        ParseXLogBlocksLsn(record, 1);
+        ParseXLogBlocksLsn(record, 0);
+
+        if (XLogRecHasBlockRef(record, 2))
+            ParseXLogBlocksLsn(record, 2);
+    }
+}
+
+static void
+polar_spg_redo_pick_split_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 0))
+        ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 2);
+
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+}
+
+bool
+polar_spg_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info)
+    {
 //        case XLOG_SPGIST_CREATE_INDEX:
 //            polar_logindex_save_block(instance, record, 0);
 //            polar_logindex_save_block(instance, record, 1);
 //            polar_logindex_save_block(instance, record, 2);
 //            break;
-//
-//        case XLOG_SPGIST_ADD_LEAF:
-//            polar_logindex_save_block(instance, record, 0);
-//
-//            if (XLogRecHasBlockRef(record, 1))
-//                polar_logindex_save_block(instance, record, 1);
-//
-//            break;
-//
-//        case XLOG_SPGIST_MOVE_LEAFS:
-//            polar_logindex_save_block(instance, record, 1);
-//            polar_logindex_save_block(instance, record, 0);
-//            polar_logindex_save_block(instance, record, 2);
-//            break;
-//
-//        case XLOG_SPGIST_ADD_NODE:
-//            polar_spg_redo_add_node_save(instance, record);
-//            break;
-//
-//        case XLOG_SPGIST_SPLIT_TUPLE:
-//            if (XLogRecHasBlockRef(record, 1))
-//                polar_logindex_save_block(instance, record, 1);
-//
-//            polar_logindex_save_block(instance, record, 0);
-//            break;
-//
-//        case XLOG_SPGIST_PICKSPLIT:
-//            polar_spg_redo_pick_split_save(instance, record);
-//            break;
-//
-//        case XLOG_SPGIST_VACUUM_LEAF:
-//        case XLOG_SPGIST_VACUUM_ROOT:
-//        case XLOG_SPGIST_VACUUM_REDIRECT:
-//            polar_logindex_save_block(instance, record, 0);
-//            break;
-//
-//        default:
-//            elog(PANIC, "polar_spg_idx_save: unknown op code %u", info);
-//            break;
-//    }
-//}
+
+        case XLOG_SPGIST_ADD_LEAF:
+            ParseXLogBlocksLsn(record, 0);
+
+            if (XLogRecHasBlockRef(record, 1))
+                ParseXLogBlocksLsn(record, 1);
+
+            break;
+
+        case XLOG_SPGIST_MOVE_LEAFS:
+            ParseXLogBlocksLsn(record, 1);
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 2);
+            break;
+
+        case XLOG_SPGIST_ADD_NODE:
+            polar_spg_redo_add_node_save(record);
+            break;
+
+        case XLOG_SPGIST_SPLIT_TUPLE:
+            if (XLogRecHasBlockRef(record, 1))
+                ParseXLogBlocksLsn(record, 1);
+
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_SPGIST_PICKSPLIT:
+            polar_spg_redo_pick_split_save(record);
+            break;
+
+        case XLOG_SPGIST_VACUUM_LEAF:
+        case XLOG_SPGIST_VACUUM_ROOT:
+        case XLOG_SPGIST_VACUUM_REDIRECT:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        default:
+            elog(PANIC, "polar_spg_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
 //
 //bool
 //polar_spg_idx_parse(polar_logindex_redo_ctl_t instance, XLogReaderState *record)

@@ -353,6 +353,10 @@ extern void assign_checkpoint_completion_target(double newval, void *extra);
 
 extern int	XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
                     int reqLen, XLogRecPtr targetRecPtr, char *readBuf);
+
+// Use this file to initialize recovery TLI for wal_redo process
+extern void ReadControlFileTimeLine(void);
+
 /*
  * Routines to start, stop, and get status of a base backup.
  */

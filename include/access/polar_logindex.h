@@ -118,6 +118,8 @@ extern log_index_lsn_t *polar_logindex_lsn_iterator_next(logindex_snapshot_t log
 extern void polar_logindex_truncate(logindex_snapshot_t logindex_snapshot, XLogRecPtr lsn);
 extern bool polar_logindex_check_state(logindex_snapshot_t logindex_snapshot, uint32 state);
 
+extern void polar_xlog_decode_data(XLogReaderState *state);
+
 /*
  * POLAR: Return the newest byte position which all logindex info could be flushed before it.
  */

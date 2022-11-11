@@ -1293,6 +1293,194 @@ uint32_t DataPageAccess_RpcMdExtend_presult::read(::apache::thrift::protocol::TP
 }
 
 
+DataPageAccess_RpcTruncate_args::~DataPageAccess_RpcTruncate_args() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcTruncate_args::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += this->_reln.read(iprot);
+          this->__isset._reln = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_forknum);
+          this->__isset._forknum = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 3:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_blknum);
+          this->__isset._blknum = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcTruncate_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcTruncate_args");
+
+  xfer += oprot->writeFieldBegin("_reln", ::apache::thrift::protocol::T_STRUCT, 1);
+  xfer += this->_reln.write(oprot);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32(this->_forknum);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeI32(this->_blknum);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcTruncate_pargs::~DataPageAccess_RpcTruncate_pargs() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcTruncate_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcTruncate_pargs");
+
+  xfer += oprot->writeFieldBegin("_reln", ::apache::thrift::protocol::T_STRUCT, 1);
+  xfer += (*(this->_reln)).write(oprot);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32((*(this->_forknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeI32((*(this->_blknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcTruncate_result::~DataPageAccess_RpcTruncate_result() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcTruncate_result::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    xfer += iprot->skip(ftype);
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcTruncate_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
+
+  uint32_t xfer = 0;
+
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcTruncate_result");
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcTruncate_presult::~DataPageAccess_RpcTruncate_presult() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcTruncate_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    xfer += iprot->skip(ftype);
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+
 DataPageAccess_zip_args::~DataPageAccess_zip_args() noexcept {
 }
 
@@ -1702,6 +1890,61 @@ void DataPageAccessClient::recv_RpcMdExtend()
   return;
 }
 
+void DataPageAccessClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+{
+  send_RpcTruncate(_reln, _forknum, _blknum);
+  recv_RpcTruncate();
+}
+
+void DataPageAccessClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+{
+  int32_t cseqid = 0;
+  oprot_->writeMessageBegin("RpcTruncate", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcTruncate_pargs args;
+  args._reln = &_reln;
+  args._forknum = &_forknum;
+  args._blknum = &_blknum;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+}
+
+void DataPageAccessClient::recv_RpcTruncate()
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  iprot_->readMessageBegin(fname, mtype, rseqid);
+  if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+    ::apache::thrift::TApplicationException x;
+    x.read(iprot_);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+    throw x;
+  }
+  if (mtype != ::apache::thrift::protocol::T_REPLY) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  if (fname.compare("RpcTruncate") != 0) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  DataPageAccess_RpcTruncate_presult result;
+  result.read(iprot_);
+  iprot_->readMessageEnd();
+  iprot_->getTransport()->readEnd();
+
+  return;
+}
+
 void DataPageAccessClient::zip()
 {
   send_zip();
@@ -2058,6 +2301,59 @@ void DataPageAccessProcessor::process_RpcMdExtend(int32_t seqid, ::apache::thrif
 
   if (this->eventHandler_.get() != nullptr) {
     this->eventHandler_->postWrite(ctx, "DataPageAccess.RpcMdExtend", bytes);
+  }
+}
+
+void DataPageAccessProcessor::process_RpcTruncate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
+{
+  void* ctx = nullptr;
+  if (this->eventHandler_.get() != nullptr) {
+    ctx = this->eventHandler_->getContext("DataPageAccess.RpcTruncate", callContext);
+  }
+  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "DataPageAccess.RpcTruncate");
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preRead(ctx, "DataPageAccess.RpcTruncate");
+  }
+
+  DataPageAccess_RpcTruncate_args args;
+  args.read(iprot);
+  iprot->readMessageEnd();
+  uint32_t bytes = iprot->getTransport()->readEnd();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postRead(ctx, "DataPageAccess.RpcTruncate", bytes);
+  }
+
+  DataPageAccess_RpcTruncate_result result;
+  try {
+    iface_->RpcTruncate(args._reln, args._forknum, args._blknum);
+  } catch (const std::exception& e) {
+    if (this->eventHandler_.get() != nullptr) {
+      this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcTruncate");
+    }
+
+    ::apache::thrift::TApplicationException x(e.what());
+    oprot->writeMessageBegin("RpcTruncate", ::apache::thrift::protocol::T_EXCEPTION, seqid);
+    x.write(oprot);
+    oprot->writeMessageEnd();
+    oprot->getTransport()->writeEnd();
+    oprot->getTransport()->flush();
+    return;
+  }
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preWrite(ctx, "DataPageAccess.RpcTruncate");
+  }
+
+  oprot->writeMessageBegin("RpcTruncate", ::apache::thrift::protocol::T_REPLY, seqid);
+  result.write(oprot);
+  oprot->writeMessageEnd();
+  bytes = oprot->getTransport()->writeEnd();
+  oprot->getTransport()->flush();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postWrite(ctx, "DataPageAccess.RpcTruncate", bytes);
   }
 }
 
@@ -2596,6 +2892,86 @@ void DataPageAccessConcurrentClient::recv_RpcMdExtend(const int32_t seqid)
         throw TProtocolException(TProtocolException::INVALID_DATA);
       }
       DataPageAccess_RpcMdExtend_presult result;
+      result.read(iprot_);
+      iprot_->readMessageEnd();
+      iprot_->getTransport()->readEnd();
+
+      sentry.commit();
+      return;
+    }
+    // seqid != rseqid
+    this->sync_->updatePending(fname, mtype, rseqid);
+
+    // this will temporarily unlock the readMutex, and let other clients get work done
+    this->sync_->waitForWork(seqid);
+  } // end while(true)
+}
+
+void DataPageAccessConcurrentClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+{
+  int32_t seqid = send_RpcTruncate(_reln, _forknum, _blknum);
+  recv_RpcTruncate(seqid);
+}
+
+int32_t DataPageAccessConcurrentClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+{
+  int32_t cseqid = this->sync_->generateSeqId();
+  ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
+  oprot_->writeMessageBegin("RpcTruncate", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcTruncate_pargs args;
+  args._reln = &_reln;
+  args._forknum = &_forknum;
+  args._blknum = &_blknum;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+
+  sentry.commit();
+  return cseqid;
+}
+
+void DataPageAccessConcurrentClient::recv_RpcTruncate(const int32_t seqid)
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  // the read mutex gets dropped and reacquired as part of waitForWork()
+  // The destructor of this sentry wakes up other clients
+  ::apache::thrift::async::TConcurrentRecvSentry sentry(this->sync_.get(), seqid);
+
+  while(true) {
+    if(!this->sync_->getPending(fname, mtype, rseqid)) {
+      iprot_->readMessageBegin(fname, mtype, rseqid);
+    }
+    if(seqid == rseqid) {
+      if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+        ::apache::thrift::TApplicationException x;
+        x.read(iprot_);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+        sentry.commit();
+        throw x;
+      }
+      if (mtype != ::apache::thrift::protocol::T_REPLY) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+      }
+      if (fname.compare("RpcTruncate") != 0) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+
+        // in a bad state, don't commit
+        using ::apache::thrift::protocol::TProtocolException;
+        throw TProtocolException(TProtocolException::INVALID_DATA);
+      }
+      DataPageAccess_RpcTruncate_presult result;
       result.read(iprot_);
       iprot_->readMessageEnd();
       iprot_->getTransport()->readEnd();

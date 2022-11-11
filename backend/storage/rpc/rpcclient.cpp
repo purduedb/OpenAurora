@@ -107,7 +107,8 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum);
     fflush(stdout);
 
     RpcInit();
@@ -130,7 +131,8 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
     fflush(stdout);
 
     RpcInit();
@@ -152,7 +154,8 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
     fflush(stdout);
 
     RpcInit();
@@ -161,13 +164,14 @@ int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
 
     int32_t result = client->RpcMdExists(_reln, _forknum);
 
-    printf("%s End\n", __func__ );
+    printf("%s End, exist = %d\n", __func__ , result);
     fflush(stdout);
     return result;
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
     fflush(stdout);
 
     RpcInit();
@@ -177,14 +181,15 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
 
     int32_t result = client->RpcMdNblocks(_reln, _forknum);
 
-    printf("%s End\n", __func__ );
+    printf("%s End, result = %d\n", __func__ , result);
     fflush(stdout);
 
     return result;
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
     fflush(stdout);
 
     RpcInit();
@@ -199,7 +204,8 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
 }
 
 void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync) {
-    printf("%s Start\n", __func__ );
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u pageIsNew=%d\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
 
     RpcInit();
@@ -213,6 +219,21 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
 
     client->RpcMdExtend(_reln, _forknum, _blknum, _buff, _skipFsync);
 
+    printf("%s End\n", __func__ );
+    fflush(stdout);
+}
+
+void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
+    fflush(stdout);
+
+    RpcInit();
+    _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
+    int32_t _forknum = forknum;
+    int32_t _blknum = blknum;
+
+    client->RpcTruncate(_reln, _forknum, _blknum);
     printf("%s End\n", __func__ );
     fflush(stdout);
 }

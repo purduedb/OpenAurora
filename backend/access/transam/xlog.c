@@ -38,6 +38,8 @@
 #include "access/xlogreader.h"
 #include "access/xlogutils.h"
 #include "access/logindex_hashmap.h"
+#include "access/logindex_func.h"
+#include "access/polar_logindex.h"
 #include "catalog/catversion.h"
 #include "catalog/pg_control.h"
 #include "catalog/pg_database.h"
@@ -3671,8 +3673,8 @@ static int
 XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 			 XLogSource source, bool notfoundOk)
 {
-    printf("pid=%d, %s %s %d, source = %d\n", getpid(), __func__ , __FILE__, __LINE__, source );
-    fflush(stdout);
+//    printf("pid=%d, %s %s %d, source = %d\n", getpid(), __func__ , __FILE__, __LINE__, source );
+//    fflush(stdout);
     char		xlogfname[MAXFNAMELEN];
 	char		activitymsg[MAXFNAMELEN + 16];
 	char		path[MAXPGPATH];
@@ -3706,8 +3708,8 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 			elog(ERROR, "invalid XLogFileRead source %d", source);
 	}
 
-    printf("pid=%d, %s %s %d, path = %s\n", getpid(), __func__ , __FILE__, __LINE__, path);
-    fflush(stdout);
+//    printf("pid=%d, %s %s %d, path = %s\n", getpid(), __func__ , __FILE__, __LINE__, path);
+//    fflush(stdout);
     /*
      * If the segment was fetched from archival storage, replace the existing
      * xlog segment (if any) with the archival version.
@@ -3757,8 +3759,8 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 static int
 XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 {
-    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
-    fflush(stdout);
+//    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+//    fflush(stdout);
 
 	char		path[MAXPGPATH];
 	ListCell   *cell;
@@ -3788,15 +3790,15 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 	else
 		tles = readTimeLineHistory(recoveryTargetTLI);
 
-    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
-    fflush(stdout);
+//    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+//    fflush(stdout);
 	foreach(cell, tles)
 	{
 		TimeLineHistoryEntry *hent = (TimeLineHistoryEntry *) lfirst(cell);
 		TimeLineID	tli = hent->tli;
 
-        printf("pid=%d, %s %s %d, timelineID = %d\n", getpid(), __func__ , __FILE__, __LINE__, tli);
-        fflush(stdout);
+//        printf("pid=%d, %s %s %d, timelineID = %d\n", getpid(), __func__ , __FILE__, __LINE__, tli);
+//        fflush(stdout);
 
 		if (tli < curFileTLI)
 			break;				/* don't bother looking at too-old TLIs */
@@ -3840,8 +3842,8 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 
 		if (source == XLOG_FROM_ANY || source == XLOG_FROM_PG_WAL)
 		{
-            printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
-            fflush(stdout);
+//            printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+//            fflush(stdout);
 			fd = XLogFileRead(segno, emode, tli,
 							  XLOG_FROM_PG_WAL, true);
 			if (fd != -1)
@@ -3853,8 +3855,8 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 		}
 	}
 
-    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
-    fflush(stdout);
+//    printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
+//    fflush(stdout);
     /* Couldn't find it.  For simplicity, complain about front timeline */
 	XLogFilePath(path, recoveryTargetTLI, segno, wal_segment_size);
 	errno = ENOENT;
@@ -5210,6 +5212,8 @@ XLOGShmemInit(void)
 	SpinLockInit(&XLogCtl->Insert.insertpos_lck);
 	SpinLockInit(&XLogCtl->info_lck);
 	SpinLockInit(&XLogCtl->ulsn_lck);
+    printf("%s InitSharedLatch for recoveryWakeupLatch\n", __func__ );
+    fflush(stdout);
 	InitSharedLatch(&XLogCtl->recoveryWakeupLatch);
 }
 
@@ -6326,6 +6330,17 @@ CheckRequiredParameterValues(void)
 	}
 }
 
+void
+ReadControlFileTimeLine(void) {
+	if (ControlFile->minRecoveryPointTLI >
+		ControlFile->checkPointCopy.ThisTimeLineID)
+		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
+	else
+		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
+	printf("%s set recoveryTargetTLI to %u\n", __func__ , recoveryTargetTLI);
+	fflush(stdout);
+}
+
 /*
  * This must be called ONCE during postmaster or standalone-backend startup
  */
@@ -6459,6 +6474,8 @@ StartupXLOG(void)
 		SyncDataDirectory();
 	}
 
+	printf("%s %d recoveryTLI = %u\n", __func__ , __LINE__, recoveryTargetTLI);
+	fflush(stdout);
 	/*
 	 * Initialize on the assumption we want to recover to the latest timeline
 	 * that's active according to pg_control.
@@ -6468,6 +6485,8 @@ StartupXLOG(void)
 		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
 	else
 		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
+	printf("%s %d recoveryTLI = %u\n", __func__ , __LINE__, recoveryTargetTLI);
+	fflush(stdout);
 
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
@@ -7376,7 +7395,20 @@ StartupXLOG(void)
 				/* Now apply the WAL record itself */
 //				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                 //For the page related xlog, replay process will deal with them
-                printf("%s starts to process xlog\n", __func__ );
+                printf("%s starts to process xlog, rmid = %d, info = %d\n", __func__ , record->xl_rmid, XLogRecGetInfo(xlogreader) & ~XLR_INFO_MASK);
+
+                // Deal With HEAP: add VM blocks to xlogreader->decoded_block
+                polar_xlog_decode_data(xlogreader);
+
+
+                const char*id=NULL;
+                id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+                if (id)
+                    printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+                else
+                    printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+                fflush(stdout);
+
                 switch (record->xl_rmid) {
                     case RM_XLOG_ID:
                     case RM_SMGR_ID:
@@ -7408,24 +7440,93 @@ StartupXLOG(void)
                                 uint64_t foundLsn;
                                 int foundPageNum;
 
+								// If not found relation page number in cache, then no updates is on this relation
+								// Then we read from standalone process ($basePageNum),
+								// 		If $basePageNum > blocks[i].blkno+1, then insert $basePageNum
+								//		Else, insert blocks[i].blkno+1
                                 int found = HashMapFindLowerBoundEntry(key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
-                                if(!found || foundPageNum<xlogreader->blocks[i].blkno) {
+                                if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
                                     if (HashMapInsertKey(key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1) )
                                         printf("%s HashMap insert succeed\n", __func__ );
                                     else
                                         printf("%s HashMap insert failed\n", __func__ );
-                                }
-
+                                } else if(!found) {
+									int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
+									if(baseRelSize > xlogreader->blocks[i].blkno+1) {
+										HashMapInsertKey(key, xlogreader->ReadRecPtr, baseRelSize);
+									} else {
+										HashMapInsertKey(key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1);
+									}
+								}
                             }
 
                         }
 
                         break;
                     default:
-//                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                         break;
                 }
 
+
+                bool parsed = false;
+                switch (record->xl_rmid) {
+                    case RM_XLOG_ID:
+                        parsed = polar_xlog_idx_save(xlogreader);
+                        break;
+                    case RM_HEAP2_ID:
+                        parsed = polar_heap2_idx_save(xlogreader);
+                        break;
+                    case RM_HEAP_ID:
+                        parsed = polar_heap_idx_save(xlogreader);
+                        break;
+                    case RM_BTREE_ID:
+                        parsed = polar_btree_idx_save(xlogreader);
+                        break;
+                    case RM_HASH_ID:
+                        parsed = polar_hash_idx_save(xlogreader);
+                        break;
+                    case RM_GIN_ID:
+                        parsed = polar_gin_idx_save(xlogreader);
+                        break;
+                    case RM_GIST_ID:
+                        parsed = polar_gist_idx_save(xlogreader);
+                        break;
+                    case RM_SEQ_ID:
+                        parsed = polar_seq_idx_save(xlogreader);
+                        break;
+                    case RM_SPGIST_ID:
+                        parsed = polar_spg_idx_save(xlogreader);
+                        break;
+                    case RM_BRIN_ID:
+                        parsed = polar_brin_idx_save(xlogreader);
+                        break;
+                    case RM_GENERIC_ID:
+                        parsed = polar_generic_idx_save(xlogreader);
+                        break;
+                    default:
+                        break;
+                }
+				if(parsed) {
+					printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
+					fflush(stdout);
+				} else {
+                    printf("%s need redo immediately\n", __func__ );
+                    fflush(stdout);
+                }
+
+                if(!parsed)
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+
+				// Debug Info
+//				int block_id;
+//				for (block_id = 0; block_id <= xlogreader->max_block_id; block_id++) {
+//					RelFileNode tempRnode = xlogreader->blocks[block_id].rnode;
+//					ForkNumber tempForkNum = xlogreader->blocks[block_id].forknum;
+//					BlockNumber tempBlkNum = xlogreader->blocks[block_id].blkno;
+//					printf("%s processing blk: Spc=%u, Db=%u, Rel=%u, fork=%d, Blk=%u\n",
+//						   tempRnode.spcNode, tempRnode.dbNode, tempRnode.relNode, tempForkNum, tempBlkNum);
+//					fflush(stdout);
+//				}
 				/*
 				 * After redo, check whether the backup pages associated with
 				 * the WAL record are consistent with the existing pages. This
@@ -12192,8 +12293,8 @@ static bool
 WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 							bool fetching_ckpt, XLogRecPtr tliRecPtr)
 {
-	printf("%s Start\n", __func__ );
-	fflush(stdout);
+//	printf("%s Start\n", __func__ );
+//	fflush(stdout);
 
 	static TimestampTz last_fail_time = 0;
 	TimestampTz now;
@@ -12234,13 +12335,13 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		currentSource = XLOG_FROM_ARCHIVE;
 	}
 
-	printf("pid=%d, %s current source is %d, StandbyMode flag is %d\n", getpid() ,__func__ , currentSource, StandbyMode);
-	fflush(stdout);
+//	printf("pid=%d, %s current source is %d, StandbyMode flag is %d\n", getpid() ,__func__ , currentSource, StandbyMode);
+//	fflush(stdout);
 
 	for (;;)
 	{
-        printf("%s %d \n", __func__ , __LINE__);
-        fflush(stdout);
+//        printf("%s %d \n", __func__ , __LINE__);
+//        fflush(stdout);
 
 		XLogSource	oldSource = currentSource;
 		bool		startWalReceiver = false;
@@ -12259,8 +12360,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				case XLOG_FROM_ARCHIVE:
 				case XLOG_FROM_PG_WAL:
 
-                    printf("%s %d \n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d \n", __func__ , __LINE__);
+//                    fflush(stdout);
 					/*
 					 * Check to see if the trigger file exists. Note that we
 					 * do this only after failure, so when you create the
@@ -12286,14 +12387,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 */
 					currentSource = XLOG_FROM_STREAM;
 					startWalReceiver = true;
-                    printf("%s %d \n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d \n", __func__ , __LINE__);
+//                    fflush(stdout);
 					break;
 
 				case XLOG_FROM_STREAM:
 
-                    printf("%s %d \n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d \n", __func__ , __LINE__);
+//                    fflush(stdout);
 					/*
 					 * Failure while streaming. Most likely, we got here
 					 * because streaming replication was terminated, or
@@ -12356,21 +12457,21 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						wait_time = wal_retrieve_retry_interval -
 							(secs * 1000 + usecs / 1000);
 
-                        printf("%s %d, start waitlatch\n", __func__ , __LINE__);
+//                        printf("%s %d, start waitlatch\n", __func__ , __LINE__);
 						(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 										 WL_LATCH_SET | WL_TIMEOUT |
 										 WL_EXIT_ON_PM_DEATH,
 										 wait_time,
 										 WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
-                        printf("%s %d, got latch\n", __func__ , __LINE__);
+//                        printf("%s %d, got latch\n", __func__ , __LINE__);
 						ResetLatch(&XLogCtl->recoveryWakeupLatch);
 						now = GetCurrentTimestamp();
 					}
 					last_fail_time = now;
 					currentSource = XLOG_FROM_ARCHIVE;
 
-                    printf("%s %d \n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d \n", __func__ , __LINE__);
+//                    fflush(stdout);
 					break;
 
 				default:
@@ -12379,8 +12480,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		}
 		else if (currentSource == XLOG_FROM_PG_WAL)
 		{
-            printf("%s %d \n", __func__ , __LINE__);
-            fflush(stdout);
+//            printf("%s %d \n", __func__ , __LINE__);
+//            fflush(stdout);
             /*
              * We just successfully read a file in pg_wal. We prefer files in
              * the archive over ones in pg_wal, so try the next file again
@@ -12391,8 +12492,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		}
 
 
-		printf("%s ready to read xlog, current source is %d, pid = %d\n", __func__ , currentSource, getpid());
-		fflush(stdout);
+//		printf("%s ready to read xlog, current source is %d, pid = %d\n", __func__ , currentSource, getpid());
+//		fflush(stdout);
 
 		if (currentSource != oldSource)
 			elog(DEBUG2, "switched WAL source from %s to %s after %s",
@@ -12404,26 +12505,26 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		 * source.
 		 */
 		lastSourceFailed = false;
-        printf("hhhhhhhhhhhhhhhhhhhhh, pid = %d\n", getpid());
-        fflush(stdout);
+//        printf("hhhhhhhhhhhhhhhhhhhhh, pid = %d\n", getpid());
+//        fflush(stdout);
 
 		switch (currentSource)
 		{
 			case XLOG_FROM_ARCHIVE:
 			case XLOG_FROM_PG_WAL:
 
-				printf("pid=%d, %s asserting\n",  getpid(), __func__ );
-                fflush(stdout);
+//				printf("pid=%d, %s asserting\n",  getpid(), __func__ );
+//                fflush(stdout);
 				/*
 				 * WAL receiver must not be running when reading WAL from
 				 * archive or pg_wal.
 				 */
-                printf("Streaming? %d\n", WalRcvStreaming());
-                fflush(stdout);
+//                printf("Streaming? %d\n", WalRcvStreaming());
+//                fflush(stdout);
 
 				Assert(!WalRcvStreaming());
-				printf("pid=%d, %s passed asserting\n", getpid(), __func__ );
-                fflush(stdout);
+//				printf("pid=%d, %s passed asserting\n", getpid(), __func__ );
+//                fflush(stdout);
 
 				/* Close any old file we might have open. */
 				if (readFile >= 0)
@@ -12442,7 +12543,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2,
 											  currentSource == XLOG_FROM_ARCHIVE ? XLOG_FROM_ANY :
 											  currentSource);
-                printf("%s %d pid=%d\n", __func__ , __LINE__, getpid());
+//                printf("%s %d pid=%d\n", __func__ , __LINE__, getpid());
 				if (readFile >= 0)
 					return true;	/* success! */
 
@@ -12633,14 +12734,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * to react to a trigger file promptly and to check if the
 					 * WAL receiver is still active.
 					 */
-                    printf("%s %d, start waitlatch\n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d, pid = %d start waitlatch\n", __func__ , __LINE__, getpid());
+//                    fflush(stdout);
                     (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 									 WL_LATCH_SET | WL_TIMEOUT |
 									 WL_EXIT_ON_PM_DEATH,
 									 5000L, WAIT_EVENT_RECOVERY_WAL_STREAM);
-                    printf("%s %d, got latch\n", __func__ , __LINE__);
-                    fflush(stdout);
+//                    printf("%s %d, got latch\n", __func__ , __LINE__);
+//                    fflush(stdout);
 					ResetLatch(&XLogCtl->recoveryWakeupLatch);
 					break;
 				}
@@ -12836,7 +12937,7 @@ CheckPromoteSignal(void)
 void
 WakeupRecovery(void)
 {
-    printf("%s Wakeup Recovery\n", __func__ );
+    printf("%s Wakeup Recovery, pid=%d,  owner_pid = %d\n", __func__ , getpid(), XLogCtl->recoveryWakeupLatch.owner_pid);
     fflush(stdout);
 
 	SetLatch(&XLogCtl->recoveryWakeupLatch);

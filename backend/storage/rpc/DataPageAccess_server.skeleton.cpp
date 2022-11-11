@@ -62,6 +62,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcMdExtend\n");
   }
 
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
+    // Your implementation goes here
+    printf("RpcTruncate\n");
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

@@ -104,6 +104,8 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
+   _Page ReadBufferCommon(1:_Smgr_Relation _reln, 2:i32 _relpersistence, 3:i32 _forknum, 4:i32 _blknum, 5:i32 _readBufferMode),
+
    _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum),
 
    i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum),
@@ -114,6 +116,7 @@ service DataPageAccess {
 
    void RpcMdExtend(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum, 4:_Page _buff, 5:i32 skipFsync), 
    
+   void RpcTruncate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum),
    /**
     * This method has a oneway modifier. That means the client only makes
     * a request and does not listen for any response at all. Oneway methods

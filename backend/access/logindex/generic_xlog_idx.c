@@ -6,7 +6,20 @@
 #include "access/xlog_internal.h"
 #include "storage/buf_internals.h"
 #include "access/polar_logindex.h"
+#include "storage/kv_interface.h"
 
+bool
+polar_generic_idx_save(XLogReaderState *record)
+{
+    int block_id;
+
+    for (block_id = 0; block_id <= MAX_GENERIC_XLOG_PAGES; block_id++)
+    {
+        if (XLogRecHasBlockRef(record, block_id))
+            ParseXLogBlocksLsn(record, block_id);
+    }
+    return true;
+}
 
 XLogRedoAction
 polar_generic_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)

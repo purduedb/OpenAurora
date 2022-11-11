@@ -9,6 +9,7 @@
 #include "access/xlogutils.h"
 #include "access/xlog_internal.h"
 #include "storage/buf_internals.h"
+#include "storage/kv_interface.h"
 #include "utils/memutils.h"
 
 
@@ -648,4 +649,106 @@ polar_gin_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     MemoryContextReset(redo_ctx);
 
     return action;
+}
+
+static void
+polar_gin_redo_insert_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+
+    ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_gin_redo_split_save(XLogReaderState *record)
+{
+    if (XLogRecHasBlockRef(record, 3))
+        ParseXLogBlocksLsn(record, 3);
+
+    ParseXLogBlocksLsn(record, 0);
+    ParseXLogBlocksLsn(record, 1);
+
+    if (XLogRecHasBlockRef(record, 2))
+        ParseXLogBlocksLsn(record, 2);
+}
+
+static void
+polar_gin_redo_update_metapage_save(XLogReaderState *record)
+{
+    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+}
+
+static void
+polar_gin_redo_delete_list_pages_save(XLogReaderState *record)
+{
+    int i = 1;
+
+    ParseXLogBlocksLsn(record, 0);
+
+    for (i = 1; i <= GIN_NDELETE_AT_ONCE; i++)
+    {
+        if (XLogRecHasBlockRef(record, i))
+            ParseXLogBlocksLsn(record, i);
+        else
+            break;
+    }
+}
+
+bool
+polar_gin_idx_save(XLogReaderState *record)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    switch (info)
+    {
+//        case XLOG_GIN_CREATE_INDEX:
+//            polar_logindex_save_block(instance, record, 0);
+//            polar_logindex_save_block(instance, record, 1);
+//            break;
+
+        case XLOG_GIN_CREATE_PTREE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_GIN_INSERT:
+            polar_gin_redo_insert_save(record);
+            break;
+
+        case XLOG_GIN_SPLIT:
+            polar_gin_redo_split_save(record);
+            break;
+
+        case XLOG_GIN_VACUUM_PAGE:
+        case XLOG_GIN_VACUUM_DATA_LEAF_PAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_GIN_DELETE_PAGE:
+            ParseXLogBlocksLsn(record, 2);
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+
+        case XLOG_GIN_UPDATE_META_PAGE:
+            polar_gin_redo_update_metapage_save(record);
+            break;
+
+        case XLOG_GIN_INSERT_LISTPAGE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_GIN_DELETE_LISTPAGE:
+            polar_gin_redo_delete_list_pages_save(record);
+            break;
+
+        default:
+            return false;
+            elog(PANIC, "polar_gin_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
 }

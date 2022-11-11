@@ -32,6 +32,8 @@
 #include "access/slru.h"
 #include "access/transam.h"
 #include "access/xlogdefs.h"
+#include "access/heapam_xlog.h"
+#include "access/visibilitymap.h"
 #include "miscadmin.h"
 #include "port/atomics.h"
 #include "port/pg_crc32c.h"
@@ -1083,4 +1085,169 @@ XLogRecPtr
 polar_logindex_mem_table_max_lsn(struct log_mem_table_t *table)
 {
 	return table->data.max_lsn;
+}
+
+
+static void
+polar_reset_blk(DecodedBkpBlock *blk)
+{
+    blk->in_use = false;
+    blk->has_image = false;
+    blk->has_data = false;
+    blk->apply_image = false;
+}
+
+static void
+polar_heap_save_vm_block(XLogReaderState *state, uint8 block_id, uint8 vm_block_id)
+{
+    DecodedBkpBlock *blk, *vm_blk;
+
+    Assert(block_id <= XLR_MAX_BLOCK_ID);
+    blk = &state->blocks[block_id];
+    vm_blk = &state->blocks[vm_block_id];
+
+    Assert(blk->in_use);
+    Assert(!vm_blk->in_use);
+    polar_reset_blk(vm_blk);
+
+    vm_blk->in_use = true;
+    vm_blk->rnode = blk->rnode;
+    vm_blk->forknum = VISIBILITYMAP_FORKNUM;
+    vm_blk->blkno = HEAPBLK_TO_MAPBLOCK(blk->blkno);
+
+    state->max_block_id = Max(state->max_block_id, vm_block_id);
+}
+
+static void
+polar_heap_update_save_vm_logindex(XLogReaderState *state, bool hotupdate)
+{
+    BlockNumber blkno_old, blkno_new;
+    xl_heap_update *xlrec = (xl_heap_update *)(state->main_data);
+
+    Assert(state->blocks[0].in_use);
+    blkno_new = state->blocks[0].blkno;
+
+    if (state->blocks[1].in_use)
+    {
+        /* HOT updates are never done across pages */
+        Assert(!hotupdate);
+        blkno_old = state->blocks[1].blkno;
+    }
+    else
+        blkno_old = blkno_new;
+
+    if (blkno_new != blkno_old)
+    {
+        if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
+            polar_heap_save_vm_block(state, 1, 3);
+
+        if (xlrec->flags & XLH_UPDATE_NEW_ALL_VISIBLE_CLEARED)
+            polar_heap_save_vm_block(state, 0, 2);
+    }
+    else
+    {
+        if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
+            polar_heap_save_vm_block(state, 0, 2);
+    }
+}
+
+static void
+polar_xlog_queue_decode_heap(XLogReaderState *state)
+{
+    XLogRecord *rechdr = state->decoded_record;
+    uint8 info = rechdr->xl_info & ~XLR_INFO_MASK;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP_INSERT:
+        {
+            xl_heap_insert *xlrec = (xl_heap_insert *)(state->main_data);
+
+            if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
+                polar_heap_save_vm_block(state, 0, 1);
+
+            break;
+        }
+
+        case XLOG_HEAP_DELETE:
+        {
+            xl_heap_delete *xlrec = (xl_heap_delete *)(state->main_data);
+
+            if (xlrec->flags & XLH_DELETE_ALL_VISIBLE_CLEARED)
+                polar_heap_save_vm_block(state, 0, 1);
+
+            break;
+        }
+
+        case XLOG_HEAP_UPDATE:
+            polar_heap_update_save_vm_logindex(state, false);
+            break;
+
+        case XLOG_HEAP_HOT_UPDATE:
+            polar_heap_update_save_vm_logindex(state, true);
+            break;
+
+        case XLOG_HEAP_LOCK:
+        {
+            xl_heap_lock *xlrec = (xl_heap_lock *)(state->main_data);
+
+            if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
+                polar_heap_save_vm_block(state, 0, 1);
+
+            break;
+        }
+    }
+}
+
+static void
+polar_xlog_queue_decode_heap2(XLogReaderState *state)
+{
+    XLogRecord *rechdr = state->decoded_record;
+    uint8 info = rechdr->xl_info & ~XLR_INFO_MASK;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP2_MULTI_INSERT:
+        {
+            xl_heap_multi_insert *xlrec = (xl_heap_multi_insert *)(state->main_data);
+
+            if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
+                polar_heap_save_vm_block(state, 0, 1);
+
+            break;
+        }
+
+        case XLOG_HEAP2_LOCK_UPDATED:
+        {
+            xl_heap_lock_updated *xlrec = (xl_heap_lock_updated *)(state->main_data);
+
+            if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
+                polar_heap_save_vm_block(state, 0, 1);
+
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
+void
+polar_xlog_decode_data(XLogReaderState *state)
+{
+    XLogRecord *rechdr = state->decoded_record;
+
+    switch (rechdr->xl_rmid)
+    {
+        case RM_HEAP_ID:
+            polar_xlog_queue_decode_heap(state);
+            break;
+
+        case RM_HEAP2_ID:
+            polar_xlog_queue_decode_heap2(state);
+            break;
+
+        default:
+            break;
+    }
 }

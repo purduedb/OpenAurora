@@ -75,6 +75,8 @@
 #include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "access/xlogutils.h"
+#include "access/logindex_func.h"
+#include "access/polar_logindex.h"
 #include "catalog/pg_class.h"
 #include "common/controldata_utils.h"
 #include "libpq/libpq.h"
@@ -105,6 +107,7 @@ static void SetBeginRead(StringInfo input_message);
 static void ApplyXlogUntil(StringInfo input_message);
 static void SyncLsnReplay(StringInfo input_message);
 static void GetRelSize(StringInfo input_message);
+static void ApplyOneXlog(StringInfo input_message);
 
 static BufferTag target_redo_tag;
 
@@ -200,6 +203,7 @@ WalRedoMain(int argc, char *argv[],
     bool		enable_seccomp;
 #endif
 
+    init_ps_display("postgres WalRedo");
     /* Initialize startup process environment if necessary. */
 //    InitStandaloneProcess(argv[0]);
 
@@ -343,6 +347,9 @@ WalRedoMain(int argc, char *argv[],
     Assert(CurrentResourceOwner == NULL);
     CurrentResourceOwner = ResourceOwnerCreate(NULL, "wal redo");
 
+    // Initialize recovery target timeline id from ControlFile
+    ReadControlFileTimeLine();
+
     /* Initialize resource managers */
     for (int rmid = 0; rmid <= RM_MAX_ID; rmid++)
     {
@@ -390,6 +397,10 @@ WalRedoMain(int argc, char *argv[],
         firstchar = ReadRedoCommand(&input_message);
         switch (firstchar)
         {
+            case 'D':
+                ApplyOneXlog(&input_message);
+                break;
+
             case 'M':
                 GetRelSize(&input_message);
                 break;
@@ -635,6 +646,9 @@ ApplyXlogUntil(StringInfo input_message) {
             break;
         printf("%s read Succeed, ready to replay this xlog, pid=%d\n", __func__ , getpid());
         fflush(stdout);
+
+        polar_xlog_decode_data(reader_state);
+
 //        if(record == NULL) {
 //            for(int i=0; i<100; i++){
 //                record = XLogReadRecord(reader_state, &err_msg);
@@ -750,6 +764,143 @@ BeginRedoForBlock(StringInfo input_message)
 //        reln->smgr_cached_nblocks[forknum] = blknum + 1;
 //    }
 }
+
+// Optimize: Startup process can put xlog to rocksdb when processing the xlogs
+//              then, rpc server can pass the xlog to this standalone process.
+static void
+ApplyOneXlog(StringInfo input_message) {
+    RelFileNode rnode;
+    ForkNumber forknum;
+    BlockNumber blknum;
+    const char *content;
+    Buffer		buf;
+    Page		page;
+    int64_t     lsn;
+
+    /*
+      * message format:
+      *
+      * ForkNumber
+      * spcNode
+      * dbNode
+      * relNode
+      * BlockNumber
+      * lsn
+      * 8k page content
+      */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+    blknum = pq_getmsgint(input_message, 4);
+    // LSN
+    pq_copymsgbytes(input_message, (char *) &lsn, sizeof(lsn));
+    lsn = pg_ntoh64(lsn);
+    content = pq_getmsgbytes(input_message, BLCKSZ);
+
+    // Put the original page to buffer
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
+    wal_redo_buffer = buf;
+    page = BufferGetPage(buf);
+    memcpy(page, content, BLCKSZ);
+    MarkBufferDirty(buf); /* pro forma */
+    UnlockReleaseBuffer(buf);
+
+    // Replay lsn which related with this page
+    XLogRecord * record;
+    char *err_msg;
+    XLogBeginRead(reader_state, lsn);
+    record = XLogReadRecord(reader_state, &err_msg);
+
+    printf("%s Read record succeed, ready to replay\n", __func__ );
+    fflush(stdout);
+
+    BufferTag bufferTag;
+    XLogRedoAction action = BLK_NOTFOUND;
+    INIT_BUFFERTAG(bufferTag, rnode, forknum, blknum);
+    switch (record->xl_rmid) {
+        case RM_XLOG_ID:
+            action = polar_xlog_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HEAP2_ID:
+            action = polar_heap2_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HEAP_ID:
+            action = polar_heap_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_BTREE_ID:
+            action = polar_btree_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HASH_ID:
+            action = polar_hash_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GIN_ID:
+            action = polar_gin_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GIST_ID:
+            action = polar_gist_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_SEQ_ID:
+            action = polar_seq_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_SPGIST_ID:
+            action = polar_spg_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_BRIN_ID:
+            action = polar_brin_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GENERIC_ID:
+            action = polar_generic_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        default:
+            printf("%s didn't find any corresponding polar redo function\n", __func__ );
+            break;
+    }
+    printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
+    fflush(stdout);
+
+    // If not found polar redo function, do regular original redo
+    if(action == BLK_NOTFOUND) {
+        RmgrTable[record->xl_rmid].rm_redo(reader_state);
+    }
+
+    // For now, redo completed, find the page from buffer pool
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_NORMAL, NULL);
+    Assert(buf == wal_redo_buffer);
+    page = BufferGetPage(buf);
+//    LockBuffer(buf, LW_SHARED);
+    /* single thread, so don't bother locking the page */
+
+    /* Response: Page content */
+    int tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < BLCKSZ);
+
+    printf("%s LINE=%d \n", __func__ , __LINE__);
+    fflush(stdout);
+
+    if(PageIsNew(page)) {
+        printf("%s found page is new \n", __func__ );
+        fflush(stdout);
+    }
+    UnlockReleaseBuffer(buf);
+//    DropRelFileNodeAllLocalBuffers(rnode);
+    wal_redo_buffer = InvalidBuffer;
+    return;
+}
+
 
 /*
  * Receive a page given by the client, and put it into buffer cache.

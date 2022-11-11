@@ -10,6 +10,8 @@
 #include "storage/standby.h"
 #include "utils/memutils.h"
 
+#include "storage/kv_interface.h"
+
 
 /*
  * Replay the clearing of F_FOLLOW_RIGHT flag on a child page.
@@ -376,39 +378,99 @@ polar_gist_idx_redo(XLogReaderState *record,  BufferTag *tag, Buffer *buffer)
      * implement a similar optimization we have in b-tree, and remove killed
      * tuples outside VACUUM, we'll need to handle that here.
      */
-
     switch (info)
     {
-        switch (info)
-        {
-            case XLOG_GIST_PAGE_UPDATE:
-                polar_gist_redo_page_update_record(record, tag, buffer);
-                break;
-            case XLOG_GIST_DELETE:
-                polar_gistRedoDeleteRecord(record, tag, buffer);
-                break;
-            case XLOG_GIST_PAGE_REUSE:
-                //todo
+        case XLOG_GIST_PAGE_UPDATE:
+            action = polar_gist_redo_page_update_record(record, tag, buffer);
+            break;
+        case XLOG_GIST_DELETE:
+            action = polar_gistRedoDeleteRecord(record, tag, buffer);
+            break;
+        case XLOG_GIST_PAGE_REUSE:
+            //todo
 //                gistRedoPageReuse(record);
-                break;
-            case XLOG_GIST_PAGE_SPLIT:
-                polar_gist_redo_page_split_record(record, tag, buffer);
-                break;
-            case XLOG_GIST_PAGE_DELETE:
-                polar_gistRedoPageDelete(record, tag, buffer);
-                break;
-            case XLOG_GIST_ASSIGN_LSN:
-                /* nop. See gistGetFakeLSN(). */
-                break;
-            default:
-                elog(PANIC, "gist_redo: unknown op code %u", info);
-        }
-
+            break;
+        case XLOG_GIST_PAGE_SPLIT:
+            action = polar_gist_redo_page_split_record(record, tag, buffer);
+            break;
+        case XLOG_GIST_PAGE_DELETE:
+            action = polar_gistRedoPageDelete(record, tag, buffer);
+            break;
+        case XLOG_GIST_ASSIGN_LSN:
+            /* nop. See gistGetFakeLSN(). */
+            break;
         default:
-            elog(PANIC, "polar_gist_idx_redo: unknown op code %u", info);
+            elog(PANIC, "gist_redo: unknown op code %u", info);
     }
+
+//    switch (info)
+//    {
+//
+//        default:
+//            elog(PANIC, "polar_gist_idx_redo: unknown op code %u", info);
+//    }
 
     MemoryContextSwitchTo(old_ctx);
     MemoryContextReset(redo_ctx);
     return action;
+}
+
+static void
+polar_gist_redo_page_update_record_save(XLogReaderState *record)
+{
+    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 1))
+        ParseXLogBlocksLsn(record, 1);
+}
+
+static void
+polar_gist_redo_page_split_record_save(XLogReaderState *record)
+{
+    int block_id;
+
+    ParseXLogBlocksLsn(record, 1);
+
+    for (block_id = 2; block_id <= XLR_MAX_BLOCK_ID; block_id++)
+    {
+        if (XLogRecHasBlockRef(record, block_id))
+            ParseXLogBlocksLsn(record, block_id);
+        else
+            break;
+    }
+
+    if (XLogRecHasBlockRef(record, 0))
+        ParseXLogBlocksLsn(record, 0);
+}
+
+bool
+polar_gist_idx_save(XLogReaderState *record) {
+    uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    switch (info)
+    {
+        case XLOG_GIST_PAGE_UPDATE:
+            polar_gist_redo_page_update_record_save(record);
+            break;
+        case XLOG_GIST_DELETE:
+            ParseXLogBlocksLsn(record, 0);
+            break;
+        case XLOG_GIST_PAGE_REUSE:
+            //todo
+//                gistRedoPageReuse(record);
+            break;
+        case XLOG_GIST_PAGE_SPLIT:
+            polar_gist_redo_page_split_record_save(record);
+            break;
+        case XLOG_GIST_PAGE_DELETE:
+            ParseXLogBlocksLsn(record, 0);
+            ParseXLogBlocksLsn(record, 1);
+            break;
+        case XLOG_GIST_ASSIGN_LSN:
+            /* nop. See gistGetFakeLSN(). */
+            break;
+        default:
+            elog(PANIC, "gist_redo: unknown op code %u", info);
+    }
+
+    return true;
 }
