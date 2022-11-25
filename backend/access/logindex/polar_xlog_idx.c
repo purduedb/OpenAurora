@@ -81,6 +81,40 @@ polar_xlog_idx_save(XLogReaderState *record)
     return true;
 }
 
+bool
+polar_xlog_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    uint8		block_id;
+
+    if (info != XLOG_FPI &&
+        info != XLOG_FPI_FOR_HINT)
+        return false;
+
+    switch (info)
+    {
+        case XLOG_FPI:
+        case XLOG_FPI_FOR_HINT:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * record->max_block_id);
+            RelFileNode rnode;
+            ForkNumber forkNumber;
+            BlockNumber blockNumber;
+            int tagCount = 0;
+
+            for (block_id = 0; block_id <= record->max_block_id; block_id++){
+                XLogRecGetBlockTag(record, block_id, &rnode, &forkNumber, &blockNumber);
+                INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+                tagCount++;
+            }
+            *tagNum = tagCount;
+            break;
+
+        default:
+            return false;
+    }
+    return true;
+}
+
 //bool
 //polar_xlog_idx_parse(polar_logindex_redo_ctl_t instance, XLogReaderState *record)
 //{

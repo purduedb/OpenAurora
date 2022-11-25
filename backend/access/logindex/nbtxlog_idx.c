@@ -996,6 +996,39 @@ polar_btree_xlog_insert_save(bool isleaf, bool ismeta, XLogReaderState *record)
 }
 
 static void
+polar_btree_xlog_insert_get_bufftag_list(bool isleaf, bool ismeta, XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
+
+    if (!isleaf) {
+//        ParseXLogBlocksLsn(record, 1);
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    if (ismeta) {
+        XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+//        ParseXLogBlocksLsn(record, 2);
+    }
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_btree_xlog_split_save(XLogReaderState *record)
 {
     if (XLogRecHasBlockRef(record, 3))
@@ -1007,6 +1040,47 @@ polar_btree_xlog_split_save(XLogReaderState *record)
     if (XLogRecHasBlockRef(record, 2))
         ParseXLogBlocksLsn(record, 2);
 }
+
+static void
+polar_btree_xlog_split_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 4);
+
+    if (XLogRecHasBlockRef(record, 3)) {
+        XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+//        ParseXLogBlocksLsn(record, 3);
+    }
+
+    XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 1);
+//    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 2)) {
+        XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+//        ParseXLogBlocksLsn(record, 2);
+    }
+
+    *tagNum = tagCount;
+}
+
 
 static void
 polar_btree_xlog_unlink_page_save(uint8 info, XLogReaderState *record)
@@ -1026,6 +1100,53 @@ polar_btree_xlog_unlink_page_save(uint8 info, XLogReaderState *record)
 }
 
 static void
+polar_btree_xlog_unlink_page_get_bufftag_list(uint8 info, XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 5);
+
+//    ParseXLogBlocksLsn(record, 2);
+    XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    if (XLogRecHasBlockRef(record, 1)) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+//        ParseXLogBlocksLsn(record, 1);
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 3)) {
+        XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+//        ParseXLogBlocksLsn(record, 3);
+    }
+
+    if (info == XLOG_BTREE_UNLINK_PAGE_META) {
+        XLogRecGetBlockTag(record, 4, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+//        ParseXLogBlocksLsn(record, 4);
+    }
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_btree_xlog_newroot_save(XLogReaderState *record)
 {
     ParseXLogBlocksLsn(record, 0);
@@ -1034,6 +1155,38 @@ polar_btree_xlog_newroot_save(XLogReaderState *record)
         ParseXLogBlocksLsn(record, 1);
 
     ParseXLogBlocksLsn(record, 2);
+}
+
+static void
+polar_btree_xlog_newroot_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    if (XLogRecHasBlockRef(record, 1)) {
+//        ParseXLogBlocksLsn(record, 1);
+
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 2);
+
+    *tagNum = tagCount;
 }
 
 bool
@@ -1094,6 +1247,106 @@ polar_btree_idx_save(XLogReaderState *record)
 
         case XLOG_BTREE_META_CLEANUP:
             ParseXLogBlocksLsn(record, 0);
+            break;
+
+        default:
+            elog(PANIC, "polar_btree_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
+
+bool
+polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    switch (info)
+    {
+        case XLOG_BTREE_INSERT_LEAF:
+            polar_btree_xlog_insert_get_bufftag_list(true, false, record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_INSERT_UPPER:
+            polar_btree_xlog_insert_get_bufftag_list(false, false, record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_INSERT_META:
+            polar_btree_xlog_insert_get_bufftag_list(false, true, record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_SPLIT_L:
+        case XLOG_BTREE_SPLIT_R:
+            polar_btree_xlog_split_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_INSERT_POST:
+            polar_btree_xlog_insert_get_bufftag_list(true, false, record, buffertagList, tagNum);
+            break;
+        case XLOG_BTREE_DEDUP:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+//            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_VACUUM:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+//            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_DELETE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+//            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_MARK_PAGE_HALFDEAD:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            *tagNum = 2;
+//            ParseXLogBlocksLsn(record, 1);
+//            ParseXLogBlocksLsn(record, 0);
+            break;
+
+        case XLOG_BTREE_UNLINK_PAGE:
+        case XLOG_BTREE_UNLINK_PAGE_META:
+            polar_btree_xlog_unlink_page_get_bufftag_list(info, record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_NEWROOT:
+            polar_btree_xlog_newroot_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_BTREE_REUSE_PAGE:
+            break;
+
+        case XLOG_BTREE_META_CLEANUP:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+//            ParseXLogBlocksLsn(record, 0);
             break;
 
         default:

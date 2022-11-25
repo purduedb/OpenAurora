@@ -31,38 +31,39 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
    * @param _forknum
    * @param _blknum
    * @param _readBufferMode
+   * @param _lsn
    */
-  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
     // Your implementation goes here
     printf("ReadBufferCommon\n");
   }
 
-  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdRead\n");
   }
 
-  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
+  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdNblocks\n");
   }
 
-  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) {
+  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdExists\n");
   }
 
-  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) {
+  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdCreate\n");
   }
 
-  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) {
+  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdExtend\n");
   }
 
-  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcTruncate\n");
   }

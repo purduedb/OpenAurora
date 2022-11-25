@@ -652,12 +652,65 @@ polar_gin_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 }
 
 static void
+polar_gin_redo_insert_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    int tagCount = 0;
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    if (XLogRecHasBlockRef(record, 1)) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_gin_redo_insert_save(XLogReaderState *record)
 {
     if (XLogRecHasBlockRef(record, 1))
         ParseXLogBlocksLsn(record, 1);
 
     ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_gin_redo_split_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    int tagCount = 0;
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 4);
+
+    if (XLogRecHasBlockRef(record, 3)) {
+        XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+    XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    if (XLogRecHasBlockRef(record, 2)) {
+        XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    *tagNum = tagCount;
 }
 
 static void
@@ -683,6 +736,29 @@ polar_gin_redo_update_metapage_save(XLogReaderState *record)
 }
 
 static void
+polar_gin_redo_update_metapage_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    int tagCount = 0;
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    if (XLogRecHasBlockRef(record, 1)) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_gin_redo_delete_list_pages_save(XLogReaderState *record)
 {
     int i = 1;
@@ -698,6 +774,122 @@ polar_gin_redo_delete_list_pages_save(XLogReaderState *record)
     }
 }
 
+static void
+polar_gin_redo_delete_list_pages_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    // At first, we already have block 0
+    int tagCount = 1;
+    int i = 1;
+
+    for (i = 1; i <= GIN_NDELETE_AT_ONCE; i++)
+    {
+        if (XLogRecHasBlockRef(record, i))
+            tagCount++;
+        else
+            break;
+    }
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * tagCount);
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+    for (i = 1; i <= GIN_NDELETE_AT_ONCE; i++)
+    {
+        if (XLogRecHasBlockRef(record, i)) {
+            XLogRecGetBlockTag(record, i, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[i], rnode, forkNumber, blockNumber);
+        }
+        else
+            break;
+    }
+
+    *tagNum = tagCount;
+}
+
+bool
+polar_gin_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    switch (info)
+    {
+//        case XLOG_GIN_CREATE_INDEX:
+//            polar_logindex_save_block(instance, record, 0);
+//            polar_logindex_save_block(instance, record, 1);
+//            break;
+
+        case XLOG_GIN_CREATE_PTREE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            break;
+
+        case XLOG_GIN_INSERT:
+            polar_gin_redo_insert_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_GIN_SPLIT:
+            polar_gin_redo_split_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_GIN_VACUUM_PAGE:
+        case XLOG_GIN_VACUUM_DATA_LEAF_PAGE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            break;
+
+        case XLOG_GIN_DELETE_PAGE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
+
+            XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[2], rnode, forkNumber, blockNumber);
+            *tagNum = 3;
+            break;
+
+        case XLOG_GIN_UPDATE_META_PAGE:
+            polar_gin_redo_update_metapage_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_GIN_INSERT_LISTPAGE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            break;
+
+        case XLOG_GIN_DELETE_LISTPAGE:
+            polar_gin_redo_delete_list_pages_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        default:
+            return false;
+            elog(PANIC, "polar_gin_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
 bool
 polar_gin_idx_save(XLogReaderState *record)
 {

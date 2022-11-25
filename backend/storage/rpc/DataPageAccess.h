@@ -38,14 +38,15 @@ class DataPageAccessIf {
    * @param _forknum
    * @param _blknum
    * @param _readBufferMode
+   * @param _lsn
    */
-  virtual void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) = 0;
-  virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) = 0;
-  virtual int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) = 0;
-  virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) = 0;
-  virtual void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) = 0;
-  virtual void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) = 0;
-  virtual void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) = 0;
+  virtual void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) = 0;
+  virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) = 0;
+  virtual int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
+  virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
+  virtual void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn) = 0;
+  virtual void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn) = 0;
+  virtual void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -82,27 +83,27 @@ class DataPageAccessIfSingletonFactory : virtual public DataPageAccessIfFactory 
 class DataPageAccessNull : virtual public DataPageAccessIf {
  public:
   virtual ~DataPageAccessNull() {}
-  void ReadBufferCommon(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _relpersistence */, const int32_t /* _forknum */, const int32_t /* _blknum */, const int32_t /* _readBufferMode */) {
+  void ReadBufferCommon(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _relpersistence */, const int32_t /* _forknum */, const int32_t /* _blknum */, const int32_t /* _readBufferMode */, const int64_t /* _lsn */) {
     return;
   }
-  void RpcMdRead(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _blknum */) {
+  void RpcMdRead(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _blknum */, const int64_t /* _lsn */) {
     return;
   }
-  int32_t RpcMdNblocks(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */) {
+  int32_t RpcMdNblocks(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _lsn */) {
     int32_t _return = 0;
     return _return;
   }
-  int32_t RpcMdExists(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */) {
+  int32_t RpcMdExists(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _lsn */) {
     int32_t _return = 0;
     return _return;
   }
-  void RpcMdCreate(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _isRedo */) {
+  void RpcMdCreate(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _isRedo */, const int64_t /* _lsn */) {
     return;
   }
-  void RpcMdExtend(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */, const _Page& /* _buff */, const int32_t /* skipFsync */) {
+  void RpcMdExtend(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */, const _Page& /* _buff */, const int32_t /* skipFsync */, const int64_t /* _lsn */) {
     return;
   }
-  void RpcTruncate(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */) {
+  void RpcTruncate(const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int32_t /* _blknum */, const int64_t /* _lsn */) {
     return;
   }
   void zip() {
@@ -111,12 +112,13 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
 };
 
 typedef struct _DataPageAccess_ReadBufferCommon_args__isset {
-  _DataPageAccess_ReadBufferCommon_args__isset() : _reln(false), _relpersistence(false), _forknum(false), _blknum(false), _readBufferMode(false) {}
+  _DataPageAccess_ReadBufferCommon_args__isset() : _reln(false), _relpersistence(false), _forknum(false), _blknum(false), _readBufferMode(false), _lsn(false) {}
   bool _reln :1;
   bool _relpersistence :1;
   bool _forknum :1;
   bool _blknum :1;
   bool _readBufferMode :1;
+  bool _lsn :1;
 } _DataPageAccess_ReadBufferCommon_args__isset;
 
 class DataPageAccess_ReadBufferCommon_args {
@@ -124,7 +126,7 @@ class DataPageAccess_ReadBufferCommon_args {
 
   DataPageAccess_ReadBufferCommon_args(const DataPageAccess_ReadBufferCommon_args&);
   DataPageAccess_ReadBufferCommon_args& operator=(const DataPageAccess_ReadBufferCommon_args&);
-  DataPageAccess_ReadBufferCommon_args() : _relpersistence(0), _forknum(0), _blknum(0), _readBufferMode(0) {
+  DataPageAccess_ReadBufferCommon_args() : _relpersistence(0), _forknum(0), _blknum(0), _readBufferMode(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_ReadBufferCommon_args() noexcept;
@@ -133,6 +135,7 @@ class DataPageAccess_ReadBufferCommon_args {
   int32_t _forknum;
   int32_t _blknum;
   int32_t _readBufferMode;
+  int64_t _lsn;
 
   _DataPageAccess_ReadBufferCommon_args__isset __isset;
 
@@ -146,6 +149,8 @@ class DataPageAccess_ReadBufferCommon_args {
 
   void __set__readBufferMode(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_ReadBufferCommon_args & rhs) const
   {
     if (!(_reln == rhs._reln))
@@ -157,6 +162,8 @@ class DataPageAccess_ReadBufferCommon_args {
     if (!(_blknum == rhs._blknum))
       return false;
     if (!(_readBufferMode == rhs._readBufferMode))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -182,6 +189,7 @@ class DataPageAccess_ReadBufferCommon_pargs {
   const int32_t* _forknum;
   const int32_t* _blknum;
   const int32_t* _readBufferMode;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -243,10 +251,11 @@ class DataPageAccess_ReadBufferCommon_presult {
 };
 
 typedef struct _DataPageAccess_RpcMdRead_args__isset {
-  _DataPageAccess_RpcMdRead_args__isset() : _reln(false), _forknum(false), _blknum(false) {}
+  _DataPageAccess_RpcMdRead_args__isset() : _reln(false), _forknum(false), _blknum(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
   bool _blknum :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcMdRead_args__isset;
 
 class DataPageAccess_RpcMdRead_args {
@@ -254,13 +263,14 @@ class DataPageAccess_RpcMdRead_args {
 
   DataPageAccess_RpcMdRead_args(const DataPageAccess_RpcMdRead_args&);
   DataPageAccess_RpcMdRead_args& operator=(const DataPageAccess_RpcMdRead_args&);
-  DataPageAccess_RpcMdRead_args() : _forknum(0), _blknum(0) {
+  DataPageAccess_RpcMdRead_args() : _forknum(0), _blknum(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcMdRead_args() noexcept;
   _Smgr_Relation _reln;
   int32_t _forknum;
   int64_t _blknum;
+  int64_t _lsn;
 
   _DataPageAccess_RpcMdRead_args__isset __isset;
 
@@ -270,6 +280,8 @@ class DataPageAccess_RpcMdRead_args {
 
   void __set__blknum(const int64_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcMdRead_args & rhs) const
   {
     if (!(_reln == rhs._reln))
@@ -277,6 +289,8 @@ class DataPageAccess_RpcMdRead_args {
     if (!(_forknum == rhs._forknum))
       return false;
     if (!(_blknum == rhs._blknum))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -300,6 +314,7 @@ class DataPageAccess_RpcMdRead_pargs {
   const _Smgr_Relation* _reln;
   const int32_t* _forknum;
   const int64_t* _blknum;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -361,9 +376,10 @@ class DataPageAccess_RpcMdRead_presult {
 };
 
 typedef struct _DataPageAccess_RpcMdNblocks_args__isset {
-  _DataPageAccess_RpcMdNblocks_args__isset() : _reln(false), _forknum(false) {}
+  _DataPageAccess_RpcMdNblocks_args__isset() : _reln(false), _forknum(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcMdNblocks_args__isset;
 
 class DataPageAccess_RpcMdNblocks_args {
@@ -371,12 +387,13 @@ class DataPageAccess_RpcMdNblocks_args {
 
   DataPageAccess_RpcMdNblocks_args(const DataPageAccess_RpcMdNblocks_args&);
   DataPageAccess_RpcMdNblocks_args& operator=(const DataPageAccess_RpcMdNblocks_args&);
-  DataPageAccess_RpcMdNblocks_args() : _forknum(0) {
+  DataPageAccess_RpcMdNblocks_args() : _forknum(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcMdNblocks_args() noexcept;
   _Smgr_Relation _reln;
   int32_t _forknum;
+  int64_t _lsn;
 
   _DataPageAccess_RpcMdNblocks_args__isset __isset;
 
@@ -384,11 +401,15 @@ class DataPageAccess_RpcMdNblocks_args {
 
   void __set__forknum(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcMdNblocks_args & rhs) const
   {
     if (!(_reln == rhs._reln))
       return false;
     if (!(_forknum == rhs._forknum))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -411,6 +432,7 @@ class DataPageAccess_RpcMdNblocks_pargs {
   virtual ~DataPageAccess_RpcMdNblocks_pargs() noexcept;
   const _Smgr_Relation* _reln;
   const int32_t* _forknum;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -472,9 +494,10 @@ class DataPageAccess_RpcMdNblocks_presult {
 };
 
 typedef struct _DataPageAccess_RpcMdExists_args__isset {
-  _DataPageAccess_RpcMdExists_args__isset() : _reln(false), _forknum(false) {}
+  _DataPageAccess_RpcMdExists_args__isset() : _reln(false), _forknum(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcMdExists_args__isset;
 
 class DataPageAccess_RpcMdExists_args {
@@ -482,12 +505,13 @@ class DataPageAccess_RpcMdExists_args {
 
   DataPageAccess_RpcMdExists_args(const DataPageAccess_RpcMdExists_args&);
   DataPageAccess_RpcMdExists_args& operator=(const DataPageAccess_RpcMdExists_args&);
-  DataPageAccess_RpcMdExists_args() : _forknum(0) {
+  DataPageAccess_RpcMdExists_args() : _forknum(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcMdExists_args() noexcept;
   _Smgr_Relation _reln;
   int32_t _forknum;
+  int64_t _lsn;
 
   _DataPageAccess_RpcMdExists_args__isset __isset;
 
@@ -495,11 +519,15 @@ class DataPageAccess_RpcMdExists_args {
 
   void __set__forknum(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcMdExists_args & rhs) const
   {
     if (!(_reln == rhs._reln))
       return false;
     if (!(_forknum == rhs._forknum))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -522,6 +550,7 @@ class DataPageAccess_RpcMdExists_pargs {
   virtual ~DataPageAccess_RpcMdExists_pargs() noexcept;
   const _Smgr_Relation* _reln;
   const int32_t* _forknum;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -583,10 +612,11 @@ class DataPageAccess_RpcMdExists_presult {
 };
 
 typedef struct _DataPageAccess_RpcMdCreate_args__isset {
-  _DataPageAccess_RpcMdCreate_args__isset() : _reln(false), _forknum(false), _isRedo(false) {}
+  _DataPageAccess_RpcMdCreate_args__isset() : _reln(false), _forknum(false), _isRedo(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
   bool _isRedo :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcMdCreate_args__isset;
 
 class DataPageAccess_RpcMdCreate_args {
@@ -594,13 +624,14 @@ class DataPageAccess_RpcMdCreate_args {
 
   DataPageAccess_RpcMdCreate_args(const DataPageAccess_RpcMdCreate_args&);
   DataPageAccess_RpcMdCreate_args& operator=(const DataPageAccess_RpcMdCreate_args&);
-  DataPageAccess_RpcMdCreate_args() : _forknum(0), _isRedo(0) {
+  DataPageAccess_RpcMdCreate_args() : _forknum(0), _isRedo(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcMdCreate_args() noexcept;
   _Smgr_Relation _reln;
   int32_t _forknum;
   int32_t _isRedo;
+  int64_t _lsn;
 
   _DataPageAccess_RpcMdCreate_args__isset __isset;
 
@@ -610,6 +641,8 @@ class DataPageAccess_RpcMdCreate_args {
 
   void __set__isRedo(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcMdCreate_args & rhs) const
   {
     if (!(_reln == rhs._reln))
@@ -617,6 +650,8 @@ class DataPageAccess_RpcMdCreate_args {
     if (!(_forknum == rhs._forknum))
       return false;
     if (!(_isRedo == rhs._isRedo))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -640,6 +675,7 @@ class DataPageAccess_RpcMdCreate_pargs {
   const _Smgr_Relation* _reln;
   const int32_t* _forknum;
   const int32_t* _isRedo;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -683,12 +719,13 @@ class DataPageAccess_RpcMdCreate_presult {
 };
 
 typedef struct _DataPageAccess_RpcMdExtend_args__isset {
-  _DataPageAccess_RpcMdExtend_args__isset() : _reln(false), _forknum(false), _blknum(false), _buff(false), skipFsync(false) {}
+  _DataPageAccess_RpcMdExtend_args__isset() : _reln(false), _forknum(false), _blknum(false), _buff(false), skipFsync(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
   bool _blknum :1;
   bool _buff :1;
   bool skipFsync :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcMdExtend_args__isset;
 
 class DataPageAccess_RpcMdExtend_args {
@@ -696,7 +733,7 @@ class DataPageAccess_RpcMdExtend_args {
 
   DataPageAccess_RpcMdExtend_args(const DataPageAccess_RpcMdExtend_args&);
   DataPageAccess_RpcMdExtend_args& operator=(const DataPageAccess_RpcMdExtend_args&);
-  DataPageAccess_RpcMdExtend_args() : _forknum(0), _blknum(0), _buff(), skipFsync(0) {
+  DataPageAccess_RpcMdExtend_args() : _forknum(0), _blknum(0), _buff(), skipFsync(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcMdExtend_args() noexcept;
@@ -705,6 +742,7 @@ class DataPageAccess_RpcMdExtend_args {
   int32_t _blknum;
   _Page _buff;
   int32_t skipFsync;
+  int64_t _lsn;
 
   _DataPageAccess_RpcMdExtend_args__isset __isset;
 
@@ -718,6 +756,8 @@ class DataPageAccess_RpcMdExtend_args {
 
   void __set_skipFsync(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcMdExtend_args & rhs) const
   {
     if (!(_reln == rhs._reln))
@@ -729,6 +769,8 @@ class DataPageAccess_RpcMdExtend_args {
     if (!(_buff == rhs._buff))
       return false;
     if (!(skipFsync == rhs.skipFsync))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -754,6 +796,7 @@ class DataPageAccess_RpcMdExtend_pargs {
   const int32_t* _blknum;
   const _Page* _buff;
   const int32_t* skipFsync;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -797,10 +840,11 @@ class DataPageAccess_RpcMdExtend_presult {
 };
 
 typedef struct _DataPageAccess_RpcTruncate_args__isset {
-  _DataPageAccess_RpcTruncate_args__isset() : _reln(false), _forknum(false), _blknum(false) {}
+  _DataPageAccess_RpcTruncate_args__isset() : _reln(false), _forknum(false), _blknum(false), _lsn(false) {}
   bool _reln :1;
   bool _forknum :1;
   bool _blknum :1;
+  bool _lsn :1;
 } _DataPageAccess_RpcTruncate_args__isset;
 
 class DataPageAccess_RpcTruncate_args {
@@ -808,13 +852,14 @@ class DataPageAccess_RpcTruncate_args {
 
   DataPageAccess_RpcTruncate_args(const DataPageAccess_RpcTruncate_args&);
   DataPageAccess_RpcTruncate_args& operator=(const DataPageAccess_RpcTruncate_args&);
-  DataPageAccess_RpcTruncate_args() : _forknum(0), _blknum(0) {
+  DataPageAccess_RpcTruncate_args() : _forknum(0), _blknum(0), _lsn(0) {
   }
 
   virtual ~DataPageAccess_RpcTruncate_args() noexcept;
   _Smgr_Relation _reln;
   int32_t _forknum;
   int32_t _blknum;
+  int64_t _lsn;
 
   _DataPageAccess_RpcTruncate_args__isset __isset;
 
@@ -824,6 +869,8 @@ class DataPageAccess_RpcTruncate_args {
 
   void __set__blknum(const int32_t val);
 
+  void __set__lsn(const int64_t val);
+
   bool operator == (const DataPageAccess_RpcTruncate_args & rhs) const
   {
     if (!(_reln == rhs._reln))
@@ -831,6 +878,8 @@ class DataPageAccess_RpcTruncate_args {
     if (!(_forknum == rhs._forknum))
       return false;
     if (!(_blknum == rhs._blknum))
+      return false;
+    if (!(_lsn == rhs._lsn))
       return false;
     return true;
   }
@@ -854,6 +903,7 @@ class DataPageAccess_RpcTruncate_pargs {
   const _Smgr_Relation* _reln;
   const int32_t* _forknum;
   const int32_t* _blknum;
+  const int64_t* _lsn;
 
   uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
 
@@ -969,27 +1019,28 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
    * @param _forknum
    * @param _blknum
    * @param _readBufferMode
+   * @param _lsn
    */
-  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
-  void send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
+  void send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   void recv_ReadBufferCommon(_Page& _return);
-  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
-  void send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
+  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
+  void send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return);
-  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum);
-  void send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum);
+  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
+  void send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
   int32_t recv_RpcMdNblocks();
-  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum);
-  void send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum);
+  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
+  void send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
   int32_t recv_RpcMdExists();
-  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo);
-  void send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo);
+  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn);
+  void send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn);
   void recv_RpcMdCreate();
-  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
-  void send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
+  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn);
+  void send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn);
   void recv_RpcMdExtend();
-  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
-  void send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn);
+  void send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn);
   void recv_RpcTruncate();
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -1071,70 +1122,71 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
    * @param _forknum
    * @param _blknum
    * @param _readBufferMode
+   * @param _lsn
    */
-  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+      ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode, _lsn);
     }
-    ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+    ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode, _lsn);
     return;
   }
 
-  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcMdRead(_return, _reln, _forknum, _blknum);
+      ifaces_[i]->RpcMdRead(_return, _reln, _forknum, _blknum, _lsn);
     }
-    ifaces_[i]->RpcMdRead(_return, _reln, _forknum, _blknum);
+    ifaces_[i]->RpcMdRead(_return, _reln, _forknum, _blknum, _lsn);
     return;
   }
 
-  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
+  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcMdNblocks(_reln, _forknum);
+      ifaces_[i]->RpcMdNblocks(_reln, _forknum, _lsn);
     }
-    return ifaces_[i]->RpcMdNblocks(_reln, _forknum);
+    return ifaces_[i]->RpcMdNblocks(_reln, _forknum, _lsn);
   }
 
-  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) {
+  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcMdExists(_reln, _forknum);
+      ifaces_[i]->RpcMdExists(_reln, _forknum, _lsn);
     }
-    return ifaces_[i]->RpcMdExists(_reln, _forknum);
+    return ifaces_[i]->RpcMdExists(_reln, _forknum, _lsn);
   }
 
-  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) {
+  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcMdCreate(_reln, _forknum, _isRedo);
+      ifaces_[i]->RpcMdCreate(_reln, _forknum, _isRedo, _lsn);
     }
-    ifaces_[i]->RpcMdCreate(_reln, _forknum, _isRedo);
+    ifaces_[i]->RpcMdCreate(_reln, _forknum, _isRedo, _lsn);
   }
 
-  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) {
+  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync);
+      ifaces_[i]->RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync, _lsn);
     }
-    ifaces_[i]->RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync);
+    ifaces_[i]->RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync, _lsn);
   }
 
-  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum);
+      ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum, _lsn);
     }
-    ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum);
+    ifaces_[i]->RpcTruncate(_reln, _forknum, _blknum, _lsn);
   }
 
   /**
@@ -1194,27 +1246,28 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
    * @param _forknum
    * @param _blknum
    * @param _readBufferMode
+   * @param _lsn
    */
-  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
-  int32_t send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode);
+  void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
+  int32_t send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   void recv_ReadBufferCommon(_Page& _return, const int32_t seqid);
-  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
-  int32_t send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum);
+  void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
+  int32_t send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return, const int32_t seqid);
-  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum);
-  int32_t send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum);
+  int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
+  int32_t send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
   int32_t recv_RpcMdNblocks(const int32_t seqid);
-  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum);
-  int32_t send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum);
+  int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
+  int32_t send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn);
   int32_t recv_RpcMdExists(const int32_t seqid);
-  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo);
-  int32_t send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo);
+  void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn);
+  int32_t send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn);
   void recv_RpcMdCreate(const int32_t seqid);
-  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
-  int32_t send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync);
+  void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn);
+  int32_t send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn);
   void recv_RpcMdExtend(const int32_t seqid);
-  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
-  int32_t send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum);
+  void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn);
+  int32_t send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn);
   void recv_RpcTruncate(const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes

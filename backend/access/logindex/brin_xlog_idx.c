@@ -335,6 +335,86 @@ polar_brin_xlog_desummarize_page(XLogReaderState *record, BufferTag *tag, Buffer
 }
 
 bool
+polar_brin_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    switch (info & XLOG_BRIN_OPMASK)
+    {
+        case XLOG_BRIN_CREATE_INDEX:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            return true;
+
+        case XLOG_BRIN_INSERT:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            *tagNum = 2;
+            return true;
+
+        case XLOG_BRIN_UPDATE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
+
+            XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[2], rnode, forkNumber, blockNumber);
+            *tagNum = 3;
+            return true;
+
+        case XLOG_BRIN_SAMEPAGE_UPDATE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            return true;
+
+        case XLOG_BRIN_REVMAP_EXTEND:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            *tagNum = 2;
+            return true;
+
+        case XLOG_BRIN_DESUMMARIZE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            *tagNum = 2;
+            return true;
+
+        default:
+            return false;
+            elog(PANIC, "polar_brin_idx_save: unknown op code %u", info);
+    }
+    return false;
+}
+
+bool
 polar_brin_idx_save(XLogReaderState *record) {
     uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 

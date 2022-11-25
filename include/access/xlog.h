@@ -357,6 +357,15 @@ extern int	XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 // Use this file to initialize recovery TLI for wal_redo process
 extern void ReadControlFileTimeLine(void);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern uint64_t GetLogWrtResultLsn(void);
+
+#ifdef __cplusplus
+}
+#endif
 /*
  * Routines to start, stop, and get status of a base backup.
  */

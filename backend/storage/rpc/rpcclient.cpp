@@ -26,6 +26,7 @@
 #include "storage/copydir.h"
 #include "storage/smgr.h"
 #include "catalog/storage.h"
+#include "access/xlog.h"
 
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TSocket.h>
@@ -122,7 +123,7 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
     _relpersistence = (int32_t)relpersistence;
     _readBufferMode = mode;
 
-    client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode);
+    client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode, GetLogWrtResultLsn());
 
     _return.copy(buff, BLCKSZ);
 
@@ -145,7 +146,7 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
     _forkNum = forknum;
     _blkNum = blknum;
 
-    client->RpcMdRead(_return, _reln, _forkNum, _blkNum);
+    client->RpcMdRead(_return, _reln, _forkNum, _blkNum, GetLogWrtResultLsn());
     _return.copy(buff, BLCKSZ);
 
     printf("%s End\n", __func__ );
@@ -162,7 +163,7 @@ int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
 
-    int32_t result = client->RpcMdExists(_reln, _forknum);
+    int32_t result = client->RpcMdExists(_reln, _forknum, GetLogWrtResultLsn());
 
     printf("%s End, exist = %d\n", __func__ , result);
     fflush(stdout);
@@ -179,7 +180,7 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
 
-    int32_t result = client->RpcMdNblocks(_reln, _forknum);
+    int32_t result = client->RpcMdNblocks(_reln, _forknum, GetLogWrtResultLsn());
 
     printf("%s End, result = %d\n", __func__ , result);
     fflush(stdout);
@@ -198,7 +199,7 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
     int32_t _forknum = forknum;
     int32_t _isRedo = isRedo;
 
-    client->RpcMdCreate(_reln, _forknum, _isRedo);
+    client->RpcMdCreate(_reln, _forknum, _isRedo, GetLogWrtResultLsn());
     printf("%s End\n", __func__ );
     fflush(stdout);
 }
@@ -217,7 +218,7 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
 
     _buff.assign(buff, BLCKSZ);
 
-    client->RpcMdExtend(_reln, _forknum, _blknum, _buff, _skipFsync);
+    client->RpcMdExtend(_reln, _forknum, _blknum, _buff, _skipFsync, GetLogWrtResultLsn());
 
     printf("%s End\n", __func__ );
     fflush(stdout);
@@ -233,7 +234,7 @@ void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
     int32_t _forknum = forknum;
     int32_t _blknum = blknum;
 
-    client->RpcTruncate(_reln, _forknum, _blknum);
+    client->RpcTruncate(_reln, _forknum, _blknum, GetLogWrtResultLsn());
     printf("%s End\n", __func__ );
     fflush(stdout);
 }

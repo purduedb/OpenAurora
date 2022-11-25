@@ -1162,6 +1162,32 @@ polar_heap_insert_save(XLogReaderState *record)
 }
 
 static void
+polar_heap_insert_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    xl_heap_insert *xlrec = (xl_heap_insert *)record->main_data;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_heap_delete_save(XLogReaderState *record)
 {
     xl_heap_delete *xlrec = (xl_heap_delete *)record->main_data;
@@ -1173,10 +1199,33 @@ polar_heap_delete_save(XLogReaderState *record)
 }
 
 static void
+polar_heap_delete_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    xl_heap_delete *xlrec = (xl_heap_delete *) record->main_data;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    if (xlrec->flags & XLH_DELETE_ALL_VISIBLE_CLEARED) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_heap_xlog_update_save(XLogReaderState *record, bool hotupdate)
 {
-    printf("%s %d\n", __func__ , __LINE__);
-    fflush(stdout);
     BlockNumber oldblk, newblk;
     BufferTag old_cleared_vm, new_cleared_vm;
     xl_heap_update *xlrec = (xl_heap_update *)(record->main_data);
@@ -1196,15 +1245,9 @@ polar_heap_xlog_update_save(XLogReaderState *record, bool hotupdate)
 
     if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
     {
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
         uint8 vm_block = (oldblk == newblk) ? 2 : 3;
         ParseXLogBlocksLsn(record, vm_block);
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
         POLAR_GET_LOG_TAG(record, old_cleared_vm, vm_block);
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
     }
 
     ParseXLogBlocksLsn(record, (oldblk == newblk) ? 0 : 1);
@@ -1225,6 +1268,74 @@ polar_heap_xlog_update_save(XLogReaderState *record, bool hotupdate)
 }
 
 static void
+polar_heap_xlog_update_get_bufftag_list(XLogReaderState *record, bool hotupdate, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 4);
+
+    BlockNumber oldblk, newblk;
+    BufferTag old_cleared_vm, new_cleared_vm;
+    xl_heap_update *xlrec = (xl_heap_update *)(record->main_data);
+
+    CLEAR_BUFFERTAG(old_cleared_vm);
+    CLEAR_BUFFERTAG(new_cleared_vm);
+
+    XLogRecGetBlockTag(record, 0, NULL, NULL, &newblk);
+
+    if (XLogRecGetBlockTag(record, 1, NULL, NULL, &oldblk))
+    {
+        /* HOT updates are never done across pages */
+        Assert(!hotupdate);
+    }
+    else
+        oldblk = newblk;
+
+    if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
+    {
+        uint8 vm_block = (oldblk == newblk) ? 2 : 3;
+
+        XLogRecGetBlockTag(record, vm_block, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+        POLAR_GET_LOG_TAG(record, old_cleared_vm, vm_block);
+    }
+
+//    ParseXLogBlocksLsn(record, (oldblk == newblk) ? 0 : 1);
+    XLogRecGetBlockTag(record, (oldblk == newblk) ? 0 : 1, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+
+    if (oldblk != newblk)
+    {
+        XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+//        ParseXLogBlocksLsn(record, 0);
+
+        if (xlrec->flags & XLH_UPDATE_NEW_ALL_VISIBLE_CLEARED)
+        {
+            /* Avoid add the same vm page to logindex twice with the same lsn value */
+            POLAR_GET_LOG_TAG(record, new_cleared_vm, 2);
+
+            if (!BUFFERTAGS_EQUAL(old_cleared_vm, new_cleared_vm)) {
+                XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
+                INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+                tagCount++;
+//                ParseXLogBlocksLsn(record, 2);
+            }
+        }
+    }
+
+    *tagNum = tagCount;
+}
+
+
+static void
 polar_heap_lock_save(XLogReaderState *record)
 {
     xl_heap_lock *xlrec = (xl_heap_lock *)record->main_data;
@@ -1233,6 +1344,34 @@ polar_heap_lock_save(XLogReaderState *record)
         ParseXLogBlocksLsn(record, 1);
 
     ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_heap_lock_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    xl_heap_lock *xlrec = (xl_heap_lock *)record->main_data;
+
+    if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED) {
+
+//        ParseXLogBlocksLsn(record, 1);
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    *tagNum = tagCount;
 }
 
 bool
@@ -1271,6 +1410,65 @@ polar_heap_idx_save(XLogReaderState *record)
 
         case XLOG_HEAP_INPLACE:
             ParseXLogBlocksLsn(record, 0);
+            break;
+
+        default:
+            elog(PANIC, "polar_heap_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
+
+bool
+polar_heap_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP_INSERT:
+            polar_heap_insert_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP_DELETE:
+            polar_heap_delete_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP_UPDATE:
+            polar_heap_xlog_update_get_bufftag_list(record, false, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP_TRUNCATE:
+            break;
+
+        case XLOG_HEAP_HOT_UPDATE:
+            polar_heap_xlog_update_get_bufftag_list(record, true, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP_CONFIRM:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            break;
+
+        case XLOG_HEAP_LOCK:
+            polar_heap_lock_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP_INPLACE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
             break;
 
         default:
@@ -1337,6 +1535,35 @@ polar_heap_multi_insert_save(XLogReaderState *record)
 }
 
 static void
+polar_heap_multi_insert_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    xl_heap_multi_insert *xlrec = (xl_heap_multi_insert *)record->main_data;
+
+    if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+
+//        ParseXLogBlocksLsn(record, 1);
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    *tagNum = tagCount;
+}
+
+static void
 polar_heap_lock_update_save(XLogReaderState *record)
 {
     xl_heap_lock_updated *xlrec = (xl_heap_lock_updated *)record->main_data;
@@ -1345,6 +1572,34 @@ polar_heap_lock_update_save(XLogReaderState *record)
         ParseXLogBlocksLsn(record, 1);
 
     ParseXLogBlocksLsn(record, 0);
+}
+
+static void
+polar_heap_lock_update_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+    xl_heap_lock_updated *xlrec = (xl_heap_lock_updated *)record->main_data;
+
+    if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED) {
+        XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        tagCount++;
+//        ParseXLogBlocksLsn(record, 1);
+    }
+
+    XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    tagCount++;
+//    ParseXLogBlocksLsn(record, 0);
+
+    *tagNum = tagCount;
 }
 
 bool
@@ -1380,6 +1635,7 @@ polar_heap2_idx_save(XLogReaderState *record)
             break;
 
         case XLOG_HEAP2_REWRITE:
+            heap_xlog_logical_rewrite(record);
             break;
 
         default:
@@ -1389,6 +1645,65 @@ polar_heap2_idx_save(XLogReaderState *record)
     return true;
 }
 
+bool
+polar_heap2_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+    uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    switch (info & XLOG_HEAP_OPMASK)
+    {
+        case XLOG_HEAP2_CLEAN:
+        case XLOG_HEAP2_FREEZE_PAGE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            *tagNum = 1;
+            break;
+
+        case XLOG_HEAP2_CLEANUP_INFO:
+            /* don't modify buffer, nothing to do for parse, just do it */
+            break;
+
+        case XLOG_HEAP2_VISIBLE:
+            *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
+
+            XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+
+            XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            *tagNum = 2;
+            break;
+
+        case XLOG_HEAP2_MULTI_INSERT:
+            polar_heap_multi_insert_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP2_LOCK_UPDATED:
+            polar_heap_lock_update_get_bufftag_list(record, buffertagList, tagNum);
+            break;
+
+        case XLOG_HEAP2_NEW_CID:
+            break;
+
+        case XLOG_HEAP2_REWRITE:
+            heap_xlog_logical_rewrite(record);
+            // heap_.._rewrite() will do redo function, no need for more redo
+            *tagNum = 0;
+            break;
+
+        default:
+            elog(PANIC, "polar_heap2_idx_save: unknown op code %u", info);
+            break;
+    }
+    return true;
+}
 
 XLogRedoAction
 polar_heap2_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
@@ -1420,7 +1735,6 @@ polar_heap2_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         case XLOG_HEAP2_NEW_CID:
             break;
         case XLOG_HEAP2_REWRITE:
-            heap_xlog_logical_rewrite(record);
             break;
         default:
             elog(PANIC, "polar_heap2_idx_redo: unknown op code %u", info);

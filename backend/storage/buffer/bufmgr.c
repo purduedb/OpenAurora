@@ -984,6 +984,71 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	return BufferDescriptorGetBuffer(bufHdr);
 }
 
+// Try to find this buffer in buffer pool.
+// If found, lock the buffer content with EXCLUSIVE lock
+// Else, return $InvalidBuffer
+Buffer
+FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumber) {
+    BufferTag bufferTag;
+    uint32		newHash;		/* hash value for newTag */
+    LWLock	   *newPartitionLock;	/* buffer partition lock for it */
+    int			buf_id;
+    BufferDesc *buf;
+
+    /* create a tag so we can lookup the buffer */
+    INIT_BUFFERTAG(bufferTag, rnode, forkNumber, blockNumber);
+
+    /* determine its hash code and partition lock ID */
+    newHash = BufTableHashCode(&bufferTag);
+    newPartitionLock = BufMappingPartitionLock(newHash);
+
+    /* see if the block is in the buffer pool already */
+    LWLockAcquire(newPartitionLock, LW_SHARED);
+    buf_id = BufTableLookup(&bufferTag, newHash);
+
+    if (buf_id >= 0) {
+        /*
+		 * Found it.  Now, pin the buffer so no one can steal it from the
+		 * buffer pool, and check to see if the correct data has been loaded
+		 * into the buffer.
+		 */
+        buf = GetBufferDescriptor(buf_id);
+
+        int valid = PinBuffer(buf, NULL);
+
+        /* Can release the mapping lock as soon as we've pinned it */
+        LWLockRelease(newPartitionLock);
+
+        if (!valid)
+        {
+            /*
+             * We can only get here if (a) someone else is still reading in
+             * the page, or (b) a previous read attempt failed.  We have to
+             * wait for any active read attempt to finish, and then set up our
+             * own read attempt if the page is still not BM_VALID.
+             * StartBufferIO does it all.
+             */
+            if (StartBufferIO(buf, true))
+            {
+                /*
+                 * If we get here, previous attempts to read the buffer must
+                 * have failed ... but we shall bravely try again.
+                 */
+                return InvalidBuffer;
+            }
+        }
+
+        // Now exclusively lock the content
+        LWLockAcquire(BufferDescriptorGetContentLock(buf),
+                      LW_EXCLUSIVE);
+
+        return BufferDescriptorGetBuffer(buf);
+    }
+
+    LWLockRelease(newPartitionLock);
+    return InvalidBuffer;
+}
+
 /*
  * BufferAlloc -- subroutine for ReadBuffer.  Handles lookup of a shared
  *		buffer.  If no buffer exists already, selects a replacement
@@ -1009,6 +1074,9 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			BufferAccessStrategy strategy,
 			bool *foundPtr)
 {
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, smgr->smgr_rnode.node.spcNode,
+           smgr->smgr_rnode.node.dbNode, smgr->smgr_rnode.node.relNode, forkNum, blockNum);
+    fflush(stdout);
 	BufferTag	newTag;			/* identity of requested block */
 	uint32		newHash;		/* hash value for newTag */
 	LWLock	   *newPartitionLock;	/* buffer partition lock for it */

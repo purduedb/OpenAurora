@@ -814,6 +814,16 @@ ApplyOneXlog(StringInfo input_message) {
 
     printf("%s Read record succeed, ready to replay\n", __func__ );
     fflush(stdout);
+    const char*id=NULL;
+    id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+    if (id)
+        printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+    else
+        printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+    fflush(stdout);
+
+    // redo function need read again from disk, make sure REDO() will lock the buff
+    buf = InvalidBuffer;
 
     BufferTag bufferTag;
     XLogRedoAction action = BLK_NOTFOUND;
@@ -895,7 +905,8 @@ ApplyOneXlog(StringInfo input_message) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
-    UnlockReleaseBuffer(buf);
+    if(action != BLK_NOTFOUND)
+        UnlockReleaseBuffer(buf);
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
     return;

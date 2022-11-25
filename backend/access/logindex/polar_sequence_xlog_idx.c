@@ -90,6 +90,35 @@ polar_seq_idx_save( XLogReaderState *record)
 	}
     return true;
 }
+
+bool
+polar_seq_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum)
+{
+	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+	int tagCount = 0;
+
+	RelFileNode rnode;
+	ForkNumber forkNumber;
+	BlockNumber blockNumber;
+
+
+	switch (info)
+	{
+		case XLOG_SEQ_LOG:
+			*buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
+
+			XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
+			INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+			*tagNum = 1;
+//			ParseXLogBlocksLsn(record, 0);
+			break;
+
+		default:
+			elog(PANIC, "polar_seq_idx_save: unknown op code %u", info);
+			break;
+	}
+	return true;
+}
 //
 //bool
 //polar_seq_idx_parse(polar_logindex_redo_ctl_t instance, XLogReaderState *record)

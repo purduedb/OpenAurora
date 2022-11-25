@@ -153,7 +153,9 @@ rpcmdexists(SMgrRelation reln, ForkNumber forkNum)
 void
 rpcmdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
-    RpcMdCreate(reln, forkNum, isRedo);
+    // Secondary compute node won't alter the shared relation
+    if(!InRecovery)
+        RpcMdCreate(reln, forkNum, isRedo);
 }
 
 void
@@ -170,7 +172,9 @@ void
 rpcmdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
-    RpcMdExtend(reln, forknum, blocknum, buffer, skipFsync);
+    // Secondary compute node won't alter the shared relation
+    if(!InRecovery)
+        RpcMdExtend(reln, forknum, blocknum, buffer, skipFsync);
 }
 
 static MdfdVec *
@@ -222,7 +226,9 @@ rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 rpcmdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
-    return RpcMdTruncate(reln, forknum, nblocks);
+    // Secondary compute node won't alter the shared relation
+    if(!InRecovery)
+        return RpcMdTruncate(reln, forknum, nblocks);
 }
 
 void

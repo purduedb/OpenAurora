@@ -21,6 +21,30 @@ polar_generic_idx_save(XLogReaderState *record)
     return true;
 }
 
+bool
+polar_generic_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagList, int* tagNum) {
+    int block_id;
+    int tagCount = 0;
+
+    RelFileNode rnode;
+    ForkNumber forkNumber;
+    BlockNumber blockNumber;
+
+    // maximun block_id
+    *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) *4);
+    for (block_id = 0; block_id <= MAX_GENERIC_XLOG_PAGES; block_id++)
+    {
+        if (XLogRecHasBlockRef(record, block_id)) {
+            XLogRecGetBlockTag(record, block_id, &rnode, &forkNumber, &blockNumber);
+
+            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            tagCount++;
+        }
+    }
+    *tagNum = tagCount;
+    return true;
+}
+
 XLogRedoAction
 polar_generic_idx_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {

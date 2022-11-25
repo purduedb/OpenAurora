@@ -51,10 +51,9 @@ public:
      *
      * @param _fd
      */
-     //! For we use WalRcv.flushedUpto as a temporary lsn, we shou
-    void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
+     void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d, lsn = %ld\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn);
         fflush(stdout);
 
         RelFileNode rnode;
@@ -207,7 +206,7 @@ public:
          // For now, we got the lsn list and at least one version was replayed
         uint64_t foundLsn;
         uint64_t foundPos;
-        int foundBound = FindListLowerBound(uintList, WalRcv->flushedUpto, &foundLsn, &foundPos);
+        int foundBound = FindListLowerBound(uintList, _lsn, &foundLsn, &foundPos);
         if(!foundBound) { // Every existed version is larger than this current lsn
             // This shouldn't happen. (GOD BLESS)
             // If it really happened, just use the base page
@@ -324,7 +323,7 @@ public:
 //        printf("%s End\n", __func__ );
     }
 
-    void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) {
+    void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %ld\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
         fflush(stdout);
@@ -372,9 +371,9 @@ public:
 //        fflush(stdout);
     }
 
-    int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+    int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
         // Your implementation goes here
 //        SyncReplayProcess();
@@ -385,7 +384,7 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
-        XLogRecPtr lsn = WalRcv->flushedUpto;
+        XLogRecPtr lsn = _lsn;
         struct KeyType keyType;
         keyType.SpcID = rnode.spcNode;
         keyType.DbID = rnode.dbNode;
@@ -416,9 +415,9 @@ public:
         return relSize;
     }
 
-    int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+    int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
 
 //        SyncReplayProcess();
@@ -436,7 +435,7 @@ public:
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
         if(found) {
             if(foundPageNum == -1)
                 return 0;
@@ -447,9 +446,9 @@ public:
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
 
-        int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, WalRcv->flushedUpto);
+        int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, _lsn);
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
-        bool insertSucc = HashMapInsertKey(key, WalRcv->flushedUpto, relSize);
+        bool insertSucc = HashMapInsertKey(key, _lsn, relSize);
         if(insertSucc) {
             printf("%s insert key successfully\n", __func__ );
         } else {
@@ -461,9 +460,9 @@ public:
         return (relSize>=0);
     }
 
-    void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, gettid());
+    void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %lu tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
 
 //        SyncReplayProcess();
@@ -481,9 +480,9 @@ public:
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
         if(!found || foundPageNum<0) {
-            if (HashMapInsertKey(key, WalRcv->flushedUpto, 0) )
+            if (HashMapInsertKey(key, _lsn, 0) )
                 printf("%s HashMap insert succeed\n", __func__ );
             else
                 printf("%s HashMap insert failed\n", __func__ );
@@ -495,9 +494,9 @@ public:
         fflush(stdout);
     }
 
-    void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, gettid());
+    void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
         fflush(stdout);
 
 //        SyncReplayProcess();
@@ -515,14 +514,14 @@ public:
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, WalRcv->flushedUpto, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
         if(!found || foundPageNum<_blknum+1) {
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
-            if (HashMapInsertKey(key, WalRcv->flushedUpto, _blknum+1) )
-                printf("%s HashMap insert succeed, lsn=%lu, pageNum=%d\n", __func__, WalRcv->flushedUpto, _blknum+1 );
+            if (HashMapInsertKey(key, _lsn, _blknum+1) )
+                printf("%s HashMap insert succeed, lsn=%lu, pageNum=%d\n", __func__, _lsn, _blknum+1 );
             else
                 printf("%s HashMap insert failed\n", __func__ );
         }
@@ -548,9 +547,9 @@ public:
     }
 
 
-    void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum) {
-        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d tid=%d\n", __func__ , __FILE__, __LINE__,
-               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, gettid());
+    void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn) {
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
         fflush(stdout);
 
         RelFileNode rnode;
@@ -564,7 +563,7 @@ public:
         key.RelID = rnode.relNode;
         key.ForkNum = _forknum;
 
-        if (HashMapInsertKey(key, WalRcv->flushedUpto, _blknum) )
+        if (HashMapInsertKey(key, _lsn, _blknum) )
             printf("%s HashMap insert succeed\n", __func__ );
         else
             printf("%s HashMap insert failed\n", __func__ );

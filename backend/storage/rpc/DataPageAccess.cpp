@@ -74,6 +74,14 @@ uint32_t DataPageAccess_ReadBufferCommon_args::read(::apache::thrift::protocol::
           xfer += iprot->skip(ftype);
         }
         break;
+      case 6:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -111,6 +119,10 @@ uint32_t DataPageAccess_ReadBufferCommon_args::write(::apache::thrift::protocol:
   xfer += oprot->writeI32(this->_readBufferMode);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 6);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -144,6 +156,10 @@ uint32_t DataPageAccess_ReadBufferCommon_pargs::write(::apache::thrift::protocol
 
   xfer += oprot->writeFieldBegin("_readBufferMode", ::apache::thrift::protocol::T_I32, 5);
   xfer += oprot->writeI32((*(this->_readBufferMode)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 6);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -309,6 +325,14 @@ uint32_t DataPageAccess_RpcMdRead_args::read(::apache::thrift::protocol::TProtoc
           xfer += iprot->skip(ftype);
         }
         break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -338,6 +362,10 @@ uint32_t DataPageAccess_RpcMdRead_args::write(::apache::thrift::protocol::TProto
   xfer += oprot->writeI64(this->_blknum);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -363,6 +391,10 @@ uint32_t DataPageAccess_RpcMdRead_pargs::write(::apache::thrift::protocol::TProt
 
   xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I64, 3);
   xfer += oprot->writeI64((*(this->_blknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -520,6 +552,14 @@ uint32_t DataPageAccess_RpcMdNblocks_args::read(::apache::thrift::protocol::TPro
           xfer += iprot->skip(ftype);
         }
         break;
+      case 3:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -545,6 +585,10 @@ uint32_t DataPageAccess_RpcMdNblocks_args::write(::apache::thrift::protocol::TPr
   xfer += oprot->writeI32(this->_forknum);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -566,6 +610,10 @@ uint32_t DataPageAccess_RpcMdNblocks_pargs::write(::apache::thrift::protocol::TP
 
   xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32((*(this->_forknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -723,6 +771,14 @@ uint32_t DataPageAccess_RpcMdExists_args::read(::apache::thrift::protocol::TProt
           xfer += iprot->skip(ftype);
         }
         break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -748,6 +804,10 @@ uint32_t DataPageAccess_RpcMdExists_args::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeI32(this->_forknum);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -769,6 +829,10 @@ uint32_t DataPageAccess_RpcMdExists_pargs::write(::apache::thrift::protocol::TPr
 
   xfer += oprot->writeFieldBegin("_forknum", ::apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32((*(this->_forknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -934,6 +998,14 @@ uint32_t DataPageAccess_RpcMdCreate_args::read(::apache::thrift::protocol::TProt
           xfer += iprot->skip(ftype);
         }
         break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -963,6 +1035,10 @@ uint32_t DataPageAccess_RpcMdCreate_args::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeI32(this->_isRedo);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -988,6 +1064,10 @@ uint32_t DataPageAccess_RpcMdCreate_pargs::write(::apache::thrift::protocol::TPr
 
   xfer += oprot->writeFieldBegin("_isRedo", ::apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32((*(this->_isRedo)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -1138,6 +1218,14 @@ uint32_t DataPageAccess_RpcMdExtend_args::read(::apache::thrift::protocol::TProt
           xfer += iprot->skip(ftype);
         }
         break;
+      case 6:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -1175,6 +1263,10 @@ uint32_t DataPageAccess_RpcMdExtend_args::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeI32(this->skipFsync);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 6);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -1208,6 +1300,10 @@ uint32_t DataPageAccess_RpcMdExtend_pargs::write(::apache::thrift::protocol::TPr
 
   xfer += oprot->writeFieldBegin("skipFsync", ::apache::thrift::protocol::T_I32, 5);
   xfer += oprot->writeI32((*(this->skipFsync)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 6);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -1342,6 +1438,14 @@ uint32_t DataPageAccess_RpcTruncate_args::read(::apache::thrift::protocol::TProt
           xfer += iprot->skip(ftype);
         }
         break;
+      case 4:
+        if (ftype == ::apache::thrift::protocol::T_I64) {
+          xfer += iprot->readI64(this->_lsn);
+          this->__isset._lsn = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
       default:
         xfer += iprot->skip(ftype);
         break;
@@ -1371,6 +1475,10 @@ uint32_t DataPageAccess_RpcTruncate_args::write(::apache::thrift::protocol::TPro
   xfer += oprot->writeI32(this->_blknum);
   xfer += oprot->writeFieldEnd();
 
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64(this->_lsn);
+  xfer += oprot->writeFieldEnd();
+
   xfer += oprot->writeFieldStop();
   xfer += oprot->writeStructEnd();
   return xfer;
@@ -1396,6 +1504,10 @@ uint32_t DataPageAccess_RpcTruncate_pargs::write(::apache::thrift::protocol::TPr
 
   xfer += oprot->writeFieldBegin("_blknum", ::apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32((*(this->_blknum)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_lsn", ::apache::thrift::protocol::T_I64, 4);
+  xfer += oprot->writeI64((*(this->_lsn)));
   xfer += oprot->writeFieldEnd();
 
   xfer += oprot->writeFieldStop();
@@ -1538,13 +1650,13 @@ uint32_t DataPageAccess_zip_pargs::write(::apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
-void DataPageAccessClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+void DataPageAccessClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn)
 {
-  send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+  send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode, _lsn);
   recv_ReadBufferCommon(_return);
 }
 
-void DataPageAccessClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+void DataPageAccessClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("ReadBufferCommon", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1555,6 +1667,7 @@ void DataPageAccessClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, co
   args._forknum = &_forknum;
   args._blknum = &_blknum;
   args._readBufferMode = &_readBufferMode;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1600,13 +1713,13 @@ void DataPageAccessClient::recv_ReadBufferCommon(_Page& _return)
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "ReadBufferCommon failed: unknown result");
 }
 
-void DataPageAccessClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
+void DataPageAccessClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
 {
-  send_RpcMdRead(_reln, _forknum, _blknum);
+  send_RpcMdRead(_reln, _forknum, _blknum, _lsn);
   recv_RpcMdRead(_return);
 }
 
-void DataPageAccessClient::send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
+void DataPageAccessClient::send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcMdRead", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1615,6 +1728,7 @@ void DataPageAccessClient::send_RpcMdRead(const _Smgr_Relation& _reln, const int
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._blknum = &_blknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1660,13 +1774,13 @@ void DataPageAccessClient::recv_RpcMdRead(_Page& _return)
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcMdRead failed: unknown result");
 }
 
-int32_t DataPageAccessClient::RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessClient::RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
-  send_RpcMdNblocks(_reln, _forknum);
+  send_RpcMdNblocks(_reln, _forknum, _lsn);
   return recv_RpcMdNblocks();
 }
 
-void DataPageAccessClient::send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum)
+void DataPageAccessClient::send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcMdNblocks", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1674,6 +1788,7 @@ void DataPageAccessClient::send_RpcMdNblocks(const _Smgr_Relation& _reln, const 
   DataPageAccess_RpcMdNblocks_pargs args;
   args._reln = &_reln;
   args._forknum = &_forknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1719,13 +1834,13 @@ int32_t DataPageAccessClient::recv_RpcMdNblocks()
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcMdNblocks failed: unknown result");
 }
 
-int32_t DataPageAccessClient::RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessClient::RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
-  send_RpcMdExists(_reln, _forknum);
+  send_RpcMdExists(_reln, _forknum, _lsn);
   return recv_RpcMdExists();
 }
 
-void DataPageAccessClient::send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum)
+void DataPageAccessClient::send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcMdExists", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1733,6 +1848,7 @@ void DataPageAccessClient::send_RpcMdExists(const _Smgr_Relation& _reln, const i
   DataPageAccess_RpcMdExists_pargs args;
   args._reln = &_reln;
   args._forknum = &_forknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1778,13 +1894,13 @@ int32_t DataPageAccessClient::recv_RpcMdExists()
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcMdExists failed: unknown result");
 }
 
-void DataPageAccessClient::RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo)
+void DataPageAccessClient::RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn)
 {
-  send_RpcMdCreate(_reln, _forknum, _isRedo);
+  send_RpcMdCreate(_reln, _forknum, _isRedo, _lsn);
   recv_RpcMdCreate();
 }
 
-void DataPageAccessClient::send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo)
+void DataPageAccessClient::send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcMdCreate", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1793,6 +1909,7 @@ void DataPageAccessClient::send_RpcMdCreate(const _Smgr_Relation& _reln, const i
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._isRedo = &_isRedo;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1833,13 +1950,13 @@ void DataPageAccessClient::recv_RpcMdCreate()
   return;
 }
 
-void DataPageAccessClient::RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync)
+void DataPageAccessClient::RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn)
 {
-  send_RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync);
+  send_RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync, _lsn);
   recv_RpcMdExtend();
 }
 
-void DataPageAccessClient::send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync)
+void DataPageAccessClient::send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcMdExtend", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1850,6 +1967,7 @@ void DataPageAccessClient::send_RpcMdExtend(const _Smgr_Relation& _reln, const i
   args._blknum = &_blknum;
   args._buff = &_buff;
   args.skipFsync = &skipFsync;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -1890,13 +2008,13 @@ void DataPageAccessClient::recv_RpcMdExtend()
   return;
 }
 
-void DataPageAccessClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+void DataPageAccessClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn)
 {
-  send_RpcTruncate(_reln, _forknum, _blknum);
+  send_RpcTruncate(_reln, _forknum, _blknum, _lsn);
   recv_RpcTruncate();
 }
 
-void DataPageAccessClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+void DataPageAccessClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn)
 {
   int32_t cseqid = 0;
   oprot_->writeMessageBegin("RpcTruncate", ::apache::thrift::protocol::T_CALL, cseqid);
@@ -1905,6 +2023,7 @@ void DataPageAccessClient::send_RpcTruncate(const _Smgr_Relation& _reln, const i
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._blknum = &_blknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2005,7 +2124,7 @@ void DataPageAccessProcessor::process_ReadBufferCommon(int32_t seqid, ::apache::
 
   DataPageAccess_ReadBufferCommon_result result;
   try {
-    iface_->ReadBufferCommon(result.success, args._reln, args._relpersistence, args._forknum, args._blknum, args._readBufferMode);
+    iface_->ReadBufferCommon(result.success, args._reln, args._relpersistence, args._forknum, args._blknum, args._readBufferMode, args._lsn);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
@@ -2059,7 +2178,7 @@ void DataPageAccessProcessor::process_RpcMdRead(int32_t seqid, ::apache::thrift:
 
   DataPageAccess_RpcMdRead_result result;
   try {
-    iface_->RpcMdRead(result.success, args._reln, args._forknum, args._blknum);
+    iface_->RpcMdRead(result.success, args._reln, args._forknum, args._blknum, args._lsn);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
@@ -2113,7 +2232,7 @@ void DataPageAccessProcessor::process_RpcMdNblocks(int32_t seqid, ::apache::thri
 
   DataPageAccess_RpcMdNblocks_result result;
   try {
-    result.success = iface_->RpcMdNblocks(args._reln, args._forknum);
+    result.success = iface_->RpcMdNblocks(args._reln, args._forknum, args._lsn);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
@@ -2167,7 +2286,7 @@ void DataPageAccessProcessor::process_RpcMdExists(int32_t seqid, ::apache::thrif
 
   DataPageAccess_RpcMdExists_result result;
   try {
-    result.success = iface_->RpcMdExists(args._reln, args._forknum);
+    result.success = iface_->RpcMdExists(args._reln, args._forknum, args._lsn);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
@@ -2221,7 +2340,7 @@ void DataPageAccessProcessor::process_RpcMdCreate(int32_t seqid, ::apache::thrif
 
   DataPageAccess_RpcMdCreate_result result;
   try {
-    iface_->RpcMdCreate(args._reln, args._forknum, args._isRedo);
+    iface_->RpcMdCreate(args._reln, args._forknum, args._isRedo, args._lsn);
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
       this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcMdCreate");
@@ -2274,7 +2393,7 @@ void DataPageAccessProcessor::process_RpcMdExtend(int32_t seqid, ::apache::thrif
 
   DataPageAccess_RpcMdExtend_result result;
   try {
-    iface_->RpcMdExtend(args._reln, args._forknum, args._blknum, args._buff, args.skipFsync);
+    iface_->RpcMdExtend(args._reln, args._forknum, args._blknum, args._buff, args.skipFsync, args._lsn);
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
       this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcMdExtend");
@@ -2327,7 +2446,7 @@ void DataPageAccessProcessor::process_RpcTruncate(int32_t seqid, ::apache::thrif
 
   DataPageAccess_RpcTruncate_result result;
   try {
-    iface_->RpcTruncate(args._reln, args._forknum, args._blknum);
+    iface_->RpcTruncate(args._reln, args._forknum, args._blknum, args._lsn);
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != nullptr) {
       this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcTruncate");
@@ -2401,13 +2520,13 @@ void DataPageAccessProcessor::process_zip(int32_t, ::apache::thrift::protocol::T
   return processor;
 }
 
-void DataPageAccessConcurrentClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+void DataPageAccessConcurrentClient::ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn)
 {
-  int32_t seqid = send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode);
+  int32_t seqid = send_ReadBufferCommon(_reln, _relpersistence, _forknum, _blknum, _readBufferMode, _lsn);
   recv_ReadBufferCommon(_return, seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode)
+int32_t DataPageAccessConcurrentClient::send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2419,6 +2538,7 @@ int32_t DataPageAccessConcurrentClient::send_ReadBufferCommon(const _Smgr_Relati
   args._forknum = &_forknum;
   args._blknum = &_blknum;
   args._readBufferMode = &_readBufferMode;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2489,13 +2609,13 @@ void DataPageAccessConcurrentClient::recv_ReadBufferCommon(_Page& _return, const
   } // end while(true)
 }
 
-void DataPageAccessConcurrentClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
+void DataPageAccessConcurrentClient::RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcMdRead(_reln, _forknum, _blknum);
+  int32_t seqid = send_RpcMdRead(_reln, _forknum, _blknum, _lsn);
   recv_RpcMdRead(_return, seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum)
+int32_t DataPageAccessConcurrentClient::send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2505,6 +2625,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcMdRead(const _Smgr_Relation& _re
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._blknum = &_blknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2575,13 +2696,13 @@ void DataPageAccessConcurrentClient::recv_RpcMdRead(_Page& _return, const int32_
   } // end while(true)
 }
 
-int32_t DataPageAccessConcurrentClient::RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessConcurrentClient::RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcMdNblocks(_reln, _forknum);
+  int32_t seqid = send_RpcMdNblocks(_reln, _forknum, _lsn);
   return recv_RpcMdNblocks(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessConcurrentClient::send_RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2590,6 +2711,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcMdNblocks(const _Smgr_Relation& 
   DataPageAccess_RpcMdNblocks_pargs args;
   args._reln = &_reln;
   args._forknum = &_forknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2660,13 +2782,13 @@ int32_t DataPageAccessConcurrentClient::recv_RpcMdNblocks(const int32_t seqid)
   } // end while(true)
 }
 
-int32_t DataPageAccessConcurrentClient::RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessConcurrentClient::RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcMdExists(_reln, _forknum);
+  int32_t seqid = send_RpcMdExists(_reln, _forknum, _lsn);
   return recv_RpcMdExists(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum)
+int32_t DataPageAccessConcurrentClient::send_RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2675,6 +2797,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcMdExists(const _Smgr_Relation& _
   DataPageAccess_RpcMdExists_pargs args;
   args._reln = &_reln;
   args._forknum = &_forknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2745,13 +2868,13 @@ int32_t DataPageAccessConcurrentClient::recv_RpcMdExists(const int32_t seqid)
   } // end while(true)
 }
 
-void DataPageAccessConcurrentClient::RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo)
+void DataPageAccessConcurrentClient::RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcMdCreate(_reln, _forknum, _isRedo);
+  int32_t seqid = send_RpcMdCreate(_reln, _forknum, _isRedo, _lsn);
   recv_RpcMdCreate(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo)
+int32_t DataPageAccessConcurrentClient::send_RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2761,6 +2884,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcMdCreate(const _Smgr_Relation& _
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._isRedo = &_isRedo;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2825,13 +2949,13 @@ void DataPageAccessConcurrentClient::recv_RpcMdCreate(const int32_t seqid)
   } // end while(true)
 }
 
-void DataPageAccessConcurrentClient::RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync)
+void DataPageAccessConcurrentClient::RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync);
+  int32_t seqid = send_RpcMdExtend(_reln, _forknum, _blknum, _buff, skipFsync, _lsn);
   recv_RpcMdExtend(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync)
+int32_t DataPageAccessConcurrentClient::send_RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2843,6 +2967,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcMdExtend(const _Smgr_Relation& _
   args._blknum = &_blknum;
   args._buff = &_buff;
   args.skipFsync = &skipFsync;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();
@@ -2907,13 +3032,13 @@ void DataPageAccessConcurrentClient::recv_RpcMdExtend(const int32_t seqid)
   } // end while(true)
 }
 
-void DataPageAccessConcurrentClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+void DataPageAccessConcurrentClient::RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn)
 {
-  int32_t seqid = send_RpcTruncate(_reln, _forknum, _blknum);
+  int32_t seqid = send_RpcTruncate(_reln, _forknum, _blknum, _lsn);
   recv_RpcTruncate(seqid);
 }
 
-int32_t DataPageAccessConcurrentClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum)
+int32_t DataPageAccessConcurrentClient::send_RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn)
 {
   int32_t cseqid = this->sync_->generateSeqId();
   ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
@@ -2923,6 +3048,7 @@ int32_t DataPageAccessConcurrentClient::send_RpcTruncate(const _Smgr_Relation& _
   args._reln = &_reln;
   args._forknum = &_forknum;
   args._blknum = &_blknum;
+  args._lsn = &_lsn;
   args.write(oprot_);
 
   oprot_->writeMessageEnd();

@@ -40,6 +40,7 @@
 #include "access/logindex_hashmap.h"
 #include "access/logindex_func.h"
 #include "access/polar_logindex.h"
+#include "access/logindex_func.h"
 #include "catalog/catversion.h"
 #include "catalog/pg_control.h"
 #include "catalog/pg_database.h"
@@ -7392,15 +7393,6 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-				/* Now apply the WAL record itself */
-//				RmgrTable[record->xl_rmid].rm_redo(xlogreader);
-                //For the page related xlog, replay process will deal with them
-                printf("%s starts to process xlog, rmid = %d, info = %d\n", __func__ , record->xl_rmid, XLogRecGetInfo(xlogreader) & ~XLR_INFO_MASK);
-
-                // Deal With HEAP: add VM blocks to xlogreader->decoded_block
-                polar_xlog_decode_data(xlogreader);
-
-
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7409,113 +7401,175 @@ StartupXLOG(void)
                     printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
 
-                switch (record->xl_rmid) {
-                    case RM_XLOG_ID:
-                    case RM_SMGR_ID:
-                    case RM_HEAP2_ID:
-                    case RM_HEAP_ID:
-                    case RM_BTREE_ID:
-                    case RM_HASH_ID:
-                    case RM_GIN_ID:
-                    case RM_GIST_ID:
-                    case RM_SEQ_ID:
-                    case RM_SPGIST_ID:
-                    case RM_BRIN_ID:
-                    case RM_GENERIC_ID:
+                if(IsRpcServer) {
+                    //For the page related xlog, replay process will deal with them
+                    printf("%s starts to process xlog, rmid = %d, info = %d\n", __func__ , record->xl_rmid, XLogRecGetInfo(xlogreader) & ~XLR_INFO_MASK);
 
-                        printf("%s max_block_id = %d\n", __func__ , xlogreader->max_block_id);
-                        if(xlogreader->max_block_id >= 0) {
-                            for(int i = 0; i <= xlogreader->max_block_id; i++) {
-                                if(!xlogreader->blocks[i].in_use)
-                                    continue;
+                    // Deal With HEAP: add VM blocks to xlogreader->decoded_block
+                    polar_xlog_decode_data(xlogreader);
 
-                                struct KeyType key;
-                                key.SpcID = xlogreader->blocks[i].rnode.spcNode;
-                                key.DbID = xlogreader->blocks[i].rnode.dbNode;
-                                key.RelID = xlogreader->blocks[i].rnode.relNode;
-                                key.ForkNum = xlogreader->blocks[i].forknum;
-                                printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
-                                       key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
 
-                                uint64_t foundLsn;
-                                int foundPageNum;
 
-								// If not found relation page number in cache, then no updates is on this relation
-								// Then we read from standalone process ($basePageNum),
-								// 		If $basePageNum > blocks[i].blkno+1, then insert $basePageNum
-								//		Else, insert blocks[i].blkno+1
-                                int found = HashMapFindLowerBoundEntry(key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
-                                if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
-                                    if (HashMapInsertKey(key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1) )
-                                        printf("%s HashMap insert succeed\n", __func__ );
-                                    else
-                                        printf("%s HashMap insert failed\n", __func__ );
-                                } else if(!found) {
-									int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
-									if(baseRelSize > xlogreader->blocks[i].blkno+1) {
-										HashMapInsertKey(key, xlogreader->ReadRecPtr, baseRelSize);
-									} else {
-										HashMapInsertKey(key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1);
-									}
-								}
+
+                    switch (record->xl_rmid) {
+                        case RM_XLOG_ID:
+                        case RM_SMGR_ID:
+                        case RM_HEAP2_ID:
+                        case RM_HEAP_ID:
+                        case RM_BTREE_ID:
+                        case RM_HASH_ID:
+                        case RM_GIN_ID:
+                        case RM_GIST_ID:
+                        case RM_SEQ_ID:
+                        case RM_SPGIST_ID:
+                        case RM_BRIN_ID:
+                        case RM_GENERIC_ID:
+
+                            printf("%s max_block_id = %d\n", __func__ , xlogreader->max_block_id);
+                            if(xlogreader->max_block_id >= 0) {
+                                for(int i = 0; i <= xlogreader->max_block_id; i++) {
+                                    if(!xlogreader->blocks[i].in_use)
+                                        continue;
+
+                                    struct KeyType key;
+                                    key.SpcID = xlogreader->blocks[i].rnode.spcNode;
+                                    key.DbID = xlogreader->blocks[i].rnode.dbNode;
+                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
+                                    key.ForkNum = xlogreader->blocks[i].forknum;
+                                    printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
+                                           key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
+
+                                    uint64_t foundLsn;
+                                    int foundPageNum;
+
+                                    // If not found relation page number in cache, then no updates is on this relation
+                                    // Then we read from standalone process ($basePageNum),
+                                    // 		If $basePageNum > blocks[i].blkno+1, then insert $basePageNum
+                                    //		Else, insert blocks[i].blkno+1
+                                    int found = HashMapFindLowerBoundEntry(key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
+                                    if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
+                                        if (HashMapInsertKey(key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1) )
+                                            printf("%s HashMap insert succeed\n", __func__ );
+                                        else
+                                            printf("%s HashMap insert failed\n", __func__ );
+                                    } else if(!found) {
+                                        int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
+                                        if(baseRelSize > xlogreader->blocks[i].blkno+1) {
+                                            HashMapInsertKey(key, xlogreader->ReadRecPtr, baseRelSize);
+                                        } else {
+                                            HashMapInsertKey(key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1);
+                                        }
+                                    }
+                                }
+
                             }
 
+                            break;
+                        default:
+                            break;
+                    }
+
+
+                    bool parsed = false;
+                    switch (record->xl_rmid) {
+                        case RM_XLOG_ID:
+                            parsed = polar_xlog_idx_save(xlogreader);
+                            break;
+                        case RM_HEAP2_ID:
+                            parsed = polar_heap2_idx_save(xlogreader);
+                            break;
+                        case RM_HEAP_ID:
+                            parsed = polar_heap_idx_save(xlogreader);
+                            break;
+                        case RM_BTREE_ID:
+                            parsed = polar_btree_idx_save(xlogreader);
+                            break;
+                        case RM_HASH_ID:
+                            parsed = polar_hash_idx_save(xlogreader);
+                            break;
+                        case RM_GIN_ID:
+                            parsed = polar_gin_idx_save(xlogreader);
+                            break;
+                        case RM_GIST_ID:
+                            parsed = polar_gist_idx_save(xlogreader);
+                            break;
+                        case RM_SEQ_ID:
+                            parsed = polar_seq_idx_save(xlogreader);
+                            break;
+                        case RM_SPGIST_ID:
+                            parsed = polar_spg_idx_save(xlogreader);
+                            break;
+                        case RM_BRIN_ID:
+                            parsed = polar_brin_idx_save(xlogreader);
+                            break;
+                        case RM_GENERIC_ID:
+                            parsed = polar_generic_idx_save(xlogreader);
+                            break;
+                        default:
+                            break;
+                    }
+                    if(parsed) {
+                        printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
+                        fflush(stdout);
+                    } else {
+                        printf("%s need redo immediately\n", __func__ );
+                        fflush(stdout);
+                    }
+
+                    if(!parsed)
+                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                } else {
+                    printf("%s %d Start process xlog\n", __func__ , __LINE__);
+                    fflush(stdout);
+                    // Deal With HEAP: add VM blocks to xlogreader->decoded_block
+                    polar_xlog_decode_data(xlogreader);
+
+                    BufferTag * bufferTagList = NULL;
+                    int tagNum;
+                    int parsed = GetXlogBuffTagList(xlogreader, &bufferTagList, &tagNum);
+                    if(!parsed) { // If not related with buffer pool
+                        printf("%s %d, immediately reply the xlog\n", __func__ , __LINE__);
+                        fflush(stdout);
+                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                    } else {
+                        printf("%s %d, need single redo for pages\n", __func__ , __LINE__);
+                        fflush(stdout);
+                        // Iterate all blocks in bufferTag
+                        for(int i = 0; i < tagNum; i++) {
+                            BufferTag tempTag = bufferTagList[i];
+                            printf("%s %d, find page in buffer, spc=%u, db=%u, rel=%u, fork=%d, blk=%u\n", __func__ , __LINE__,
+                                   tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum);
+                            fflush(stdout);
+                            // Find and lock the buffer content
+                            // TODO, xlogRedoSinglePage will lock again
+                            Buffer buff = FindPageInBuffer(tempTag.rnode, tempTag.forkNum, tempTag.blockNum);
+                            printf("%s %d\n", __func__ , __LINE__);
+                            fflush(stdout);
+
+                            // If buffer pool doesn't contain this page, just ignore (no redo)
+                            if(buff == InvalidBuffer) {
+                                printf("%s %d drop this xlog block\n", __func__ , __LINE__);
+                                fflush(stdout);
+                                continue;
+                            } else { //
+//                                UnlockReleaseBuffer(buff);
+                                buff = InvalidBuffer;
+                                printf("%s %d, Start single page redo, spc=%u, db=%u, rel=%u, fork=%d, blk=%u, redo_record_lsn=%lu\n", __func__ , __LINE__,
+                                       tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->EndRecPtr);
+                                fflush(stdout);
+                                XlogRedoSinglePage(xlogreader, &tempTag, &buff);
+                                printf("%s %d, after redo, buffer lsn = %lu\n", __func__, __LINE__, PageGetLSN((Page) BufferGetPage(buff)));
+                                fflush(stdout);
+                                // Now release and unlock the buff
+                                UnlockReleaseBuffer(buff);
+                            }
                         }
 
-                        break;
-                    default:
-                        break;
+                        if(tagNum > 0)
+                            free(bufferTagList);
+                    }
                 }
 
-
-                bool parsed = false;
-                switch (record->xl_rmid) {
-                    case RM_XLOG_ID:
-                        parsed = polar_xlog_idx_save(xlogreader);
-                        break;
-                    case RM_HEAP2_ID:
-                        parsed = polar_heap2_idx_save(xlogreader);
-                        break;
-                    case RM_HEAP_ID:
-                        parsed = polar_heap_idx_save(xlogreader);
-                        break;
-                    case RM_BTREE_ID:
-                        parsed = polar_btree_idx_save(xlogreader);
-                        break;
-                    case RM_HASH_ID:
-                        parsed = polar_hash_idx_save(xlogreader);
-                        break;
-                    case RM_GIN_ID:
-                        parsed = polar_gin_idx_save(xlogreader);
-                        break;
-                    case RM_GIST_ID:
-                        parsed = polar_gist_idx_save(xlogreader);
-                        break;
-                    case RM_SEQ_ID:
-                        parsed = polar_seq_idx_save(xlogreader);
-                        break;
-                    case RM_SPGIST_ID:
-                        parsed = polar_spg_idx_save(xlogreader);
-                        break;
-                    case RM_BRIN_ID:
-                        parsed = polar_brin_idx_save(xlogreader);
-                        break;
-                    case RM_GENERIC_ID:
-                        parsed = polar_generic_idx_save(xlogreader);
-                        break;
-                    default:
-                        break;
-                }
-				if(parsed) {
-					printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
-					fflush(stdout);
-				} else {
-                    printf("%s need redo immediately\n", __func__ );
-                    fflush(stdout);
-                }
-
-                if(!parsed)
-                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
 
 				// Debug Info
 //				int block_id;
@@ -12961,4 +13015,12 @@ void
 XLogRequestWalReceiverReply(void)
 {
 	doRequestWalReceiverReply = true;
+}
+
+uint64_t GetLogWrtResultLsn(void)
+{
+    if(WalRcv && WalRcv->flushedUpto > XLogCtl->LogwrtResult.Flush)
+        return WalRcv->flushedUpto;
+    else
+        return XLogCtl->LogwrtResult.Flush;
 }

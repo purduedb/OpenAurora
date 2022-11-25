@@ -104,19 +104,19 @@ service DataPageAccess {
    * field lists in struct or exception definitions.
    */
 
-   _Page ReadBufferCommon(1:_Smgr_Relation _reln, 2:i32 _relpersistence, 3:i32 _forknum, 4:i32 _blknum, 5:i32 _readBufferMode),
+   _Page ReadBufferCommon(1:_Smgr_Relation _reln, 2:i32 _relpersistence, 3:i32 _forknum, 4:i32 _blknum, 5:i32 _readBufferMode, 6:i64 _lsn),
 
-   _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum),
+   _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum, 4:i64 _lsn),
 
-   i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum),
+   i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _lsn),
 
-   i32 RpcMdExists(1:_Smgr_Relation _reln, 2:i32 _forknum),
+   i32 RpcMdExists(1:_Smgr_Relation _reln, 2:i32 _forknum, 4:i64 _lsn),
 
-   void RpcMdCreate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _isRedo),
+   void RpcMdCreate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _isRedo, 4:i64 _lsn),
 
-   void RpcMdExtend(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum, 4:_Page _buff, 5:i32 skipFsync), 
+   void RpcMdExtend(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum, 4:_Page _buff, 5:i32 skipFsync, 6:i64 _lsn), 
    
-   void RpcTruncate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum),
+   void RpcTruncate(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i32 _blknum, 4:i64 _lsn),
    /**
     * This method has a oneway modifier. That means the client only makes
     * a request and does not listen for any response at all. Oneway methods

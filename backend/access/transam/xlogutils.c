@@ -462,15 +462,21 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 	smgrcreate(smgr, forknum, true);
 
 	lastblock = smgrnblocks(smgr, forknum);
+    printf("%s %d, mdnblock=%u, target=%u\n", __func__ , __LINE__, lastblock, blkno);
+    fflush(stdout);
 
-	if (blkno < lastblock)
+    if (blkno < lastblock)
 	{
+        printf("%s %d, start find page in buffer, mdnblock=%u, target=%u\n", __func__ , __LINE__, lastblock, blkno);
+        fflush(stdout);
 		/* page exists in file */
 		buffer = ReadBufferWithoutRelcache(rnode, forknum, blkno,
 										   mode, NULL);
 	}
 	else
 	{
+        printf("%s %d, didn't find page in buffer\n", __func__ , __LINE__);
+        fflush(stdout);
 		/* hm, page doesn't exist in file */
 		if (mode == RBM_NORMAL)
 		{
@@ -523,6 +529,8 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 			return InvalidBuffer;
 		}
 	}
+    uint64_t lsn = PageGetLSN((Page) BufferGetPage(buffer));
+    printf("%s %d, find page with lsn = %lu\n", __func__ , __LINE__, lsn);
 
 	return buffer;
 }
