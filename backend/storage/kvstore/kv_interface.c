@@ -26,6 +26,9 @@ rocksdb_t *db = NULL;
 // $SpcID_$DbID_$RelID_$ForkNum_$BlkNum_$LSN
 #define ROCKSDB_PAGE_VERSION_KEY  ("rocks_page_%lu_%lu_%lu_%d_%u_%lu\0")
 
+// $LSN
+#define ROCKSDB_XLOG_KEY ("rocks_xlog_%lu\0")
+
 #define MAX_PATH_LEN (256)
 
 char KvStorePath[MAXPGPATH];
@@ -169,6 +172,23 @@ int KvDelete(char *key) {
     return 0;
 }
 
+
+int PutXlogWithLsn(XLogRecPtr lsn, XLogRecord* record) {
+
+    char tempKey[MAX_PATH_LEN];
+    snprintf(tempKey, sizeof(tempKey), ROCKSDB_XLOG_KEY, lsn);
+
+    return KvPut(tempKey, (char*)record, record->xl_tot_len);
+}
+
+int GetXlogWithLsn(XLogRecPtr lsn, XLogRecord** record, size_t* record_size) {
+    char tempKey[MAX_PATH_LEN];
+    snprintf(tempKey, sizeof(tempKey), ROCKSDB_XLOG_KEY, lsn);
+
+    KvGet(tempKey, (char**)record, record_size);
+    return *record_size > 0;
+}
+
 // Put list:
 //      input: list, listNum
 //      Set listNum to rocksdb
@@ -187,7 +207,9 @@ int GetListWithKey(char* key, uint64_t** listPointer, int* listSize) {
     size_t size;
     KvGet(key, (char**)listPointer, &size);
     *listSize = size / sizeof(uint64_t);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s get values size is %lu, listSize = %d\n", __func__ , size, *listSize);
+#endif
     // If found, return 1. Else, return 0
     return (size>0);
 }
@@ -251,6 +273,14 @@ int FindListLowerBound(uint64_t* uintList, uint64_t targetLsn, uint64_t *foundLs
     return 1;
 }
 
+void DeletePageFromRocksdb(BufferTag bufferTag, uint64_t lsn) {
+    char tempKey[MAX_PATH_LEN];
+    snprintf(tempKey, sizeof(tempKey), ROCKSDB_PAGE_VERSION_KEY, bufferTag.rnode.spcNode,
+             bufferTag.rnode.dbNode, bufferTag.rnode.relNode, bufferTag.forkNum, bufferTag.blockNum, lsn);
+
+    KvDelete(tempKey);
+}
+
 // pageContent should be freed by caller functions
 // return value: found->1, not found->0
 int GetPageFromRocksdb(BufferTag bufferTag, uint64_t lsn, char** pageContent) {
@@ -275,6 +305,8 @@ void PutPage2Rocksdb(BufferTag bufferTag, uint64_t lsn, char* pageContent) {
     char tempKey[MAX_PATH_LEN];
     snprintf(tempKey, sizeof(tempKey), ROCKSDB_PAGE_VERSION_KEY, bufferTag.rnode.spcNode,
              bufferTag.rnode.dbNode, bufferTag.rnode.relNode, bufferTag.forkNum, bufferTag.blockNum, lsn);
+    printf("%s %d, key = %s\n", __func__ , __LINE__, tempKey);
+    fflush(stdout);
 
     KvPut(tempKey, pageContent, BLCKSZ);
 
@@ -282,27 +314,35 @@ void PutPage2Rocksdb(BufferTag bufferTag, uint64_t lsn, char* pageContent) {
 }
 
 void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s 2Starts\n", __func__ );
     fflush(stdout);
+#endif
 
     char tempKey[MAX_PATH_LEN];
     snprintf(tempKey, sizeof(tempKey), ROCKSDB_LSN_LIST_KEY, bufferTag.rnode.spcNode,
             bufferTag.rnode.dbNode, bufferTag.rnode.relNode, bufferTag.forkNum, bufferTag.blockNum);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("tempKey = %s\n", tempKey);
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     int listSize;
     uint64_t *int64List;
     int found = GetListWithKey(tempKey, &int64List, &listSize);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, old_list_size = %d\n", __func__ , __LINE__, listSize);
     fflush(stdout);
+#endif
     // Create a new version list, if no list exist
     if(!found) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         uint64_t newList[8];
         // Insert the first lsn to list
         newList[2] = lsn;
@@ -314,8 +354,10 @@ void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
         PutListWithKey(tempKey, newList, 3);
         return;
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     // Insert new element to rocksdb
 
@@ -325,8 +367,10 @@ void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
         return;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
     // Assign a new lsn list
     uint64_t *extendList = (uint64_t*) malloc( (listSize+1) * sizeof(uint64_t) );
     memcpy(extendList, int64List, listSize*sizeof(uint64_t));
@@ -337,23 +381,31 @@ void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
     // Add new element to extendList
     extendList[listSize] = lsn;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
     PutListWithKey(tempKey, extendList, listSize+1);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
     free(int64List);
     free(extendList);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Ends\n", __func__ );
     fflush(stdout);
+#endif
     return;
 }
 
 void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start \n", __func__ );
     fflush(stdout);
+#endif
 
     BufferTag tag;
 
@@ -374,8 +426,10 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
 
     InsertLsn2RocksdbList(tag, record->ReadRecPtr);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Ends \n", __func__ );
     fflush(stdout);
+#endif
     return;
 }
 

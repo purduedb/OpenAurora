@@ -395,6 +395,8 @@ WalRedoMain(int argc, char *argv[],
          * (3) read a command (loop blocks here)
          */
         firstchar = ReadRedoCommand(&input_message);
+        printf("%s %d start \n", __func__ , __LINE__);
+        fflush(stdout);
         switch (firstchar)
         {
             case 'D':
@@ -769,6 +771,9 @@ BeginRedoForBlock(StringInfo input_message)
 //              then, rpc server can pass the xlog to this standalone process.
 static void
 ApplyOneXlog(StringInfo input_message) {
+    printf("%s %d, start \n", __func__ , __LINE__);
+    fflush(stdout);
+
     RelFileNode rnode;
     ForkNumber forknum;
     BlockNumber blknum;
@@ -776,6 +781,7 @@ ApplyOneXlog(StringInfo input_message) {
     Buffer		buf;
     Page		page;
     int64_t     lsn;
+    XLogRecord * record;
 
     /*
       * message format:
@@ -807,10 +813,26 @@ ApplyOneXlog(StringInfo input_message) {
     UnlockReleaseBuffer(buf);
 
     // Replay lsn which related with this page
-    XLogRecord * record;
     char *err_msg;
+    record = (XLogRecord *) pq_getmsgbytes(input_message, sizeof(XLogRecord));
+    printf("%s %d, get record info, record total length is %u\n", __func__ , __LINE__, record->xl_tot_len);
+    fflush(stdout);
+
+    int nleft = input_message->len - input_message->cursor;
+    if (record->xl_tot_len != sizeof(XLogRecord) + nleft)
+        elog(ERROR, "mismatch between record (%d) and message size (%d)",
+             record->xl_tot_len, (int) sizeof(XLogRecord) + nleft);
+
     XLogBeginRead(reader_state, lsn);
-    record = XLogReadRecord(reader_state, &err_msg);
+    reader_state->ReadRecPtr = lsn;
+    reader_state->decoded_record = record;
+
+    if (!DecodeXLogRecord(reader_state, record, &err_msg))
+        elog(ERROR, "failed to decode WAL record: %s", err_msg);
+
+
+
+//    record = XLogReadRecord(reader_state, &err_msg);
 
     printf("%s Read record succeed, ready to replay\n", __func__ );
     fflush(stdout);
@@ -872,6 +894,8 @@ ApplyOneXlog(StringInfo input_message) {
     // If not found polar redo function, do regular original redo
     if(action == BLK_NOTFOUND) {
         RmgrTable[record->xl_rmid].rm_redo(reader_state);
+    } else {
+        UnlockReleaseBuffer(buf);
     }
 
     // For now, redo completed, find the page from buffer pool
@@ -898,6 +922,7 @@ ApplyOneXlog(StringInfo input_message) {
         tot_written += rc;
     } while (tot_written < BLCKSZ);
 
+    ReleaseBuffer(buf);
     printf("%s LINE=%d \n", __func__ , __LINE__);
     fflush(stdout);
 
@@ -905,8 +930,6 @@ ApplyOneXlog(StringInfo input_message) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
-    if(action != BLK_NOTFOUND)
-        UnlockReleaseBuffer(buf);
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
     return;

@@ -75,6 +75,7 @@
 #include "storage/smgr.h"
 #include "storage/spin.h"
 #include "storage/sync.h"
+#include "storage/kv_interface.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/memutils.h"
@@ -159,6 +160,70 @@ const struct config_enum_entry sync_method_options[] = {
 #endif
 	{NULL, 0, false}
 };
+
+#define DEBUG_TIMING 1
+
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <stdlib.h>
+
+int initialized2 = 0;
+struct timeval output_timing2;
+
+pthread_mutex_t timing_mutex2 = PTHREAD_MUTEX_INITIALIZER;
+
+long startupTime[20];
+long startupCount[20];
+
+void PrintTimingResult() {
+    struct timeval now;
+
+    if(!initialized2){
+        gettimeofday(&output_timing2, NULL);
+        memset(startupCount, 0, 20*sizeof(startupCount[0]));
+        memset(startupTime, 0, 20*sizeof(startupTime[0]));
+        initialized2 = 1;
+
+    }
+
+
+    gettimeofday(&now, NULL);
+
+    if(now.tv_sec-output_timing2.tv_sec >= 5) {
+        for(int i = 0 ; i < 20; i++) {
+            if(startupCount[i] == 0)
+                continue;
+            printf("startup_%d = %ld\n",i,  startupTime[i]/startupCount[i]);
+            printf("total_startup_%d = %ld, count = %ld\n",i,  startupTime[i], startupCount[i]);
+            fflush(stdout);
+        }
+        output_timing2 = now;
+    }
+}
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+do { \
+    gettimeofday(end_p, NULL); \
+    pthread_mutex_lock(&timing_mutex2); \
+    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec))/1000; \
+    (*global_count)++;                                                               \
+    pthread_mutex_unlock(&timing_mutex2); \
+    PrintTimingResult(); \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+
+#endif
+
+
+XLogRecPtr XLogParseUpto = 0;
 
 
 /*
@@ -7249,12 +7314,18 @@ StartupXLOG(void)
 			ereport(LOG,
 					(errmsg("redo starts at %X/%X",
 							(uint32) (ReadRecPtr >> 32), (uint32) ReadRecPtr)));
-
+#ifdef DEBUG_TIMING
+            struct timeval start, end;
+            START_TIMING(&start);
+#endif
 			/*
 			 * main redo apply loop
 			 */
 			do
 			{
+#ifdef DEBUG_TIMING
+                RECORD_TIMING(&start, &end, &(startupTime[0]), &(startupCount[0]))
+#endif
 				bool		switchedTLI = false;
 
 #ifdef WAL_DEBUG
@@ -7396,10 +7467,14 @@ StartupXLOG(void)
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
-                    printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+                    printf("%s %s %d, lsn = %lu rm = %s info = %s\n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name ,id);
                 else
-                    printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+                    printf("%s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
+
+#ifdef DEBUG_TIMING
+                RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
+#endif
 
                 if(IsRpcServer) {
                     //For the page related xlog, replay process will deal with them
@@ -7469,6 +7544,9 @@ StartupXLOG(void)
                             break;
                     }
 
+#ifdef DEBUG_TIMING
+                    RECORD_TIMING(&start, &end, &(startupTime[2]), &(startupCount[2]))
+#endif
 
                     bool parsed = false;
                     switch (record->xl_rmid) {
@@ -7510,14 +7588,31 @@ StartupXLOG(void)
                     }
                     if(parsed) {
                         printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
+                        printf("%s put xlog to rocksdb\n", __func__ );
                         fflush(stdout);
+
+                        // Save this xlog to rocksdb, for lately read by wal_redo process
+                        PutXlogWithLsn(xlogreader->ReadRecPtr, record);
                     } else {
                         printf("%s need redo immediately\n", __func__ );
                         fflush(stdout);
                     }
 
+#ifdef DEBUG_TIMING
+                    RECORD_TIMING(&start, &end, &(startupTime[3]), &(startupCount[3]))
+#endif
                     if(!parsed)
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+
+                    printf("%s %d, starts = %lu, ends = %lu \n",
+                           __func__ , __LINE__, xlogreader->ReadRecPtr, xlogreader->EndRecPtr);
+                    fflush(stdout);
+
+                    if(xlogreader->EndRecPtr > XLogParseUpto)
+                        XLogParseUpto = xlogreader->EndRecPtr;
+#ifdef DEBUG_TIMING
+                    RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
+#endif
                 } else {
                     printf("%s %d Start process xlog\n", __func__ , __LINE__);
                     fflush(stdout);

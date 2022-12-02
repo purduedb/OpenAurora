@@ -995,6 +995,8 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
     int			buf_id;
     BufferDesc *buf;
 
+    ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
+
     /* create a tag so we can lookup the buffer */
     INIT_BUFFERTAG(bufferTag, rnode, forkNumber, blockNumber);
 
@@ -1007,20 +1009,31 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
     buf_id = BufTableLookup(&bufferTag, newHash);
 
     if (buf_id >= 0) {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         /*
 		 * Found it.  Now, pin the buffer so no one can steal it from the
 		 * buffer pool, and check to see if the correct data has been loaded
 		 * into the buffer.
 		 */
         buf = GetBufferDescriptor(buf_id);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
 
-        int valid = PinBuffer(buf, NULL);
+        bool valid = PinBuffer(buf, NULL);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
 
         /* Can release the mapping lock as soon as we've pinned it */
         LWLockRelease(newPartitionLock);
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         if (!valid)
         {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
             /*
              * We can only get here if (a) someone else is still reading in
              * the page, or (b) a previous read attempt failed.  We have to
@@ -1039,9 +1052,11 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
         }
 
         // Now exclusively lock the content
-        LWLockAcquire(BufferDescriptorGetContentLock(buf),
-                      LW_EXCLUSIVE);
+//        LWLockAcquire(BufferDescriptorGetContentLock(buf),
+//                      LW_EXCLUSIVE);
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         return BufferDescriptorGetBuffer(buf);
     }
 
@@ -1658,6 +1673,9 @@ ReleaseAndReadBuffer(Buffer buffer,
 static bool
 PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 {
+    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+    fflush(stdout);
 	Buffer		b = BufferDescriptorGetBuffer(buf);
 	bool		result;
 	PrivateRefCountEntry *ref;
@@ -1743,6 +1761,9 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 static void
 PinBuffer_Locked(BufferDesc *buf)
 {
+    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+    fflush(stdout);
 	Buffer		b;
 	PrivateRefCountEntry *ref;
 	uint32		buf_state;
@@ -1781,6 +1802,9 @@ PinBuffer_Locked(BufferDesc *buf)
 static void
 UnpinBuffer(BufferDesc *buf, bool fixOwner)
 {
+    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+    fflush(stdout);
 	PrivateRefCountEntry *ref;
 	Buffer		b = BufferDescriptorGetBuffer(buf);
 
@@ -3086,6 +3110,9 @@ DropRelFileNodeBuffers(RelFileNodeBackend rnode, ForkNumber *forkNum,
 void
 DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 {
+	printf("%s nnodes = %d\n", __func__ , nnodes);
+	fflush(stdout);
+
 	int			i,
 				n = 0;
 	RelFileNode *nodes;
@@ -3108,6 +3135,8 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 			nodes[n++] = rnodes[i].node;
 	}
 
+	printf("%s %d\n", __func__ , __LINE__);
+	fflush(stdout);
 	/*
 	 * If there are no non-local relations, then we're done. Release the
 	 * memory and return.
@@ -3130,8 +3159,12 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 	if (use_bsearch)
 		pg_qsort(nodes, n, sizeof(RelFileNode), rnode_comparator);
 
+	printf("%s %d, NBuffers = %d\n", __func__ , __LINE__, NBuffers);
+	fflush(stdout);
 	for (i = 0; i < NBuffers; i++)
 	{
+		printf("%s %d\n", __func__ , __LINE__);
+		fflush(stdout);
 		RelFileNode *rnode = NULL;
 		BufferDesc *bufHdr = GetBufferDescriptor(i);
 		uint32		buf_state;
@@ -3161,17 +3194,25 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 							rnode_comparator);
 		}
 
+		printf("%s %d\n", __func__ , __LINE__);
+		fflush(stdout);
 		/* buffer doesn't belong to any of the given relfilenodes; skip it */
 		if (rnode == NULL)
 			continue;
 
 		buf_state = LockBufHdr(bufHdr);
+		printf("%s %d\n", __func__ , __LINE__);
+		fflush(stdout);
 		if (RelFileNodeEquals(bufHdr->tag.rnode, (*rnode)))
 			InvalidateBuffer(bufHdr);	/* releases spinlock */
 		else
 			UnlockBufHdr(bufHdr, buf_state);
+		printf("%s %d\n", __func__ , __LINE__);
+		fflush(stdout);
 	}
 
+	printf("%s %d\n", __func__ , __LINE__);
+	fflush(stdout);
 	pfree(nodes);
 }
 
@@ -4360,6 +4401,9 @@ rnode_comparator(const void *p1, const void *p2)
 uint32
 LockBufHdr(BufferDesc *desc)
 {
+	printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , desc->tag.rnode.spcNode,
+		   desc->tag.rnode.dbNode, desc->tag.rnode.relNode);
+	fflush(stdout);
 	SpinDelayStatus delayStatus;
 	uint32		old_buf_state;
 

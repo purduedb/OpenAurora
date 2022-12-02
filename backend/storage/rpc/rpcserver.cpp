@@ -30,6 +30,120 @@
 #include "replication/walreceiver.h"
 #include "storage/kv_interface.h"
 #include "storage/buf_internals.h"
+#include "access/xlog.h"
+
+
+#define DEBUG_TIMING 1
+
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <cstdlib>
+
+int initialized = 0;
+struct timeval output_timing;
+
+pthread_mutex_t timing_mutex = PTHREAD_MUTEX_INITIALIZER;
+long readBufferCommon[16];
+long readBufferCount[16];
+
+long nblocksTime[16];
+long nblocksCount[16];
+
+long existsTime[16];
+long existsCount[16];
+
+void PrintTimingResult() {
+    struct timeval now;
+
+    if(!initialized){
+        gettimeofday(&output_timing, NULL);
+        initialized = 1;
+
+        memset(readBufferCount, 0, 16*sizeof(readBufferCount[0]));
+        memset(readBufferCommon, 0, 16*sizeof(readBufferCommon[0]));
+
+        memset(nblocksCount, 0, 16*sizeof(nblocksCount[0]));
+        memset(nblocksTime, 0, 16*sizeof(nblocksTime[0]));
+
+        memset(existsCount, 0, 16*sizeof(existsCount[0]));
+        memset(existsTime, 0, 16*sizeof(existsTime[0]));
+    }
+
+
+    gettimeofday(&now, NULL);
+
+    if(now.tv_sec-output_timing.tv_sec >= 5) {
+        for(int i = 0 ; i < 9; i++) {
+            if(readBufferCount[i] == 0)
+                continue;
+            printf("readBufferCommon_%d = %ld\n",i,  readBufferCommon[i]/readBufferCount[i]);
+            printf("total_readBufferCommon_%d = %ld, count = %ld\n",i,  readBufferCommon[i], readBufferCount[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(nblocksCount[i] == 0)
+                continue;
+            printf("nblocks_%d = %ld\n",i,  nblocksTime[i]/nblocksCount[i]);
+            printf("nblocks_%d = %ld, count = %ld\n",i,  nblocksTime[i], nblocksCount[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(existsCount[i] == 0)
+                continue;
+            printf("exists_%d = %ld\n",i,  existsTime[i]/existsCount[i]);
+            printf("exists_%d = %ld, count = %ld\n",i,  existsTime[i], existsCount[i]);
+            fflush(stdout);
+        }
+
+        output_timing = now;
+    }
+}
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+do { \
+    gettimeofday(end_p, NULL); \
+    pthread_mutex_lock(&timing_mutex); \
+    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec))/1000; \
+    (*global_count)++;                                                               \
+    pthread_mutex_unlock(&timing_mutex); \
+    PrintTimingResult(); \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+
+#endif
+
+extern XLogRecPtr XLogParseUpto;
+
+
+void WaitParse(int64_t _lsn) {
+    if(WalRcvRunning() == false)
+        return;
+    XLogRecPtr flushUpto = WalRcv->flushedUpto;
+    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
+        printf("%s %d, parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
+               __func__ , __LINE__, _lsn, XLogParseUpto, flushUpto);
+        fflush(stdout);
+        XLogRecPtr targetLsn = flushUpto;
+        if(_lsn < targetLsn)
+            targetLsn = _lsn;
+
+        while(XLogParseUpto < targetLsn) {
+//            printf("%s get into sleep\n", __func__ );
+//            fflush(stdout);
+            usleep(200);
+        }
+    }
+}
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -56,6 +170,12 @@ public:
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn);
         fflush(stdout);
 
+        WaitParse(_lsn);
+
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
@@ -111,6 +231,9 @@ public:
 
         int found = GetListFromRocksdb(tag, &uintList, &listSize);
 
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &(readBufferCommon[0]), &(readBufferCount[0]))
+#endif
         printf("%s found = %d\n", __func__ , found);
         fflush(stdout);
         // If not found list, get the base page from standalone process
@@ -124,15 +247,20 @@ public:
 
             char* buff;
             // Try to get RpcMdExtend page as BasePage
-            if(GetPageFromRocksdb(bufferTag, -1, &buff) == 0) {
+            if(GetPageFromRocksdb(bufferTag, 0, &buff) == 0) {
+                printf("%s %d, can't find page in RocksDB-extend, try to find it from standalone\n", __func__ , __LINE__);
+                fflush(stdout);
                 // If not created by RpcMdExtend, get page from StandAlone process
                 buff = (char*) malloc(BLCKSZ);
                 GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
             }
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &(readBufferCommon[1]), &(readBufferCount[1]))
+#endif
             XLogRecPtr lsn = PageGetLSN(buff);
-
-            printf("%s %d\n", __func__ , __LINE__);
+            printf("%s %d, get basePage version, lsn = %lu\n", __func__ , __LINE__, lsn);
             fflush(stdout);
+
 
             // Create new lsn list to Rocksdb
             uint64_t lsnList[3];
@@ -142,12 +270,8 @@ public:
 
             // Put new list to Rocksdb
             PutList2Rocksdb(bufferTag, lsnList, 3);
-            printf("%s %d\n", __func__ , __LINE__);
-            fflush(stdout);
             // Put base page to Rocksdb
             PutPage2Rocksdb(bufferTag, lsn, buff);
-            printf("%s %d\n", __func__ , __LINE__);
-            fflush(stdout);
 
             // Set return value from RPC client
             _return.assign(buff, BLCKSZ);
@@ -156,6 +280,9 @@ public:
             free(uintList);
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &(readBufferCommon[2]), &(readBufferCount[2]))
+#endif
             return;
         }
          printf("%s %d\n", __func__ , __LINE__);
@@ -198,6 +325,9 @@ public:
             printf("%s LINE=%d \n", __func__ , __LINE__);
             fflush(stdout);
 
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &readBufferCommon[3], &readBufferCount[3])
+#endif
         }
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
@@ -222,6 +352,9 @@ public:
             _return.assign(basePage, BLCKSZ);
             free(uintList);
             free(basePage);
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &readBufferCommon[4], &readBufferCount[4])
+#endif
             return;
         }
 
@@ -244,6 +377,9 @@ public:
             _return.assign(targetPage, BLCKSZ);
             free(uintList);
             free(targetPage);
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &readBufferCommon[5], &readBufferCount[5])
+#endif
             return;
         }
 
@@ -278,7 +414,10 @@ public:
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
 
-         for(int i = (int)uintList[1]+2; i <= foundPos; i++) {
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &readBufferCommon[6], &readBufferCount[6])
+#endif
+        for(int i = (int)uintList[1]+2; i <= foundPos; i++) {
              printf("%s LINE=%d \n", __func__ , __LINE__);
              fflush(stdout);
 
@@ -300,8 +439,28 @@ public:
          // Update the list $currPos
         uintList[1] = foundPos+1-2;
 
+        // If at least 4 versions were replayed, we will truncate it
+        // and only reserve three versionsz
+        if (uintList[1] > 4) {
+            int needDelete = uintList[1]-3;
+
+            // We need to delete page version uintList[2+0 ... 2+needDelete-1]
+            for(int i = 2; i < 2+needDelete; i++) {
+                DeletePageFromRocksdb(bufferTag, uintList[i]);
+            }
+
+            for(int i = uintList[1]-3; i < uintList[0]; i++) {
+                uintList[2+i-needDelete] = uintList[2+i];
+            }
+            uintList[0] = uintList[0] - needDelete;
+        }
+
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &readBufferCommon[7], &readBufferCount[7])
+#endif
+//        printf("%s list size is %ld\n", __func__ , uintList[0]+2);
         // Put the updated list to rocksdb
-        PutList2Rocksdb(bufferTag, uintList, listSize);
+        PutList2Rocksdb(bufferTag, uintList, uintList[0]+2);
 
         // Set the desired page version as return value
         _return.assign(page1, BLCKSZ);
@@ -309,9 +468,12 @@ public:
         free(page1);
         free(page2);
         free(uintList);
-         printf("%s LINE=%d \n", __func__ , __LINE__);
-         fflush(stdout);
+//         printf("%s LINE=%d \n", __func__ , __LINE__);
+//         fflush(stdout);
 
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &readBufferCommon[8], &readBufferCount[8])
+#endif
 //        char buff[BLCKSZ];
 //        GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
 //        _return.assign(buff, BLCKSZ);
@@ -333,6 +495,7 @@ public:
         rnode.relNode = _reln._rel_node;
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
+        WaitParse(_lsn);
 
         char buff[BLCKSZ];
         GetPageByLsn(rnode, (ForkNumber)_forknum, _blknum, 0, buff);
@@ -378,6 +541,12 @@ public:
         // Your implementation goes here
 //        SyncReplayProcess();
 
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
+        WaitParse(_lsn);
+
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
@@ -397,9 +566,15 @@ public:
         if ( HashMapFindLowerBoundEntry(keyType, lsn, &foundLsn, &foundPageNum) ) {
             printf("%s cached, lsn = %lu, pageNum = %d\n", __func__ , foundLsn, foundPageNum);
             fflush(stdout);
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &nblocksTime[0], &nblocksCount[0])
+#endif
             return foundPageNum;
         }
 
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &nblocksTime[1], &nblocksCount[1])
+#endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
         bool insertSucc = HashMapInsertKey(keyType, lsn, relSize);
@@ -412,14 +587,22 @@ public:
 //        BlockNumber result = mdnblocks(smgrReln, (ForkNumber)_forknum);
         printf("%s end\n", __func__ );
         fflush(stdout);
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &nblocksTime[2], &nblocksCount[2])
+#endif
         return relSize;
     }
 
     int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
 
+        WaitParse(_lsn);
 //        SyncReplayProcess();
 
         RelFileNode rnode;
@@ -437,6 +620,9 @@ public:
         int foundPageNum;
         int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
         if(found) {
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &existsTime[0], &existsCount[0])
+#endif
             if(foundPageNum == -1)
                 return 0;
             else
@@ -446,6 +632,9 @@ public:
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
 
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &existsTime[1], &existsCount[1])
+#endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, _lsn);
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
         bool insertSucc = HashMapInsertKey(key, _lsn, relSize);
@@ -457,6 +646,9 @@ public:
 
         printf("%s result = %d end\n", __func__, relSize);
         fflush(stdout);
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &existsTime[2], &existsCount[2])
+#endif
         return (relSize>=0);
     }
 
@@ -466,6 +658,7 @@ public:
         fflush(stdout);
 
 //        SyncReplayProcess();
+        WaitParse(_lsn);
 
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
@@ -500,6 +693,7 @@ public:
         fflush(stdout);
 
 //        SyncReplayProcess();
+        WaitParse(_lsn);
 
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
@@ -533,8 +727,10 @@ public:
         char *extendPage = (char*) malloc(BLCKSZ);
 
         _buff.copy(extendPage, BLCKSZ);
+        printf("%s %d, parameter lsn = %lu\n", __func__ , __LINE__, PageGetLSN(extendPage));
+        fflush(stdout);
         // Put version:-1 to RocksDB
-        PutPage2Rocksdb(tag, -1, extendPage);
+        PutPage2Rocksdb(tag, 0, extendPage);
 
         free(extendPage);
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
@@ -551,6 +747,8 @@ public:
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
         fflush(stdout);
+
+        WaitParse(_lsn);
 
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;

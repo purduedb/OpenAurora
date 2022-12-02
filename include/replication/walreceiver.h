@@ -317,25 +317,43 @@ walrcv_clear_result(WalRcvExecResult *walres)
 
 	pfree(walres);
 }
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* prototypes for functions in walreceiver.c */
 extern void WalReceiverMain(void) pg_attribute_noreturn();
+
 extern void ProcessWalRcvInterrupts(void);
+
 extern void StartWalRcvThread(void);
 
 /* prototypes for functions in walreceiverfuncs.c */
 extern Size WalRcvShmemSize(void);
+
 extern void WalRcvShmemInit(void);
+
 extern void ShutdownWalRcv(void);
+
 extern bool WalRcvStreaming(void);
+
 extern bool WalRcvRunning(void);
+
 extern void RequestXLogStreaming(TimeLineID tli, XLogRecPtr recptr,
 								 const char *conninfo, const char *slotname,
 								 bool create_temp_slot);
+
 extern XLogRecPtr GetWalRcvFlushRecPtr(XLogRecPtr *latestChunkStart, TimeLineID *receiveTLI);
+
 extern XLogRecPtr GetWalRcvWriteRecPtr(void);
-extern int	GetReplicationApplyDelay(void);
-extern int	GetReplicationTransferLatency(void);
+
+extern int GetReplicationApplyDelay(void);
+
+extern int GetReplicationTransferLatency(void);
+
 extern void WalRcvForceReply(void);
 
+#ifdef __cplusplus
+}
+#endif
 #endif							/* _WALRECEIVER_H */

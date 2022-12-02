@@ -242,7 +242,9 @@ extern PGDLLIMPORT LWLockMinimallyPadded *BufferIOLWLockArray;
 extern uint32 LockBufHdr(BufferDesc *desc);
 #define UnlockBufHdr(desc, s)	\
 	do {	\
-		pg_write_barrier(); \
+	    printf("UnlockBufHdf starts, spc = %ld, db = %ld, rel = %ld\n", desc->tag.rnode.spcNode, desc->tag.rnode.dbNode, desc->tag.rnode.relNode); \
+        fflush(stdout); \
+        pg_write_barrier(); \
 		pg_atomic_write_u32(&(desc)->state, (s) & (~BM_LOCKED)); \
 	} while (0)
 

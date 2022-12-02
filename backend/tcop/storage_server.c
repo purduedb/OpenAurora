@@ -375,8 +375,15 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
     fflush(stdout);
 
+    // Read XlogRecord from RocksDB
+    XLogRecord *record;
+    size_t record_size;
+    GetXlogWithLsn(lsn, &record, &record_size);
+
+    printf("%s %d, get xlog from rocksdb, lsn = %lu, record_len = %lu\n", __func__ , __LINE__, lsn, record_size);
+    fflush(stdout);
     // ------ Send "ApplyOneLsn" request to replay process ------
-    char requestBuffer[8192+1024];
+    char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
     int32 msgLen = 0;
 
     requestBuffer[0] = 'D';
@@ -389,6 +396,7 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     msgLen += 4; // $blknum
     msgLen += 8; // $lsn
     msgLen += BLCKSZ; // $pageContent
+    msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
 
     msgLen = pg_hton32(msgLen);
 
@@ -407,13 +415,18 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     memcpy(&requestBuffer[1+4+1+4+4+4], &blockNumber, 4);
     memcpy(&requestBuffer[1+4+1+4+4+4+4], &lsn, 8);
     memcpy(&requestBuffer[1+4+1+4+4+4+4+8], origPage, BLCKSZ);
+    memcpy(&requestBuffer[1+4+1+4+4+4+4+8+BLCKSZ], record, record->xl_tot_len);
 
-    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ;
+
+    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ+record->xl_tot_len;
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
         int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
+
+    free(record);
+    free(requestBuffer);
 
     // ------- Read target page from replay process ------
     int recvLen = 0;
@@ -646,7 +659,7 @@ RpcServerMain(int argc, char *argv[],
 
     printf("%s start, pid = %d\n", __func__ , getpid());
     fflush(stdout);
-    HashMapInit(128);
+    HashMapInit(123);
 
     /***********Clean environment before exit********/
     struct sigaction catchTermSig;

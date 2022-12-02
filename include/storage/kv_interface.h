@@ -33,6 +33,11 @@ extern void PutList2Rocksdb(BufferTag bufferTag, uint64_t* listPointer, int list
 // Page related
 extern int GetPageFromRocksdb(BufferTag bufferTag, uint64_t lsn, char** pageContent);
 extern void PutPage2Rocksdb(BufferTag bufferTag, uint64_t lsn, char* pageContent);
+extern void DeletePageFromRocksdb(BufferTag bufferTag, uint64_t lsn);
+
+// Xlog related
+extern int PutXlogWithLsn(XLogRecPtr lsn, XLogRecord* record);
+extern int GetXlogWithLsn(XLogRecPtr lsn, XLogRecord** record, size_t* record_size);
 
 extern int FindListLowerBound(uint64_t* uintList, uint64_t targetLsn, uint64_t *foundLsn, uint64_t *foundPos);
 
