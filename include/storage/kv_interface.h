@@ -24,7 +24,7 @@ extern void KvPrefixCopyDir(char* , char* , const char* );
 // If list exists, insert it to list. otherwise, create a new list
 extern void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn);
 // this function will call InsertLsn2RocksdbList
-extern void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId);
+//extern void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId);
 
 // Lsn list related
 extern int GetListFromRocksdb(BufferTag bufferTag, uint64_t** listPointer, int* listSize);

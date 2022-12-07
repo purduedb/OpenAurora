@@ -12,6 +12,7 @@
 #include "storage/standby.h"
 #include "storage/kv_interface.h"
 #include "utils/memutils.h"
+#include "access/xlog.h"
 
 //static void
 //polar_spg_redo_add_node_save(polar_logindex_redo_ctl_t instance, XLogReaderState *record)

@@ -42,6 +42,9 @@
 #include "access/logindex_hashmap.h"
 #include "storage/kv_interface.h"
 
+extern HashMap pageVersionHashMap;
+extern HashMap relSizeHashMap;
+
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
     KvClose();
@@ -52,6 +55,13 @@ int IsRpcServer = 0;
 pid_t WalRcvPid = 0;
 pid_t StartupPid = 0;
 
+#define DEBUG_TIMING
+#ifdef DEBUG_TIMING
+struct timeval output_timing3;
+long walRedoWaitLockTime = 0;
+int initialized3 = 0;
+int timing_count = 0;
+#endif
 
 static void
 getInstallationPaths(const char *argv0)
@@ -217,7 +227,9 @@ sigusr1_handler(SIGNAL_ARGS) {
 
 static void
 proc_die(SIGNAL_ARGS) {
-   exit(0);
+    HashMapDestroy(pageVersionHashMap);
+    HashMapDestroy(relSizeHashMap);
+    exit(0);
 }
 
 int serverPipe[2];
@@ -281,7 +293,30 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     printf("%s start \n", __func__ );
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
     pthread_mutex_lock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    timing_count++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     char requestBuffer[1024];
@@ -369,7 +404,32 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
 // targetPage should be allocated by caller function
 // This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
 void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* origPage, char* targetPage) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
     pthread_mutex_lock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    timing_count++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
+        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+//    pthread_mutex_lock(&replayProcessMutex);
 
     printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
@@ -444,7 +504,33 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 }
 
 void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, char* buffer) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
     pthread_mutex_lock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    timing_count++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
+        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+
+//    pthread_mutex_lock(&replayProcessMutex);
     // ------- Send "GetPage" request to replay process ------
     char requestBuffer[1024];
     int32 msgLen = 0;
@@ -493,9 +579,35 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 }
 
 void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* buffer) {
-
-
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
     pthread_mutex_lock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    timing_count++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
+        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+
+
+//    pthread_mutex_lock(&replayProcessMutex);
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     char requestBuffer[1024];
@@ -575,8 +687,33 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 }
 
 void SyncReplayProcess() {
-
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
     pthread_mutex_lock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    timing_count++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
+        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+
+//    pthread_mutex_lock(&replayProcessMutex);
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     XLogRecPtr lsn = 0;
@@ -659,7 +796,11 @@ RpcServerMain(int argc, char *argv[],
 
     printf("%s start, pid = %d\n", __func__ , getpid());
     fflush(stdout);
-    HashMapInit(123);
+    HashMapInit(&pageVersionHashMap, 123);
+    HashMapInit(&relSizeHashMap, 123);
+    printf("%s HashMapAddress = %p\n", __func__ , pageVersionHashMap);
+    printf("%s HashMapAddress = %p\n", __func__ , relSizeHashMap);
+    fflush(stdout);
 
     /***********Clean environment before exit********/
     struct sigaction catchTermSig;

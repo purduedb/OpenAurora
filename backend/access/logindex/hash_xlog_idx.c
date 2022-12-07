@@ -9,6 +9,7 @@
 #include "storage/standby.h"
 #include "access/polar_logindex.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 //TODO: Here skip many parse functions for hash index
 

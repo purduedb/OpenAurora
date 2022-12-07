@@ -20,6 +20,7 @@
 #include "commands/sequence.h"
 #include "storage/buf_internals.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 static XLogRedoAction
 polar_seq_xlog_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)

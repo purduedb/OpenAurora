@@ -11,6 +11,7 @@
 #include "utils/memutils.h"
 
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 
 /*

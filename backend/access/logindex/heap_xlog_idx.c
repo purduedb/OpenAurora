@@ -14,6 +14,7 @@
 #include "storage/standby.h"
 #include "access/polar_logindex.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 static XLogRedoAction
 polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
@@ -188,6 +189,9 @@ static XLogRedoAction
 polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
     XLogRecPtr  lsn = record->EndRecPtr;
+    printf("%s %d, record lsn = %lu\n", __func__ , __LINE__, lsn);
+    fflush(stdout);
+
     xl_heap_insert *xlrec = (xl_heap_insert *) XLogRecGetData(record);
     Page        page;
     union
@@ -220,6 +224,9 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
     if (BUFFERTAGS_EQUAL(*tag, tag0))
     {
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+
         ItemPointerSetBlockNumber(&target_tid, tag0.blockNum);
         ItemPointerSetOffsetNumber(&target_tid, xlrec->offnum);
 
@@ -240,6 +247,9 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
         if (action == BLK_NEEDS_REDO)
         {
+            printf("%s %d, action need redo\n", __func__ , __LINE__);
+            fflush(stdout);
+
             Size        datalen;
             char       *data;
 
@@ -1176,12 +1186,12 @@ polar_heap_insert_get_bufftag_list(XLogReaderState *record, BufferTag** bufferta
 
     if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED) {
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     *tagNum = tagCount;

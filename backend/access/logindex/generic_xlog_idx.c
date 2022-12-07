@@ -7,6 +7,7 @@
 #include "storage/buf_internals.h"
 #include "access/polar_logindex.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 bool
 polar_generic_idx_save(XLogReaderState *record)

@@ -401,37 +401,37 @@ void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
     return;
 }
 
-void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
-#ifdef ENABLE_DEBUG_INFO
-    printf("%s Start \n", __func__ );
-    fflush(stdout);
-#endif
-
-    BufferTag tag;
-
-    if(record->max_block_id < recordBlockId) {
-        printf("%s parameter block id %d is larger than max_block_id %d\n", __func__, recordBlockId, record->max_block_id );
-        return;
-    }
-
-    if(!XLogRecHasBlockRef(record, recordBlockId)) {
-        printf("%s this block is not used\n", __func__ );
-        return;
-    }
-
-    if(!XLogRecGetBlockTag(record, recordBlockId, &tag.rnode, &tag.forkNum, &tag.blockNum)) {
-        printf("%s get block tag failed \n", __func__ );
-        return;
-    }
-
-    InsertLsn2RocksdbList(tag, record->ReadRecPtr);
-
-#ifdef ENABLE_DEBUG_INFO
-    printf("%s Ends \n", __func__ );
-    fflush(stdout);
-#endif
-    return;
-}
+//void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
+//#ifdef ENABLE_DEBUG_INFO
+//    printf("%s Start \n", __func__ );
+//    fflush(stdout);
+//#endif
+//
+//    BufferTag tag;
+//
+//    if(record->max_block_id < recordBlockId) {
+//        printf("%s parameter block id %d is larger than max_block_id %d\n", __func__, recordBlockId, record->max_block_id );
+//        return;
+//    }
+//
+//    if(!XLogRecHasBlockRef(record, recordBlockId)) {
+//        printf("%s this block is not used\n", __func__ );
+//        return;
+//    }
+//
+//    if(!XLogRecGetBlockTag(record, recordBlockId, &tag.rnode, &tag.forkNum, &tag.blockNum)) {
+//        printf("%s get block tag failed \n", __func__ );
+//        return;
+//    }
+//
+//    InsertLsn2RocksdbList(tag, record->ReadRecPtr);
+//
+//#ifdef ENABLE_DEBUG_INFO
+//    printf("%s Ends \n", __func__ );
+//    fflush(stdout);
+//#endif
+//    return;
+//}
 
 void MarshalIntList(int* numList, int size, char **p) {
     *p = malloc(sizeof(int) * (size+1));

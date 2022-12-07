@@ -10,6 +10,7 @@
 #include "storage/buf_internals.h"
 #include "storage/standby.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 /*
  * _bt_clear_incomplete_split -- clear INCOMPLETE_SPLIT flag on a page

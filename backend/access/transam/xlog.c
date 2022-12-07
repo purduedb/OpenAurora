@@ -90,6 +90,9 @@ extern uint32 bootstrap_data_checksum_version;
 
 extern int IsRpcServer;
 extern bool	am_wal_redo_postgres;
+
+extern HashMap pageVersionHashMap;
+extern HashMap relSizeHashMap;
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
 #define RECOVERY_COMMAND_DONE	"recovery.done"
@@ -4415,8 +4418,10 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
 	XLogRecord *record;
 	XLogPageReadPrivate *private = (XLogPageReadPrivate *) xlogreader->private_data;
@@ -5173,7 +5178,9 @@ XLOGShmemSize(void)
 void
 XLOGShmemInit(void)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start\n", __func__ );
+#endif
 	bool		foundCFile,
 				foundXLog;
 	char	   *allocptr;
@@ -5206,7 +5213,9 @@ XLOGShmemInit(void)
 
 	if (foundCFile || foundXLog)
 	{
+#ifdef ENABLE_DEBUG_INFO
 	    printf("%s, checkpoint=%ld\n", __func__ , ControlFile->checkPoint);
+#endif
 		/* both should be present or neither */
 		Assert(foundCFile && foundXLog);
 
@@ -5225,12 +5234,16 @@ XLOGShmemInit(void)
 	 */
 	if (localControlFile)
 	{
+#ifdef ENABLE_DEBUG_INFO
 	    printf("%s, localControlFile, checkpoint =%ld\n", __func__ , localControlFile->checkPoint);
+#endif
 		memcpy(ControlFile, localControlFile, sizeof(ControlFileData));
 		pfree(localControlFile);
 	}
 
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s, SetControl checkpoint finished\n", __func__ );
+#endif
 	/*
 	 * Since XLogCtlData contains XLogRecPtr fields, its sizeof should be a
 	 * multiple of the alignment for same, so no extra alignment padding is
@@ -5278,8 +5291,10 @@ XLOGShmemInit(void)
 	SpinLockInit(&XLogCtl->Insert.insertpos_lck);
 	SpinLockInit(&XLogCtl->info_lck);
 	SpinLockInit(&XLogCtl->ulsn_lck);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s InitSharedLatch for recoveryWakeupLatch\n", __func__ );
     fflush(stdout);
+#endif
 	InitSharedLatch(&XLogCtl->recoveryWakeupLatch);
 }
 
@@ -6403,8 +6418,10 @@ ReadControlFileTimeLine(void) {
 		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
 	else
 		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s set recoveryTargetTLI to %u\n", __func__ , recoveryTargetTLI);
 	fflush(stdout);
+#endif
 }
 
 /*
@@ -6415,7 +6432,10 @@ StartupXLOG(void)
 {
     if(IsRpcServer)
         sleep(5);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start\n", __func__ );
+    fflush(stdout);
+#endif
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
 	bool		wasShutdown;
@@ -6452,7 +6472,10 @@ StartupXLOG(void)
 	if (!XRecOffIsValid(ControlFile->checkPoint))
 		ereport(FATAL,
 				(errmsg("control file contains invalid checkpoint location")));
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s checkPoint = %ld\n", __func__ , ControlFile->checkPoint);
+    fflush(stdout);
+#endif
 
 	switch (ControlFile->state)
 	{
@@ -6540,8 +6563,10 @@ StartupXLOG(void)
 		SyncDataDirectory();
 	}
 
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s %d recoveryTLI = %u\n", __func__ , __LINE__, recoveryTargetTLI);
 	fflush(stdout);
+#endif
 	/*
 	 * Initialize on the assumption we want to recover to the latest timeline
 	 * that's active according to pg_control.
@@ -6551,11 +6576,15 @@ StartupXLOG(void)
 		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
 	else
 		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s %d recoveryTLI = %u\n", __func__ , __LINE__, recoveryTargetTLI);
 	fflush(stdout);
+#endif
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	/*
 	 * Check for signal files, and if so set up state for offline recovery
 	 */
@@ -6597,7 +6626,9 @@ StartupXLOG(void)
 	 * recovery.
 	 */
 	if (ArchiveRecoveryRequested) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s OwnLatch\n", __func__ );
+#endif
         OwnLatch(&XLogCtl->recoveryWakeupLatch);
 
     }
@@ -6617,8 +6648,10 @@ StartupXLOG(void)
 				 errdetail("Failed while allocating a WAL reading processor.")));
 	xlogreader->system_identifier = ControlFile->system_identifier;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	/*
 	 * Allocate two page buffers dedicated to WAL consistency checks.  We do
 	 * it this way, rather than just making static arrays, for two reasons:
@@ -6647,8 +6680,10 @@ StartupXLOG(void)
 		 * When a backup_label file is present, we want to roll forward from
 		 * the checkpoint it identifies, rather than using pg_control.
 		 */
+#ifdef ENABLE_DEBUG_INFO
 		printf("%s %d, checkPointLoc = %ld\n", __func__ , __LINE__, checkPointLoc);
 		fflush(stdout);
+#endif
 		record = ReadCheckpointRecord(xlogreader, checkPointLoc, 0, true);
 		if (record != NULL)
 		{
@@ -6667,7 +6702,9 @@ StartupXLOG(void)
 			 */
 			if (checkPoint.redo < checkPointLoc)
 			{
+#ifdef ENABLE_DEBUG_INFO
 			    printf("%s %d, checkpoint.redo = %ld\n", __func__ , __LINE__, checkPoint.redo);
+#endif
 				XLogBeginRead(xlogreader, checkPoint.redo);
 				if (!ReadRecord(xlogreader, LOG, false))
 					ereport(FATAL,
@@ -6785,7 +6822,9 @@ StartupXLOG(void)
 		/* Get the last valid checkpoint record. */
 		checkPointLoc = ControlFile->checkPoint;
 		RedoStartLSN = ControlFile->checkPointCopy.redo;
+#ifdef ENABLE_DEBUG_INFO
 		printf("%s %d, redoStartLSN = %ld\n", __func__ , __LINE__, RedoStartLSN);
+#endif
 		record = ReadCheckpointRecord(xlogreader, checkPointLoc, 1, true);
 		if (record != NULL)
 		{
@@ -6808,8 +6847,10 @@ StartupXLOG(void)
 		wasShutdown = ((record->xl_info & ~XLR_INFO_MASK) == XLOG_CHECKPOINT_SHUTDOWN);
 	}
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	/*
 	 * Clear out any old relcache cache files.  This is *necessary* if we do
 	 * any WAL replay, since that would probably result in the cache files
@@ -6852,8 +6893,10 @@ StartupXLOG(void)
 						   (uint32) switchpoint)));
 	}
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	/*
 	 * The min recovery point should be part of the requested timeline's
 	 * history, too.
@@ -6868,11 +6911,15 @@ StartupXLOG(void)
 						(uint32) ControlFile->minRecoveryPoint,
 						ControlFile->minRecoveryPointTLI)));
 
+#ifdef ENABLE_DEBUG_INFO
 	printf("%s %d, LastRec = %ld\n",__func__ , __LINE__, LastRec);
+#endif
 	LastRec = RecPtr = checkPointLoc;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
 	ereport(DEBUG1,
 			(errmsg_internal("redo record is at %X/%X; shutdown %s",
@@ -7464,6 +7511,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
+#ifdef ENABLE_DEBUG_INFO
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7471,6 +7519,7 @@ StartupXLOG(void)
                 else
                     printf("%s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
                 RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
@@ -7478,7 +7527,9 @@ StartupXLOG(void)
 
                 if(IsRpcServer) {
                     //For the page related xlog, replay process will deal with them
+#ifdef ENABLE_DEBUG_INFO
                     printf("%s starts to process xlog, rmid = %d, info = %d\n", __func__ , record->xl_rmid, XLogRecGetInfo(xlogreader) & ~XLR_INFO_MASK);
+#endif
 
                     // Deal With HEAP: add VM blocks to xlogreader->decoded_block
                     polar_xlog_decode_data(xlogreader);
@@ -7500,19 +7551,24 @@ StartupXLOG(void)
                         case RM_BRIN_ID:
                         case RM_GENERIC_ID:
 
+#ifdef ENABLE_DEBUG_INFO
                             printf("%s max_block_id = %d\n", __func__ , xlogreader->max_block_id);
+#endif
                             if(xlogreader->max_block_id >= 0) {
                                 for(int i = 0; i <= xlogreader->max_block_id; i++) {
                                     if(!xlogreader->blocks[i].in_use)
                                         continue;
 
-                                    struct KeyType key;
+                                    KeyType key;
                                     key.SpcID = xlogreader->blocks[i].rnode.spcNode;
                                     key.DbID = xlogreader->blocks[i].rnode.dbNode;
                                     key.RelID = xlogreader->blocks[i].rnode.relNode;
                                     key.ForkNum = xlogreader->blocks[i].forknum;
+                                    key.BlkNum = -1;
+#ifdef ENABLE_DEBUG_INFO
                                     printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
                                            key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
+#endif
 
                                     uint64_t foundLsn;
                                     int foundPageNum;
@@ -7521,18 +7577,22 @@ StartupXLOG(void)
                                     // Then we read from standalone process ($basePageNum),
                                     // 		If $basePageNum > blocks[i].blkno+1, then insert $basePageNum
                                     //		Else, insert blocks[i].blkno+1
-                                    int found = HashMapFindLowerBoundEntry(key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
+
+                                    //TODO: do we need FindLowerBound? If the lsn is monotonic increasing, we just need to compare it with the last item,
+                                    //      if the xlog's blockno is larger, then insert it.
+                                    int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
                                     if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
-                                        if (HashMapInsertKey(key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1) )
+                                        if (HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1, true) )
                                             printf("%s HashMap insert succeed\n", __func__ );
                                         else
                                             printf("%s HashMap insert failed\n", __func__ );
                                     } else if(!found) {
+                                        // TODO: Could this merge with RocksDb creating list, since we will migrate list from RocksDb to inMem hashTable
                                         int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
                                         if(baseRelSize > xlogreader->blocks[i].blkno+1) {
-                                            HashMapInsertKey(key, xlogreader->ReadRecPtr, baseRelSize);
+                                            HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, baseRelSize, true);
                                         } else {
-                                            HashMapInsertKey(key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1);
+                                            HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1, true);
                                         }
                                     }
                                 }
@@ -7587,15 +7647,19 @@ StartupXLOG(void)
                             break;
                     }
                     if(parsed) {
+#ifdef ENABLE_DEBUG_INFO
                         printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
                         printf("%s put xlog to rocksdb\n", __func__ );
                         fflush(stdout);
+#endif
 
                         // Save this xlog to rocksdb, for lately read by wal_redo process
                         PutXlogWithLsn(xlogreader->ReadRecPtr, record);
                     } else {
+#ifdef ENABLE_DEBUG_INFO
                         printf("%s need redo immediately\n", __func__ );
                         fflush(stdout);
+#endif
                     }
 
 #ifdef DEBUG_TIMING
@@ -7604,18 +7668,28 @@ StartupXLOG(void)
                     if(!parsed)
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
 
+#ifdef ENABLE_DEBUG_INFO
                     printf("%s %d, starts = %lu, ends = %lu \n",
                            __func__ , __LINE__, xlogreader->ReadRecPtr, xlogreader->EndRecPtr);
                     fflush(stdout);
+#endif
 
-                    if(xlogreader->EndRecPtr > XLogParseUpto)
+                    if(xlogreader->EndRecPtr > XLogParseUpto) {
                         XLogParseUpto = xlogreader->EndRecPtr;
+#ifdef ENABLE_DEBUG_INFO
+                        printf("%s %d , set XLogParseUpto as %lu\n", __func__ , __LINE__, XLogParseUpto);
+                        fflush(stdout);
+#endif
+
+                    }
 #ifdef DEBUG_TIMING
                     RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
 #endif
                 } else {
+#ifdef ENABLE_DEBUG_INFO
                     printf("%s %d Start process xlog\n", __func__ , __LINE__);
                     fflush(stdout);
+#endif
                     // Deal With HEAP: add VM blocks to xlogreader->decoded_block
                     polar_xlog_decode_data(xlogreader);
 
@@ -7623,38 +7697,52 @@ StartupXLOG(void)
                     int tagNum;
                     int parsed = GetXlogBuffTagList(xlogreader, &bufferTagList, &tagNum);
                     if(!parsed) { // If not related with buffer pool
+#ifdef ENABLE_DEBUG_INFO
                         printf("%s %d, immediately reply the xlog\n", __func__ , __LINE__);
                         fflush(stdout);
+#endif
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                     } else {
+#ifdef ENABLE_DEBUG_INFO
                         printf("%s %d, need single redo for pages\n", __func__ , __LINE__);
                         fflush(stdout);
+#endif
                         // Iterate all blocks in bufferTag
                         for(int i = 0; i < tagNum; i++) {
                             BufferTag tempTag = bufferTagList[i];
+#ifdef ENABLE_DEBUG_INFO
                             printf("%s %d, find page in buffer, spc=%u, db=%u, rel=%u, fork=%d, blk=%u\n", __func__ , __LINE__,
                                    tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum);
                             fflush(stdout);
+#endif
                             // Find and lock the buffer content
                             // TODO, xlogRedoSinglePage will lock again
                             Buffer buff = FindPageInBuffer(tempTag.rnode, tempTag.forkNum, tempTag.blockNum);
+#ifdef ENABLE_DEBUG_INFO
                             printf("%s %d\n", __func__ , __LINE__);
                             fflush(stdout);
+#endif
 
                             // If buffer pool doesn't contain this page, just ignore (no redo)
                             if(buff == InvalidBuffer) {
+#ifdef ENABLE_DEBUG_INFO
                                 printf("%s %d drop this xlog block\n", __func__ , __LINE__);
                                 fflush(stdout);
+#endif
                                 continue;
                             } else { //
 //                                UnlockReleaseBuffer(buff);
                                 buff = InvalidBuffer;
+#ifdef ENABLE_DEBUG_INFO
                                 printf("%s %d, Start single page redo, spc=%u, db=%u, rel=%u, fork=%d, blk=%u, redo_record_lsn=%lu\n", __func__ , __LINE__,
                                        tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->EndRecPtr);
                                 fflush(stdout);
+#endif
                                 XlogRedoSinglePage(xlogreader, &tempTag, &buff);
+#ifdef ENABLE_DEBUG_INFO
                                 printf("%s %d, after redo, buffer lsn = %lu\n", __func__, __LINE__, PageGetLSN((Page) BufferGetPage(buff)));
                                 fflush(stdout);
+#endif
                                 // Now release and unlock the buff
                                 UnlockReleaseBuffer(buff);
                             }
@@ -8609,8 +8697,10 @@ ReadCheckpointRecord(XLogReaderState *xlogreader, XLogRecPtr RecPtr,
 	XLogBeginRead(xlogreader, RecPtr);
 	record = ReadRecord(xlogreader, LOG, true);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	if (record == NULL)
 	{
 		if (!report)
@@ -12236,8 +12326,10 @@ int
 XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr, int reqLen,
 			 XLogRecPtr targetRecPtr, char *readBuf)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start %s %d, pid=%d\n", __func__ , __FILE__, __LINE__, getpid());
     fflush(stdout);
+#endif
 
 	XLogPageReadPrivate *private =
 	(XLogPageReadPrivate *) xlogreader->private_data;
@@ -12331,8 +12423,10 @@ retry:
 		char		fname[MAXFNAMELEN];
 		int			save_errno = errno;
 
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d, read BLCKSZ xlog failed\n", __func__ , __FILE__, __LINE__);
         fflush(stdout);
+#endif
 
 		pgstat_report_wait_end();
 		XLogFileName(fname, curFileTLI, readSegNo, wal_segment_size);
@@ -12387,8 +12481,10 @@ retry:
 	 */
 	if (!XLogReaderValidatePageHeader(xlogreader, targetPagePtr, readBuf))
 	{
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d, page header is invalid\n", __func__ , __FILE__, __LINE__);
         fflush(stdout);
+#endif
 		/* reset any error XLogReaderValidatePageHeader() might have set */
 		xlogreader->errormsg_buf[0] = '\0';
 		goto next_record_is_invalid;
@@ -12699,6 +12795,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				/*
 				 * Nope, not found in archive or pg_wal.
 				 */
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d read xlog file failed\n", __func__ , __LINE__);
+                fflush(stdout);
+#endif
 				lastSourceFailed = true;
 				break;
 
@@ -13086,8 +13186,10 @@ CheckPromoteSignal(void)
 void
 WakeupRecovery(void)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Wakeup Recovery, pid=%d,  owner_pid = %d\n", __func__ , getpid(), XLogCtl->recoveryWakeupLatch.owner_pid);
     fflush(stdout);
+#endif
 
 	SetLatch(&XLogCtl->recoveryWakeupLatch);
 }
@@ -13118,4 +13220,43 @@ uint64_t GetLogWrtResultLsn(void)
         return WalRcv->flushedUpto;
     else
         return XLogCtl->LogwrtResult.Flush;
+}
+
+void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s Start \n", __func__ );
+    fflush(stdout);
+#endif
+
+    BufferTag tag;
+
+    if(record->max_block_id < recordBlockId) {
+        printf("%s parameter block id %d is larger than max_block_id %d\n", __func__, recordBlockId, record->max_block_id );
+        return;
+    }
+
+    if(!XLogRecHasBlockRef(record, recordBlockId)) {
+        printf("%s this block is not used\n", __func__ );
+        return;
+    }
+
+    if(!XLogRecGetBlockTag(record, recordBlockId, &tag.rnode, &tag.forkNum, &tag.blockNum)) {
+        printf("%s get block tag failed \n", __func__ );
+        return;
+    }
+
+    KeyType key;
+    key.SpcID = record->blocks[recordBlockId].rnode.spcNode;
+    key.DbID = record->blocks[recordBlockId].rnode.dbNode;
+    key.RelID = record->blocks[recordBlockId].rnode.relNode;
+    key.ForkNum = record->blocks[recordBlockId].forknum;
+    key.BlkNum = record->blocks[recordBlockId].blkno;
+
+    HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, false);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s Ends \n", __func__ );
+    fflush(stdout);
+#endif
+    return;
 }

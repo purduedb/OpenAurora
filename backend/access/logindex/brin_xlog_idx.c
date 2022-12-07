@@ -11,6 +11,7 @@
 #include "storage/buf_internals.h"
 
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 /*
  * xlog replay routines

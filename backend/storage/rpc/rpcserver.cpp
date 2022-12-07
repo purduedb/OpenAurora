@@ -32,6 +32,8 @@
 #include "storage/buf_internals.h"
 #include "access/xlog.h"
 
+extern HashMap pageVersionHashMap;
+extern HashMap relSizeHashMap;
 
 #define DEBUG_TIMING 1
 
@@ -129,7 +131,7 @@ void WaitParse(int64_t _lsn) {
     if(WalRcvRunning() == false)
         return;
     XLogRecPtr flushUpto = WalRcv->flushedUpto;
-    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
+    if((XLogRecPtr)_lsn-1025 > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
         printf("%s %d, parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
                __func__ , __LINE__, _lsn, XLogParseUpto, flushUpto);
         fflush(stdout);
@@ -137,12 +139,14 @@ void WaitParse(int64_t _lsn) {
         if(_lsn < targetLsn)
             targetLsn = _lsn;
 
-        while(XLogParseUpto < targetLsn) {
+        while(XLogParseUpto < targetLsn-1025) {
 //            printf("%s get into sleep\n", __func__ );
 //            fflush(stdout);
             usleep(200);
         }
     }
+    printf("%s %d exit\n" ,__func__ , __LINE__);
+    fflush(stdout);
 }
 
 using namespace ::apache::thrift;
@@ -180,11 +184,11 @@ public:
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
-
-        uint64_t *uintList;
-        int listSize;
-        BufferTag tag;
-        INIT_BUFFERTAG(tag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+//
+//        uint64_t *uintList;
+//        int listSize;
+//        BufferTag tag;
+//        INIT_BUFFERTAG(tag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
 
         // Get relation size from in-memory hashmap
         // If relation size is smaller than parameter request $_blknum, just return blank page (caused by RpcMdCreate, RpcMdExist)
@@ -228,8 +232,18 @@ public:
 //         free(blankPage);
         /************************************END IN MEMORY REL SIZE CACHE***************************************/
 
+        KeyType key;
+        key.SpcID = _reln._spc_node;
+        key.DbID = _reln._db_node;
+        key.RelID = _reln._rel_node;
+        key.ForkNum = _forknum;
+        key.BlkNum = _blknum;
 
-        int found = GetListFromRocksdb(tag, &uintList, &listSize);
+        uint64_t  replayedLsn;
+        uint64_t *toReplayList;
+        int listSize;
+        int found = HashMapGetBlockReplayList(pageVersionHashMap, key, _lsn, &replayedLsn, &toReplayList, &listSize);
+//        int found = GetListFromRocksdb(tag, &uintList, &listSize);
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &(readBufferCommon[0]), &(readBufferCount[0]))
@@ -254,6 +268,8 @@ public:
                 buff = (char*) malloc(BLCKSZ);
                 GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
             }
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[1]), &(readBufferCount[1]))
 #endif
@@ -262,22 +278,18 @@ public:
             fflush(stdout);
 
 
-            // Create new lsn list to Rocksdb
-            uint64_t lsnList[3];
-            lsnList[0] = 1; // length
-            lsnList[1] = 1; // current position is 1 rather than 0, since we have the first version already
-            lsnList[2] = lsn; // first lsn
+            HashMapInsertKey(pageVersionHashMap, key, lsn, -1, 1);
+            HashMapUpdateReplayedLsn(pageVersionHashMap, key, lsn, false);
 
-            // Put new list to Rocksdb
-            PutList2Rocksdb(bufferTag, lsnList, 3);
             // Put base page to Rocksdb
             PutPage2Rocksdb(bufferTag, lsn, buff);
+            // Remove extended page from Rocksdb
+            DeletePageFromRocksdb(bufferTag, 0);
 
             // Set return value from RPC client
             _return.assign(buff, BLCKSZ);
 
             free(buff);
-            free(uintList);
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
 #ifdef DEBUG_TIMING
@@ -294,7 +306,7 @@ public:
         // Then this list was created by replay process, which won't consist base page's lsn.
         // So, we need to get base page from standalone process and insert it lsn as
         // the first element of the list. Also, update $currPos to 1 (base page "replayed")
-        if(uintList[1] == 0) {
+        if(replayedLsn == 0) {
             char* buff = (char*) malloc(BLCKSZ);
             GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
             XLogRecPtr lsn = PageGetLSN(buff);
@@ -305,21 +317,13 @@ public:
             // Put page to Rocksdb
             PutPage2Rocksdb(bufferTag, lsn, buff);
 
-            uint64_t* newList = (uint64_t*) malloc( sizeof(uint64_t)*(listSize+1) );
-            newList[0] = uintList[0]+1;
-            newList[1] = 1; // mark base page as replayed
-            newList[2] = lsn; // insert it as the first lsn
+            // Set first slot's lsn as this page's lsn
+            // Set replayed slot
+            HashMapUpdateFirstEmptySlot(pageVersionHashMap, key, lsn);
 
-            for(int i = 3; i < listSize+1; i++) {
-                newList[i] = uintList[i-1];
-            }
-
+            replayedLsn = lsn;
             printf("%s LINE=%d \n", __func__ , __LINE__);
             fflush(stdout);
-
-            free(uintList);
-            uintList = newList;
-            listSize++;
 
             free(buff);
             printf("%s LINE=%d \n", __func__ , __LINE__);
@@ -333,55 +337,21 @@ public:
          fflush(stdout);
 
 
-         // For now, we got the lsn list and at least one version was replayed
-        uint64_t foundLsn;
-        uint64_t foundPos;
-        int foundBound = FindListLowerBound(uintList, _lsn, &foundLsn, &foundPos);
-        if(!foundBound) { // Every existed version is larger than this current lsn
-            // This shouldn't happen. (GOD BLESS)
-            // If it really happened, just use the base page
-            BufferTag bufferTag;
-            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
-            uint64_t targetLsn = uintList[2];
+        // For now, we got the lsn list and at least one version was replayed
+        // No need to replay the xlog
+         if(listSize == 0) {
+             char* page;
+             BufferTag bufferTag;
+             INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+             if(!GetPageFromRocksdb(bufferTag, replayedLsn, &page)) {
+                 // Not found page in rocksdb, report error
+                 printf("%s Error, get replayed page failed\n", __func__ );
+                 return;
+             }
 
-            char* basePage;
-            if(GetPageFromRocksdb(bufferTag, targetLsn, &basePage) == 0) {
-                printf("%s get base page failed \n", __func__ );
-            }
-
-            _return.assign(basePage, BLCKSZ);
-            free(uintList);
-            free(basePage);
-#ifdef DEBUG_TIMING
-            RECORD_TIMING(&start, &end, &readBufferCommon[4], &readBufferCount[4])
-#endif
-            return;
-        }
-
-         printf("%s LINE=%d \n", __func__ , __LINE__);
-         fflush(stdout);
-
-         // Unnecessary to replay any xlog
-        //      foundPos is the last element that <= targetLsn, so it needs to plus 1
-        //      uintList[1] is the address of sublist, so it needs to plus 2
-        if(foundPos+1 <= uintList[1]+2) { // first element that larger than targetLsn : first element hasn't been replayed
-            BufferTag bufferTag;
-            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
-            uint64_t targetLsn = uintList[foundPos];
-
-            char* targetPage;
-            if(GetPageFromRocksdb(bufferTag, targetLsn, &targetPage) == 0) {
-                printf("%s get already replayed page from rocksdb failed\n", __func__ );
-            }
-
-            _return.assign(targetPage, BLCKSZ);
-            free(uintList);
-            free(targetPage);
-#ifdef DEBUG_TIMING
-            RECORD_TIMING(&start, &end, &readBufferCommon[5], &readBufferCount[5])
-#endif
-            return;
-        }
+             _return.assign(page, BLCKSZ);
+             free(page);
+         }
 
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
@@ -389,9 +359,6 @@ public:
          // For now, we need to replay several xlogs until we get the expected version
         // The xlog sublist we need to replay is [ uintList[1]+2 , foundPos ]
 
-        // Get the base page (uintList[1]-1) from the rocksdb
-        uint64_t basePageLsn = uintList[ uintList[1]-1 +2 ]; // +2 convert from sublist to full list
-        char* basePage;
 
         BufferTag bufferTag;
         INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
@@ -399,13 +366,15 @@ public:
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
 
-         if(GetPageFromRocksdb(bufferTag, basePageLsn, &basePage) == 0)
-            printf("%s get base page for replay failed \n", __func__ );
+         char* basePage;
+         if(GetPageFromRocksdb(bufferTag, replayedLsn, &basePage) == 0) {
+             printf("%s Error get base page for replay failed \n", __func__ );
+             return;
+         }
 
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
-
-         char* page1 = (char*) malloc(BLCKSZ);
+        char* page1 = (char*) malloc(BLCKSZ);
         char* page2 = (char*) malloc(BLCKSZ);
         char* tempPage;
         memcpy(page1, basePage, BLCKSZ);
@@ -417,12 +386,12 @@ public:
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &readBufferCommon[6], &readBufferCount[6])
 #endif
-        for(int i = (int)uintList[1]+2; i <= foundPos; i++) {
+        for(int i = 0; i < listSize; i++) {
              printf("%s LINE=%d \n", __func__ , __LINE__);
              fflush(stdout);
 
-             uint64_t currLsn = uintList[i];
-            ApplyOneLsn(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, currLsn, page1, page2);
+             uint64_t currLsn = toReplayList[i];
+             ApplyOneLsn(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, currLsn, page1, page2);
              printf("%s LINE=%d \n", __func__ , __LINE__);
              fflush(stdout);
             // Now the page2 is replayed version, put it to rocksdb
@@ -436,38 +405,19 @@ public:
          fflush(stdout);
 
 
-         // Update the list $currPos
-        uintList[1] = foundPos+1-2;
+        HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize-1], true);
 
-        // If at least 4 versions were replayed, we will truncate it
-        // and only reserve three versionsz
-        if (uintList[1] > 4) {
-            int needDelete = uintList[1]-3;
-
-            // We need to delete page version uintList[2+0 ... 2+needDelete-1]
-            for(int i = 2; i < 2+needDelete; i++) {
-                DeletePageFromRocksdb(bufferTag, uintList[i]);
-            }
-
-            for(int i = uintList[1]-3; i < uintList[0]; i++) {
-                uintList[2+i-needDelete] = uintList[2+i];
-            }
-            uintList[0] = uintList[0] - needDelete;
-        }
+        free(toReplayList);
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &readBufferCommon[7], &readBufferCount[7])
 #endif
-//        printf("%s list size is %ld\n", __func__ , uintList[0]+2);
-        // Put the updated list to rocksdb
-        PutList2Rocksdb(bufferTag, uintList, uintList[0]+2);
 
         // Set the desired page version as return value
         _return.assign(page1, BLCKSZ);
 
         free(page1);
         free(page2);
-        free(uintList);
 //         printf("%s LINE=%d \n", __func__ , __LINE__);
 //         fflush(stdout);
 
@@ -554,16 +504,17 @@ public:
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
         XLogRecPtr lsn = _lsn;
-        struct KeyType keyType;
+        KeyType keyType;
         keyType.SpcID = rnode.spcNode;
         keyType.DbID = rnode.dbNode;
         keyType.RelID = rnode.relNode;
         keyType.ForkNum = _forknum;
+        keyType.BlkNum = -1;
 
         uint64_t foundLsn;
         int foundPageNum;
 
-        if ( HashMapFindLowerBoundEntry(keyType, lsn, &foundLsn, &foundPageNum) ) {
+        if ( HashMapFindLowerBoundEntry(relSizeHashMap, keyType, lsn, &foundLsn, &foundPageNum) ) {
             printf("%s cached, lsn = %lu, pageNum = %d\n", __func__ , foundLsn, foundPageNum);
             fflush(stdout);
 #ifdef DEBUG_TIMING
@@ -577,7 +528,8 @@ public:
 #endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
-        bool insertSucc = HashMapInsertKey(keyType, lsn, relSize);
+        fflush(stdout);
+        bool insertSucc = HashMapInsertKey(relSizeHashMap, keyType, lsn, relSize, true);
         if(insertSucc) {
             printf("%s insert key successfully\n", __func__ );
         } else {
@@ -610,15 +562,16 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        struct KeyType key{};
+        KeyType key{};
         key.SpcID = rnode.spcNode;
         key.DbID = rnode.dbNode;
         key.RelID = rnode.relNode;
         key.ForkNum = _forknum;
+        key.BlkNum = -1;
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
         if(found) {
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &existsTime[0], &existsCount[0])
@@ -637,7 +590,7 @@ public:
 #endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, _lsn);
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
-        bool insertSucc = HashMapInsertKey(key, _lsn, relSize);
+        bool insertSucc = HashMapInsertKey(relSizeHashMap, key, _lsn, relSize, true);
         if(insertSucc) {
             printf("%s insert key successfully\n", __func__ );
         } else {
@@ -665,17 +618,18 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        struct KeyType key{};
+        KeyType key{};
         key.SpcID = rnode.spcNode;
         key.DbID = rnode.dbNode;
         key.RelID = rnode.relNode;
         key.ForkNum = _forknum;
+        key.BlkNum = -1;
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
         if(!found || foundPageNum<0) {
-            if (HashMapInsertKey(key, _lsn, 0) )
+            if (HashMapInsertKey(relSizeHashMap, key, _lsn, 0, true) )
                 printf("%s HashMap insert succeed\n", __func__ );
             else
                 printf("%s HashMap insert failed\n", __func__ );
@@ -700,21 +654,22 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        struct KeyType key{};
+        KeyType key{};
         key.SpcID = rnode.spcNode;
         key.DbID = rnode.dbNode;
         key.RelID = rnode.relNode;
         key.ForkNum = _forknum;
+        key.BlkNum = -1;
 
         uint64_t foundLsn;
         int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(key, _lsn, &foundLsn, &foundPageNum);
+        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
         if(!found || foundPageNum<_blknum+1) {
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
-            if (HashMapInsertKey(key, _lsn, _blknum+1) )
+            if (HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum+1, true) )
                 printf("%s HashMap insert succeed, lsn=%lu, pageNum=%d\n", __func__, _lsn, _blknum+1 );
             else
                 printf("%s HashMap insert failed\n", __func__ );
@@ -755,13 +710,14 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        struct KeyType key{};
+        KeyType key;
         key.SpcID = rnode.spcNode;
         key.DbID = rnode.dbNode;
         key.RelID = rnode.relNode;
         key.ForkNum = _forknum;
+        key.BlkNum = -1;
 
-        if (HashMapInsertKey(key, _lsn, _blknum) )
+        if (HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum, true) )
             printf("%s HashMap insert succeed\n", __func__ );
         else
             printf("%s HashMap insert failed\n", __func__ );

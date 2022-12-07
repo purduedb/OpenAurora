@@ -20,6 +20,7 @@
 #include "miscadmin.h"
 #include "storage/buf_internals.h"
 #include "storage/kv_interface.h"
+#include "access/xlog.h"
 
 static XLogRedoAction
 xlog_idx_fpi_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
@@ -103,7 +104,7 @@ polar_xlog_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLi
 
             for (block_id = 0; block_id <= record->max_block_id; block_id++){
                 XLogRecGetBlockTag(record, block_id, &rnode, &forkNumber, &blockNumber);
-                INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+                INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
                 tagCount++;
             }
             *tagNum = tagCount;
