@@ -1,6 +1,6 @@
-# OpenAurora: An Open-Source Cloud-Native Database System
+# An Open-Source Cloud-Native Database System
 
-Cloud-native databases are designed from the ground up to take the full advantage of the cloud infrastructure to provide a fully managed SQL database service in the cloud, i.e., database-as-a-service (DBaaS), to achieve the best elasticity, on-demand scaling, cost-efficiency, and etc. Examples include Amazon Aurora and Microsoft Socrates. However, a pain point is that existing cloud-native databases are all commercial products that are closed source. This prevents many possible optimizations from academia to improve and evaluate cloud-native databases. OpenAurora is an open-source version of Amazon Aurora, which is the first cloud-native OLTP database. Our hope is to provide an open platform for our database community to enable more research and optimizations in cloud-native database systems.
+Cloud-native databases are designed from the ground up to take the full advantage of the cloud infrastructure to provide a fully managed SQL database service in the cloud, i.e., database-as-a-service (DBaaS), to achieve the best elasticity, on-demand scaling, cost-efficiency, and etc. Examples include Amazon Aurora and Microsoft Socrates. However, a pain point is that existing cloud-native databases are all commercial products that are closed source. This prevents many possible optimizations from academia to improve and evaluate cloud-native databases. This system's architecture is similar to Amazon Aurora, which is the first cloud-native OLTP database. Our hope is to provide an open platform for our database community to enable more research and optimizations in cloud-native database systems.
 
 ## Features
 * Resource disaggregation
@@ -82,7 +82,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Getting the source code
 ```bash
-git clone https://github.com/px1900/OpenAurora.git
+git clone https://github.com/px1900/Cloud-Native-DB-Prototype.git
 ```
 
 ## Building
@@ -98,7 +98,7 @@ This project is based on [PostgreSql 13.0](https://www.postgresql.org/docs/13/re
 make 
 ```
 
-* Install OpenAurora
+* Install this system
 ```bash
 make install
 ```
@@ -113,7 +113,7 @@ If you see a message similar to:
 ```bash
 createdb: command not found
 ```
-then OpenAurora was not installed properly. Try calling the command with an absolute path instead:
+then our system was not installed properly. Try calling the command with an absolute path instead:
 ```bash
 $your_project_dir/bin/createdb mydb
 ```
