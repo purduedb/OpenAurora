@@ -1,6 +1,6 @@
-# OpenAurora: An Open-Source Cloud-Native Database System
+# An Open-Source Cloud-Native Database System
 
-Cloud-native databases are designed from the ground up to take the full advantage of the cloud infrastructure to provide a fully managed SQL database service in the cloud, i.e., database-as-a-service (DBaaS), to achieve the best elasticity, on-demand scaling, cost-efficiency, and etc. Examples include Amazon Aurora and Microsoft Socrates. However, a pain point is that existing cloud-native databases are all commercial products that are closed source. This prevents many possible optimizations from academia to improve and evaluate cloud-native databases. OpenAurora is an open-source version of Amazon Aurora, which is the first cloud-native OLTP database. Our hope is to provide an open platform for our database community to enable more research and optimizations in cloud-native database systems.
+Cloud-native databases are designed from the ground up to take the full advantage of the cloud infrastructure to provide a fully managed SQL database service in the cloud, i.e., database-as-a-service (DBaaS), to achieve the best elasticity, on-demand scaling, cost-efficiency, and etc. Examples include Amazon Aurora and Microsoft Socrates. However, a pain point is that existing cloud-native databases are all commercial products that are closed source. This prevents many possible optimizations from academia to improve and evaluate cloud-native databases. This system's architecture is similar to Amazon Aurora, which is the first cloud-native OLTP database. Our hope is to provide an open platform for our database community to enable more research and optimizations in cloud-native database systems.
 
 ## Features
 * Resource disaggregation
@@ -15,19 +15,19 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Incoming Progress
 
-### Milestone#1 (Done)
+### Milestone#1
 **Goal**
 * Decouple the log-replay functions to a new module, called "Replay Module"
 * Truncate the original page data write path (Execution Engine -> Shared Buffer -> Hard Disk)
 * Create a new page data write path (XLog -> Replay Module -> Shared Buffer -> Hard Disk)
 
-### Milestone#2 (Done)
+### Milestone#2
 **Goal**
 * Decouple "Replication Service" into an individual service
 * Design a new page level MVCC protocol
 * Transform local storage engine interfaces into RPC interfaces
 
-### Milestone#3 (2022/01/05 - 2022/02/07)
+### Milestone#3
 **Goal**
 * Disaggregate storage layer and compute layer
 
@@ -42,7 +42,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * After decoupled compute layer and storage layer, some services like vacuum service will be temporarily unavailable. This is because they need to cooperate with compute nodes transaction information. It is acceptable these services completion to be delayed.  
   
   
-### Milestone#4 (2022/02/08 - 2022/02/18)
+### Milestone#4
 **Goal**
 * Replace the PostgreSql storage engine with a K/V store
 
@@ -53,7 +53,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Developing RPC interfaces and related strategy functions
   
 
-### Milestone#5 (2022/02/19 - 2022/03/10)
+### Milestone#5
 **Goal**
 * Replace PostgreSql's tuple level MVCC with page level MVCC
 
@@ -62,7 +62,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Develop a page MVCC with the K/V store
 
   
-### Milestone#6 (2022/03/11 - 2022/03/17)
+### Milestone#6
 **Goal**
 * Support multi-client: one-primary-several-replicas
 
@@ -71,7 +71,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 * Disseminate primary node's write requests to all replicas
 
   
-### Milestone#7 (2022/03/18 - 2022/04/08)
+### Milestone#7
 **Goal**
 * Support distributed storage layer.
 
@@ -82,7 +82,7 @@ Cloud-native databases are designed from the ground up to take the full advantag
 
 ## Getting the source code
 ```bash
-git clone https://github.com/px1900/OpenAurora.git
+git clone https://github.com/px1900/Cloud-Native-DB-Prototype.git
 ```
 
 ## Building
@@ -98,7 +98,7 @@ This project is based on [PostgreSql 13.0](https://www.postgresql.org/docs/13/re
 make 
 ```
 
-* Install OpenAurora
+* Install this system
 ```bash
 make install
 ```
@@ -113,7 +113,7 @@ If you see a message similar to:
 ```bash
 createdb: command not found
 ```
-then OpenAurora was not installed properly. Try calling the command with an absolute path instead:
+then our system was not installed properly. Try calling the command with an absolute path instead:
 ```bash
 $your_project_dir/bin/createdb mydb
 ```
