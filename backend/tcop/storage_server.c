@@ -45,6 +45,7 @@
 extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
 
+
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
     KvClose();
@@ -58,9 +59,16 @@ pid_t StartupPid = 0;
 #define DEBUG_TIMING
 #ifdef DEBUG_TIMING
 struct timeval output_timing3;
-long walRedoWaitLockTime = 0;
 int initialized3 = 0;
-int timing_count = 0;
+
+long SyncGetRelSizeTime = 0;
+long SyncGetRelSizeCount = 0;
+long ApplyOneLsnTime = 0;
+long ApplyOneLsnCount = 0;
+long GetBasePageTime = 0;
+long GetBasePageCount = 0;
+long GetPageByLsnTime = 0;
+long GetPageByLsnCount = 0;
 #endif
 
 static void
@@ -298,25 +306,7 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     gettimeofday(&start, NULL);
 #endif
     pthread_mutex_lock(&replayProcessMutex);
-#ifdef DEBUG_TIMING
-    gettimeofday(&end, NULL);
-    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
-    timing_count++;
 
-    struct timeval now;
-
-    if(!initialized3){
-        gettimeofday(&output_timing3, NULL);
-        initialized3 = 1;
-    }
-    gettimeofday(&now, NULL);
-    if(now.tv_sec-output_timing3.tv_sec >= 5) {
-
-        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
-        fflush(stdout);
-        output_timing3 = now;
-    }
-#endif
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     char requestBuffer[1024];
@@ -397,7 +387,116 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     fflush(stdout);
     pthread_mutex_unlock(&replayProcessMutex);
 
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    SyncGetRelSizeTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    SyncGetRelSizeCount++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        printf("walredo_SyncGetRelSize = %ld, count = %d\n",SyncGetRelSizeTime, SyncGetRelSizeCount);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
     return nblocks;
+
+}
+
+void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* targetPage) {
+    pthread_mutex_lock(&replayProcessMutex);
+
+    printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
+           relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
+    fflush(stdout);
+
+#ifdef XLOG_IN_ROCKSDB
+    // Read XlogRecord from RocksDB
+    XLogRecord *record;
+    size_t record_size;
+    GetXlogWithLsn(lsn, &record, &record_size);
+#endif
+
+    // ------ Send "ApplyOneLsn" request to replay process ------
+#ifdef XLOG_IN_ROCKSDB
+    char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
+#else
+    char *requestBuffer = (char*) malloc(8192+1024);
+#endif
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'E';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen += 4; // $blknum
+    msgLen += 8; // $lsn
+//    msgLen += BLCKSZ; // $pageContent
+#ifdef XLOG_IN_ROCKSDB
+    msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
+#endif
+
+    msgLen = pg_hton32(msgLen);
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+    blockNumber = pg_hton32(blockNumber);
+    lsn = pg_hton64(lsn);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+4], &forkNumber, sizeof(unsigned char));
+    memcpy(&requestBuffer[1+4+1], &relFileNode.spcNode, 4);
+    memcpy(&requestBuffer[1+4+1+4], &relFileNode.dbNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4], &relFileNode.relNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4+4], &blockNumber, 4);
+    memcpy(&requestBuffer[1+4+1+4+4+4+4], &lsn, 8);
+//    memcpy(&requestBuffer[1+4+1+4+4+4+4+8], origPage, BLCKSZ);
+#ifdef XLOG_IN_ROCKSDB
+    memcpy(&requestBuffer[1+4+1+4+4+4+4+8], record, record->xl_tot_len);
+#endif
+
+
+#ifdef XLOG_IN_ROCKSDB
+    int targetMsgLen = 1+4+1+4+4+4+4+8+record->xl_tot_len;
+#else
+    int targetMsgLen = 1+4+1+4+4+4+4+8;
+#endif
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+#ifdef XLOG_IN_ROCKSDB
+    free(record);
+#endif
+    free(requestBuffer);
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    while (recvLen < BLCKSZ) {
+        int readLen = read(computePipe[0], &targetPage[recvLen], BLCKSZ - recvLen);
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    printf("%s read %d from standalone \n", __func__ , recvLen);
+    fflush(stdout);
+
+    Assert(recvLen == BLCKSZ);
+    pthread_mutex_unlock(&replayProcessMutex);
 
 }
 
@@ -409,41 +508,26 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     gettimeofday(&start, NULL);
 #endif
     pthread_mutex_lock(&replayProcessMutex);
-#ifdef DEBUG_TIMING
-    gettimeofday(&end, NULL);
-    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
-    timing_count++;
 
-    struct timeval now;
-
-    if(!initialized3){
-        gettimeofday(&output_timing3, NULL);
-        initialized3 = 1;
-    }
-    gettimeofday(&now, NULL);
-    if(now.tv_sec-output_timing3.tv_sec >= 5) {
-
-        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
-        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
-        fflush(stdout);
-        output_timing3 = now;
-    }
-#endif
 //    pthread_mutex_lock(&replayProcessMutex);
 
     printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
     fflush(stdout);
 
+#ifdef XLOG_IN_ROCKSDB
     // Read XlogRecord from RocksDB
     XLogRecord *record;
     size_t record_size;
     GetXlogWithLsn(lsn, &record, &record_size);
+#endif
 
-    printf("%s %d, get xlog from rocksdb, lsn = %lu, record_len = %lu\n", __func__ , __LINE__, lsn, record_size);
-    fflush(stdout);
     // ------ Send "ApplyOneLsn" request to replay process ------
+#ifdef XLOG_IN_ROCKSDB
     char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
+#else
+    char *requestBuffer = (char*) malloc(8192+1024);
+#endif
     int32 msgLen = 0;
 
     requestBuffer[0] = 'D';
@@ -456,7 +540,9 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     msgLen += 4; // $blknum
     msgLen += 8; // $lsn
     msgLen += BLCKSZ; // $pageContent
+#ifdef XLOG_IN_ROCKSDB
     msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
+#endif
 
     msgLen = pg_hton32(msgLen);
 
@@ -475,17 +561,182 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     memcpy(&requestBuffer[1+4+1+4+4+4], &blockNumber, 4);
     memcpy(&requestBuffer[1+4+1+4+4+4+4], &lsn, 8);
     memcpy(&requestBuffer[1+4+1+4+4+4+4+8], origPage, BLCKSZ);
+#ifdef XLOG_IN_ROCKSDB
     memcpy(&requestBuffer[1+4+1+4+4+4+4+8+BLCKSZ], record, record->xl_tot_len);
+#endif
 
 
+#ifdef XLOG_IN_ROCKSDB
     int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ+record->xl_tot_len;
+#else
+    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ;
+#endif
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
         int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
+#ifdef XLOG_IN_ROCKSDB
     free(record);
+#endif
+    free(requestBuffer);
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    while (recvLen < BLCKSZ) {
+        int readLen = read(computePipe[0], &targetPage[recvLen], BLCKSZ - recvLen);
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    printf("%s read %d from standalone \n", __func__ , recvLen);
+    fflush(stdout);
+
+    Assert(recvLen == BLCKSZ);
+    pthread_mutex_unlock(&replayProcessMutex);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    ApplyOneLsnTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    ApplyOneLsnCount++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
+        printf("walredo_ApplyOneLsn = %ld, count = %d\n",ApplyOneLsnTime, ApplyOneLsnCount);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+}
+
+// targetPage should be allocated by caller function
+// This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
+void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize, char* origPage, char* targetPage) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    pthread_mutex_lock(&replayProcessMutex);
+
+//    pthread_mutex_lock(&replayProcessMutex);
+
+    printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, listSize = %d\n", __func__ , __FILE__, __LINE__,
+           relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, listSize);
+    fflush(stdout);
+
+#ifdef XLOG_IN_ROCKSDB
+    // Read XlogRecord from RocksDB
+    XLogRecord *record;
+    size_t record_size;
+    GetXlogWithLsn(lsn, &record, &record_size);
+#endif
+
+    // ------ Send "ApplyOneLsn" request to replay process ------
+#ifdef XLOG_IN_ROCKSDB
+    char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
+#else
+    char *requestBuffer = (char*) malloc(8192+1024+listSize*sizeof(uint64_t));
+#endif
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'O';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen += 4; // $blknum
+    msgLen += 4; // $listSize
+    msgLen += 8*listSize; // $lsnList
+    msgLen += BLCKSZ; // $pageContent
+#ifdef XLOG_IN_ROCKSDB
+    msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
+#endif
+    int origMsgLen = msgLen;
+    msgLen = pg_hton32(msgLen);
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+    blockNumber = pg_hton32(blockNumber);
+
+    // Important
+    int origListSize = listSize;
+    printf("%s %d, listsize = %d\n", __func__ , __LINE__, listSize);
+    for(int i = 0; i < origListSize; i++) {
+        printf("lsn %d = %lu\n", i, lsnList[i]);
+    }
+    fflush(stdout);
+
+    // h: 1 -> n:16777216
+    listSize = pg_hton32(listSize);
+
+//    for(int i = 0; i < origListSize; i++) {
+//        lsnList[i] = pg_hton64(lsnList[i]);
+//    }
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
+
+    int currLen = 1;
+    memcpy(&requestBuffer[currLen], &msgLen, sizeof(msgLen));
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &forkNumber, sizeof(unsigned char));
+    currLen+=1;
+    memcpy(&requestBuffer[currLen], &relFileNode.spcNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.dbNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.relNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &blockNumber, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &listSize, 4);
+    currLen+=4;
+    for(int i = 0; i < origListSize; i++) {
+        uint64_t netLsn = pg_hton64(lsnList[i]);
+        memcpy(&requestBuffer[currLen], &(netLsn), 8);
+        currLen+=8;
+    }
+    memcpy(&requestBuffer[currLen], origPage, BLCKSZ);
+    printf("%s %d origin page lsn = %lu\n", __func__ , __LINE__, PageGetLSN(origPage));
+    fflush(stdout);
+#ifdef XLOG_IN_ROCKSDB
+    memcpy(&requestBuffer[1+4+1+4+4+4+4+8+BLCKSZ], record, record->xl_tot_len);
+#endif
+
+
+    printf("%s %d ready to send %d lsns\n", __func__ , __LINE__, origListSize);
+    fflush(stdout);
+
+
+#ifdef XLOG_IN_ROCKSDB
+    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ+record->xl_tot_len;
+#else
+    int targetMsgLen = 1+origMsgLen;
+#endif
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+#ifdef XLOG_IN_ROCKSDB
+    free(record);
+#endif
     free(requestBuffer);
 
     // ------- Read target page from replay process ------
@@ -509,26 +760,7 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     gettimeofday(&start, NULL);
 #endif
     pthread_mutex_lock(&replayProcessMutex);
-#ifdef DEBUG_TIMING
-    gettimeofday(&end, NULL);
-    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
-    timing_count++;
 
-    struct timeval now;
-
-    if(!initialized3){
-        gettimeofday(&output_timing3, NULL);
-        initialized3 = 1;
-    }
-    gettimeofday(&now, NULL);
-    if(now.tv_sec-output_timing3.tv_sec >= 5) {
-
-        //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
-        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
-        fflush(stdout);
-        output_timing3 = now;
-    }
-#endif
 
 //    pthread_mutex_lock(&replayProcessMutex);
     // ------- Send "GetPage" request to replay process ------
@@ -576,18 +808,10 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 
     Assert(recvLen == BLCKSZ);
     pthread_mutex_unlock(&replayProcessMutex);
-}
-
-void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* buffer) {
-#ifdef DEBUG_TIMING
-    struct timeval start, end;
-    gettimeofday(&start, NULL);
-#endif
-    pthread_mutex_lock(&replayProcessMutex);
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
-    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
-    timing_count++;
+    GetBasePageTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    GetBasePageCount++;
 
     struct timeval now;
 
@@ -599,12 +823,20 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     if(now.tv_sec-output_timing3.tv_sec >= 5) {
 
         //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
-        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
-
+        printf("walredo_getBasePage = %ld, count = %d\n",GetBasePageTime, GetBasePageCount);
         fflush(stdout);
         output_timing3 = now;
     }
 #endif
+}
+
+void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* buffer) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    pthread_mutex_lock(&replayProcessMutex);
+
 
 
 //    pthread_mutex_lock(&replayProcessMutex);
@@ -684,18 +916,11 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 
     Assert(recvLen == BLCKSZ);
     pthread_mutex_unlock(&replayProcessMutex);
-}
 
-void SyncReplayProcess() {
-#ifdef DEBUG_TIMING
-    struct timeval start, end;
-    gettimeofday(&start, NULL);
-#endif
-    pthread_mutex_lock(&replayProcessMutex);
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
-    walRedoWaitLockTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
-    timing_count++;
+    GetBasePageTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    GetBasePageCount++;
 
     struct timeval now;
 
@@ -707,11 +932,16 @@ void SyncReplayProcess() {
     if(now.tv_sec-output_timing3.tv_sec >= 5) {
 
         //printf("walredo_wait_time = %ld\n",walRedoWaitLockTime);
-        printf("walredo_wait_time = %ld, count = %d\n",walRedoWaitLockTime, timing_count);
+        printf("walredo_getPageByLsn = %ld, count = %d\n",GetBasePageTime, GetBasePageCount);
+
         fflush(stdout);
         output_timing3 = now;
     }
 #endif
+}
+
+void SyncReplayProcess() {
+    pthread_mutex_lock(&replayProcessMutex);
 
 //    pthread_mutex_lock(&replayProcessMutex);
 

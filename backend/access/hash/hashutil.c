@@ -221,9 +221,12 @@ _hash_checkpage(Relation rel, Buffer buf, int flags)
 	if (PageIsNew(page))
 		ereport(ERROR,
 				(errcode(ERRCODE_INDEX_CORRUPTED),
-				 errmsg("index \"%s\" contains unexpected zero page at block %u",
-						RelationGetRelationName(rel),
-						BufferGetBlockNumber(buf)),
+				 errmsg("index \"%s\" contains unexpected zero page at block %u, spc=%lu, db=%lu, rel=%lu",
+                        RelationGetRelationName(rel),
+                        BufferGetBlockNumber(buf),
+                        rel->rd_node.spcNode,
+                        rel->rd_node.dbNode,
+                        rel->rd_node.relNode),
 				 errhint("Please REINDEX it.")));
 
 	/*

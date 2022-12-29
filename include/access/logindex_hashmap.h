@@ -76,6 +76,7 @@ struct HashNodeEle {
     // When entryNum reaches HASH_ELEM_NUM, malloc a new
     // element node linked with this node
     HashNodeEle *nextEle;
+    HashNodeEle *prevEle;
 };
 
 struct HashMapStruct {

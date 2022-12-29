@@ -121,6 +121,8 @@ int			CommitSiblings = 5; /* # concurrent xacts needed to sleep */
 int			wal_retrieve_retry_interval = 5000;
 int			max_slot_wal_keep_size_mb = -1;
 
+//#define XLOG_IN_ROCKSDB
+
 #ifdef WAL_DEBUG
 bool		XLOG_DEBUG = false;
 #endif
@@ -228,6 +230,8 @@ do { \
 
 XLogRecPtr XLogParseUpto = 0;
 
+// Now, we have no available xlog in this wal standby machine
+int reachXlogTempEnd = 0;
 
 /*
  * Although only "on", "off", and "always" are documented,
@@ -4443,6 +4447,9 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 		EndRecPtr = xlogreader->EndRecPtr;
 		if (record == NULL)
 		{
+            printf("%s reached the end of xlog\n", __func__ );
+            fflush(stdout);
+            reachXlogTempEnd = 1;
 			if (readFile >= 0)
 			{
 				close(readFile);
@@ -7511,7 +7518,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-#ifdef ENABLE_DEBUG_INFO
+//#ifdef ENABLE_DEBUG_INFO
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7519,7 +7526,7 @@ StartupXLOG(void)
                 else
                     printf("%s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
-#endif
+//#endif
 
 #ifdef DEBUG_TIMING
                 RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
@@ -7646,6 +7653,8 @@ StartupXLOG(void)
                         default:
                             break;
                     }
+
+#ifdef XLOG_IN_ROCKSDB
                     if(parsed) {
 #ifdef ENABLE_DEBUG_INFO
                         printf("%s parsed new xlog to rocksdb, lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
@@ -7661,6 +7670,7 @@ StartupXLOG(void)
                         fflush(stdout);
 #endif
                     }
+#endif
 
 #ifdef DEBUG_TIMING
                     RECORD_TIMING(&start, &end, &(startupTime[3]), &(startupCount[3]))
@@ -7682,9 +7692,14 @@ StartupXLOG(void)
 #endif
 
                     }
+                    // It seems sometime xlogreader->EndRecPtr won't change
+                    if(xlogreader->ReadRecPtr > XLogParseUpto) {
+                        XLogParseUpto = xlogreader->ReadRecPtr;
+                    }
 #ifdef DEBUG_TIMING
                     RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
 #endif
+                    printf("%s parsed = %d, lsn = %lu\n", __func__ , parsed, xlogreader->ReadRecPtr);
                 } else {
 #ifdef ENABLE_DEBUG_INFO
                     printf("%s %d Start process xlog\n", __func__ , __LINE__);
@@ -7755,15 +7770,17 @@ StartupXLOG(void)
 
 
 				// Debug Info
-//				int block_id;
-//				for (block_id = 0; block_id <= xlogreader->max_block_id; block_id++) {
-//					RelFileNode tempRnode = xlogreader->blocks[block_id].rnode;
-//					ForkNumber tempForkNum = xlogreader->blocks[block_id].forknum;
-//					BlockNumber tempBlkNum = xlogreader->blocks[block_id].blkno;
-//					printf("%s processing blk: Spc=%u, Db=%u, Rel=%u, fork=%d, Blk=%u\n",
-//						   tempRnode.spcNode, tempRnode.dbNode, tempRnode.relNode, tempForkNum, tempBlkNum);
-//					fflush(stdout);
-//				}
+				int block_id;
+				for (block_id = 0; block_id <= xlogreader->max_block_id; block_id++) {
+                    if(!xlogreader->blocks[block_id].in_use)
+                        continue;
+                    RelFileNode tempRnode = xlogreader->blocks[block_id].rnode;
+					ForkNumber tempForkNum = xlogreader->blocks[block_id].forknum;
+					BlockNumber tempBlkNum = xlogreader->blocks[block_id].blkno;
+					printf("%s processing blk: lsn = %lu, Spc=%u, Db=%u, Rel=%u, fork=%d, Blk=%u, endLsn = %lu\n",
+						   __func__ , xlogreader->ReadRecPtr, tempRnode.spcNode, tempRnode.dbNode, tempRnode.relNode, tempForkNum, tempBlkNum, xlogreader->EndRecPtr);
+					fflush(stdout);
+				}
 				/*
 				 * After redo, check whether the backup pages associated with
 				 * the WAL record are consistent with the existing pages. This
@@ -12416,6 +12433,9 @@ retry:
 	/* Read the requested page */
 	readOff = targetPageOff;
 
+//    reachXlogTempEnd = 1;
+//    printf("%s %d, reachXlogTempEnd\n", __func__ , __LINE__);
+//    fflush(stdout);
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
 	r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
 	if (r != XLOG_BLCKSZ)
@@ -12502,8 +12522,12 @@ next_record_is_invalid:
 	readSource = XLOG_FROM_ANY;
 
 	/* In standby-mode, keep trying */
-	if (StandbyMode)
-		goto retry;
+	if (StandbyMode) {
+        reachXlogTempEnd = 1;
+        printf("%s %d, reachXlogTempEnd\n", __func__ , __LINE__);
+        fflush(stdout);
+        goto retry;
+    }
 	else
 		return -1;
 }

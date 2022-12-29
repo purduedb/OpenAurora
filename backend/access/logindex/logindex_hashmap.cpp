@@ -4,12 +4,101 @@
 #include "access/logindex_hashmap.h"
 #include <atomic>
 
+#define DEBUG_TIMING
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <cstdlib>
+
+int initialized4 = 0;
+struct timeval output_timing4;
+
+pthread_mutex_t timing_mutex4 = PTHREAD_MUTEX_INITIALIZER;
+long findLowerTime[16];
+long findLowerCount[16];
+
+void PrintTimingResult4() {
+    struct timeval now;
+
+    if(!initialized4){
+        gettimeofday(&output_timing4, NULL);
+        initialized4 = 1;
+
+        memset(findLowerTime, 0, 16*sizeof(findLowerTime[0]));
+        memset(findLowerCount, 0, 16*sizeof(findLowerCount[0]));
+    }
+
+
+    gettimeofday(&now, NULL);
+
+    if(now.tv_sec-output_timing4.tv_sec >= 5) {
+        for(int i = 0 ; i < 9; i++) {
+            if(findLowerCount[i] == 0)
+                continue;
+            printf("findLowerTime_%d = %ld\n",i,  findLowerTime[i]/findLowerCount[i]);
+            printf("total_findLowerTime_%d = %ld, count = %ld\n",i,  findLowerTime[i], findLowerCount[i]);
+            fflush(stdout);
+        }
+
+        output_timing4 = now;
+    }
+}
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+do { \
+    gettimeofday(end_p, NULL); \
+    pthread_mutex_lock(&timing_mutex4); \
+    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec)); \
+    (*global_count)++;                                                               \
+    pthread_mutex_unlock(&timing_mutex4); \
+    PrintTimingResult4(); \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+#endif
+
 
 //typedef boost::shared_mutex Lock;
 //typedef boost::unique_lock< Lock >  WriterLock;
 //typedef boost::shared_lock< Lock >  ReaderLock;
 
 //Lock myLock;
+
+// The lsnList is sorted from small to large
+int LsnListFindLowerBound(uint64_t targetLsn, LsnEntry* entryList, int listSize) {
+    if(listSize == 0) {
+        return -1;
+    }
+
+    int largeSide = listSize-1;
+    int smallSide = 0;
+
+    while(largeSide != smallSide) {
+        int mid = (largeSide+smallSide+1) /2;
+        if(targetLsn < entryList[mid].lsn) {
+            largeSide = mid-1;
+        } else {
+            smallSide = mid;
+        }
+
+        if(entryList[mid].lsn == targetLsn) {
+            largeSide = mid;
+            smallSide = mid;
+        }
+    }
+
+    if(entryList[largeSide].lsn > targetLsn) {
+        return -1;
+    }
+
+    return largeSide;
+}
 
 
 HashMap relSizeHashMap;
@@ -150,6 +239,10 @@ bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool h
 }
 
 bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, bool noEmptyFirstSlot) {
+    printf("%s start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %ld, lsn = %lu\n", __func__ ,
+           key.SpcID, key.DbID, key.RelID, key.ForkNum, key.BlkNum, lsn);
+    fflush(stdout);
+
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
 
@@ -205,10 +298,16 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         pthread_rwlock_init(&head->headLock, NULL);
 
         if(key.BlkNum != -1 && !noEmptyFirstSlot) { // this is for page version lsn list
+            printf("%s %d, insertLsn = %lu\n", __func__ , __LINE__, lsn);
+            fflush(stdout);
+
             head->lsnEntry[0].lsn = 0;
             head->lsnEntry[1].lsn = lsn;
             head->entryNum = 2;
         } else{ // this is for rel nblocks
+            printf("%s %d, insertLsn = %lu\n", __func__ , __LINE__, lsn);
+            fflush(stdout);
+
             head->lsnEntry[0].lsn = lsn;
             head->lsnEntry[0].pageNum = pageNum;
             head->entryNum = 1;
@@ -350,11 +449,13 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
     eleNode->lsnEntry[0].lsn = lsn;
     eleNode->entryNum = 1;
     eleNode->nextEle = NULL;
+    eleNode->prevEle = NULL;
 
     iter->maxLsn = lsn;
 
     // If header has one or more element nodes
     if(iter->tailEle != NULL) {
+        eleNode->prevEle = iter->tailEle;
         iter->tailEle->nextEle = eleNode;
         iter->tailEle = eleNode;
     } else { // If no element node linked by this header
@@ -429,17 +530,11 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     if (iter->replayedLsn > targetLsn) { // no need replay
         // Now, in head, find the largest lsn that <= targetLsn
         if(iter->lsnEntry[iter->entryNum-1].lsn >= targetLsn) { // Should find in head
-            uint64_t currentLsn = -1;
-            for(int i = 0; i < iter->entryNum; i++) {
-                if(iter->lsnEntry[i].lsn > targetLsn) {
-                    break;
-                } else {
-                    currentLsn = iter->lsnEntry[i].lsn;
-                }
-            }
+            int resultIndex = LsnListFindLowerBound(targetLsn, iter->lsnEntry, iter->entryNum);
+
             // If all list elements are larger than targetLsn, return false
             // This case should not happen
-            if(currentLsn == -1) {
+            if(resultIndex == -1) {
                 pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
                 pthread_rwlock_unlock(&iter->headLock);
 
@@ -450,7 +545,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                 pthread_rwlock_unlock(&iter->headLock);
 
                 *listLen = 0;
-                *replayedLsn = currentLsn;
+                *replayedLsn = iter->lsnEntry[resultIndex].lsn;
                 return true;
             }
 
@@ -470,14 +565,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                 continue;
             }
 
-            // targetEntry should be found in the list
-            for(int i = 0; i < eleIter->entryNum; i++) {
-                if(eleIter->lsnEntry[i].lsn > targetLsn) {
-                    break;
-                } else {
-                    currentLsn = eleIter->lsnEntry[i].lsn;
-                }
-            }
+            int resultIndex = LsnListFindLowerBound(targetLsn, eleIter->lsnEntry, eleIter->entryNum);
+
+            if(resultIndex >= 0)
+                currentLsn = eleIter->lsnEntry[resultIndex].lsn;
 
             // Found the desired lsn
             break;
@@ -506,23 +597,29 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     int toReplayCount = 0;
     *toReplayList = (uint64_t*) malloc(sizeof(uint64_t)* mallocSize);
 
+    // Circumstance: ... $replayedLsn ..(what we need).. $targetLsn
+    int foundReplayLsnPosition = 0;
     // last replayed lsn in head
     if(iter->replayedLsn <= iter->lsnEntry[iter->entryNum-1].lsn) {
-        for(int i = 0; i < iter->entryNum; i++) {
-            if(iter->lsnEntry[i].lsn > iter->replayedLsn
-            && iter->lsnEntry[i].lsn <= targetLsn) {
+        foundReplayLsnPosition = 1;
+        //Firstly, find the replayedLsn position, this is our start
+        int replayedLsnIndex = LsnListFindLowerBound(iter->replayedLsn, iter->lsnEntry, iter->entryNum);
+        printf("%s %d, get replayedLsnIndex = %d\n", __func__ , __LINE__, replayedLsnIndex);
+        fflush(stdout);
 
+        for(int i = replayedLsnIndex+1; i < iter->entryNum; i++) {
+            if(iter->lsnEntry[i].lsn <= targetLsn) {
                 (*toReplayList)[toReplayCount] = iter->lsnEntry[i].lsn;
+                printf("%s %d, set %d slot as lsn = %lu\n", __func__ , __LINE__, toReplayCount, iter->lsnEntry[i].lsn);
+                fflush(stdout);
                 toReplayCount++;
                 if(toReplayCount == mallocSize) {
                     mallocSize *= 2;
                     uint64_t* newList = (uint64_t*) realloc(*toReplayList, sizeof(uint64_t)*mallocSize);
                     *toReplayList = newList;
                 }
-            } else if (iter->lsnEntry[i].lsn > targetLsn) { // found all toReplay list
+            } else { // found all toReplay list
                 break;
-            } else { // didn't reach replayLsn
-                continue;
             }
         }
     }
@@ -539,10 +636,17 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             continue;
         }
 
+        int startIndex = 0;
+        if(!foundReplayLsnPosition) {
+            startIndex = LsnListFindLowerBound(iter->replayedLsn, eleIter->lsnEntry, eleIter->entryNum);
+            startIndex +=1;
+            foundReplayLsnPosition = 1;
+        }
+
+
         // targetEntry should be found in the list
-        for(int i = 0; i < eleIter->entryNum; i++) {
-            if(eleIter->lsnEntry[i].lsn > iter->replayedLsn
-               && eleIter->lsnEntry[i].lsn <= targetLsn) {
+        for(int i = startIndex; i < eleIter->entryNum; i++) {
+            if(eleIter->lsnEntry[i].lsn <= targetLsn) {
                 (*toReplayList)[toReplayCount] = eleIter->lsnEntry[i].lsn;
                 toReplayCount++;
                 if(toReplayCount == mallocSize) {
@@ -550,11 +654,8 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                     uint64_t* newList = (uint64_t*) realloc(*toReplayList, sizeof(uint64_t)*mallocSize);
                     *toReplayList = newList;
                 }
-            }
-            else if (eleIter->lsnEntry[i].lsn > targetLsn) { // found all toReplay list
+            } else {  // found all toReplay list
                 break;
-            } else { // didn't reach replayLsn
-                continue;
             }
         }
 
@@ -577,6 +678,11 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 // If targetLsn >= lsn(n), return true, return ( true, lsn(n) )
 // If lsn list is empty, return false
 bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t* foundLsn, int* foundPageNum) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
+
 #ifdef ENABLE_DEBUG_INFO
     printf("%s start, hashMap Address = %p \n", __func__ , hashMap);
     fflush(stdout);
@@ -595,10 +701,23 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 //    ReaderLock r_lock(hashMap->bucketList[bucketPos].bucketLock);
     pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[0]), &(findLowerCount[0]))
+#endif
+
+#ifdef DEBUG_ITER_TIME
+    int iter_header_time = 0;
+    int iter_ele_time = 0;
+#endif
+
     // Find the match head
     HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
     bool foundHead = false;
     while(iter != NULL) {
+
+#ifdef DEBUG_ITER_TIME
+        iter_header_time++;
+#endif
 
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d \n", __func__ , __LINE__);
@@ -613,6 +732,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 
         iter = iter->nextHead;
     }
+#ifdef DEBUG_ITER_TIME
+    printf("%s hashmap_iter_head = %d\n", __func__ , iter_header_time);
+    fflush(stdout);
+#endif
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d \n", __func__ , __LINE__);
@@ -625,6 +748,9 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
         printf("%s %d \n", __func__ , __LINE__);
         fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &(findLowerTime[1]), &(findLowerCount[1]))
+#endif
         return false;
     }
 
@@ -634,29 +760,33 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 #endif
     // Unlock bucketList, now it's useless
     pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[2]), &(findLowerCount[2]))
+#endif
     // Lock this head
 //    ReaderLock r_head_lock(iter->headLock);
     pthread_rwlock_rdlock(&iter->headLock);
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[3]), &(findLowerCount[3]))
+#endif
     uint64_t currentLsn = -1;
     int      currentPageNum;
     // If lsn is in this head
     // Iterate all the elements in the head
     if(iter->lsnEntry[iter->entryNum-1].lsn >= targetLsn) {
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d \n", __func__ , __LINE__);
+        int resultIndex = LsnListFindLowerBound(targetLsn, iter->lsnEntry, iter->entryNum);
+
+#ifdef DEBUG_ITER_TIME
+        printf("%s hashmap_iter_ele = %d\n", __func__ , iter->entryNum);
         fflush(stdout);
 #endif
-        for(int i = 0; i < iter->entryNum; i++) {
-            if(iter->lsnEntry[i].lsn > targetLsn) {
-                break;
-            } else {
-                currentLsn = iter->lsnEntry[i].lsn;
-                currentPageNum = iter->lsnEntry[i].pageNum;
-            }
-        }
+
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &(findLowerTime[4]), &(findLowerCount[4]))
+#endif
         // If all list elements are larger than targetLsn, return false
-        if(currentLsn == -1) {
+        if(resultIndex == -1) {
 //            pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
             pthread_rwlock_unlock(&iter->headLock);
 
@@ -669,8 +799,8 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 //            pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
             pthread_rwlock_unlock(&iter->headLock);
 
-            *foundLsn = currentLsn;
-            *foundPageNum = currentPageNum;
+            *foundLsn = iter->lsnEntry[resultIndex].lsn;
+            *foundPageNum = iter->lsnEntry[resultIndex].pageNum;
 
 #ifdef ENABLE_DEBUG_INFO
             printf("%s %d \n", __func__ , __LINE__);
@@ -684,53 +814,76 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
     fflush(stdout);
 #endif
 
+#ifdef DEBUG_ITER_TIME
+    iter_ele_time += HASH_HEAD_NUM;
+#endif
     // Iterate all following element nodes
 
     // Initialize the currentLsn as the rear lsn of list
     currentLsn = iter->lsnEntry[iter->entryNum-1].lsn;
     currentPageNum = iter->lsnEntry[iter->entryNum-1].pageNum;
 
-    HashNodeEle* eleIter = iter->nextEle;
+//    HashNodeEle* eleIter = iter->nextEle;
+    HashNodeEle* eleIter = iter->tailEle;
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[5]), &(findLowerCount[5]))
+#endif
+
     while(eleIter != NULL) {
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d \n", __func__ , __LINE__);
         fflush(stdout);
 #endif
         // fast skip
-        if(eleIter->maxLsn < targetLsn) {
-            currentLsn = eleIter->lsnEntry[eleIter->entryNum-1].lsn;
-            currentPageNum = eleIter->lsnEntry[eleIter->entryNum-1].pageNum;
-
-            eleIter = eleIter->nextEle;
+        if(eleIter->lsnEntry[0].lsn > targetLsn) {
+            eleIter = eleIter->prevEle;
             continue;
         }
+//        if(eleIter->maxLsn < targetLsn) {
+//            currentLsn = eleIter->lsnEntry[eleIter->entryNum-1].lsn;
+//            currentPageNum = eleIter->lsnEntry[eleIter->entryNum-1].pageNum;
+//
+//            eleIter = eleIter->nextEle;
+//#ifdef DEBUG_ITER_TIME
+//            iter_ele_time += HASH_ELEM_NUM;
+//#endif
+//            continue;
+//        }
 
-        // targetEntry should be found in the list
-        for(int i = 0; i < eleIter->entryNum; i++) {
-#ifdef ENABLE_DEBUG_INFO
-            printf("Get in, comparedLsn = %lu, pageNum = %d\n", eleIter->lsnEntry[i].lsn, eleIter->lsnEntry[i].pageNum);
-            fflush(stdout);
+#ifdef DEBUG_ITER_TIME
+        iter_ele_time += eleIter->entryNum;
 #endif
-            if(eleIter->lsnEntry[i].lsn > targetLsn) {
-                break;
-            } else {
-                currentLsn = eleIter->lsnEntry[i].lsn;
-                currentPageNum = eleIter->lsnEntry[i].pageNum;
-            }
+        // targetEntry should be found in the list
+        int resultIndex = LsnListFindLowerBound(targetLsn, eleIter->lsnEntry, eleIter->entryNum);
+        if(resultIndex != -1) {
+            currentLsn = eleIter->lsnEntry[resultIndex].lsn;
+            currentPageNum = eleIter->lsnEntry[resultIndex].pageNum;
         }
 
         // Found the desired lsn
         break;
     }
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[6]), &(findLowerCount[6]))
+#endif
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d \n", __func__ , __LINE__);
     fflush(stdout);
 #endif
+
+#ifdef DEBUG_ITER_TIME
+    printf("%s hashmap_iter_ele = %d\n", __func__ , iter_ele_time);
+    fflush(stdout);
+#endif
+
     *foundLsn = currentLsn;
     *foundPageNum = currentPageNum;
 
     pthread_rwlock_unlock(&iter->headLock);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(findLowerTime[7]), &(findLowerCount[7]))
+#endif
 //    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s end\n", __func__ );

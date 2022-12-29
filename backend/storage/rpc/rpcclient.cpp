@@ -68,6 +68,151 @@ DataPageAccessClient *client=NULL;
 int IsRpcClient = 0;
 pid_t MyPid = 0;
 
+#define DEBUG_TIMING
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <cstdlib>
+
+int initialized5 = 0;
+struct timeval output_timing5;
+
+pthread_mutex_t timing_mutex5 = PTHREAD_MUTEX_INITIALIZER;
+long client_nblocks_time[16];
+long client_nblocks_count[16];
+
+long client_readbuffer_time[16];
+long client_readbuffer_count[16];
+
+long client_extend_time[16];
+long client_extend_count[16];
+
+long client_exist_time[16];
+long client_exist_count[16];
+
+long client_create_time[16];
+long client_create_count[16];
+
+long client_truncate_time[16];
+long client_truncate_count[16];
+
+long client_read_time[16];
+long client_read_count[16];
+
+void PrintTimingResult5() {
+    struct timeval now;
+
+    if(!initialized5){
+        gettimeofday(&output_timing5, NULL);
+        initialized5 = 1;
+
+        memset(client_nblocks_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_nblocks_count, 0, 16*sizeof(client_nblocks_count[0]));
+
+        memset(client_readbuffer_time, 0, 16*sizeof(client_readbuffer_time[0]));
+        memset(client_readbuffer_count, 0, 16*sizeof(client_readbuffer_count[0]));
+
+        memset(client_extend_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_extend_count, 0, 16*sizeof(client_nblocks_count[0]));
+
+        memset(client_exist_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_exist_count, 0, 16*sizeof(client_nblocks_count[0]));
+
+        memset(client_create_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_create_count, 0, 16*sizeof(client_nblocks_count[0]));
+
+        memset(client_truncate_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_truncate_count, 0, 16*sizeof(client_nblocks_count[0]));
+
+        memset(client_read_time, 0, 16*sizeof(client_nblocks_time[0]));
+        memset(client_read_count, 0, 16*sizeof(client_nblocks_count[0]));
+    }
+
+
+    gettimeofday(&now, NULL);
+
+    if(now.tv_sec-output_timing5.tv_sec >= 5) {
+        output_timing5 = now;
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_nblocks_count[i] == 0)
+                continue;
+            printf("client_nblocks_%d = %ld\n",i,  client_nblocks_time[i]/client_nblocks_count[i]);
+            printf("client_nblocks_%d = %ld, count = %ld\n",i,  client_nblocks_time[i], client_nblocks_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_readbuffer_count[i] == 0)
+                continue;
+            printf("client_readbuffer_%d = %ld\n",i,  client_readbuffer_time[i]/client_readbuffer_count[i]);
+            printf("client_readbuffer_%d = %ld, count = %ld\n",i,  client_readbuffer_time[i], client_readbuffer_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_extend_count[i] == 0)
+                continue;
+            printf("client_extend_%d = %ld\n",i,  client_extend_time[i]/client_extend_count[i]);
+            printf("client_extend_%d = %ld, count = %ld\n",i,  client_extend_time[i], client_extend_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_exist_count[i] == 0)
+                continue;
+            printf("client_exist_%d = %ld\n",i,  client_exist_time[i]/client_exist_count[i]);
+            printf("client_exist_%d = %ld, count = %ld\n",i,  client_exist_time[i], client_exist_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_create_count[i] == 0)
+                continue;
+            printf("client_create_%d = %ld\n",i,  client_create_time[i]/client_create_count[i]);
+            printf("client_create_%d = %ld, count = %ld\n",i,  client_create_time[i], client_create_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_truncate_count[i] == 0)
+                continue;
+            printf("client_truncate_%d = %ld\n",i,  client_truncate_time[i]/client_truncate_count[i]);
+            printf("client_truncate_%d = %ld, count = %ld\n",i,  client_truncate_time[i], client_truncate_count[i]);
+            fflush(stdout);
+        }
+
+        for(int i = 0 ; i < 9; i++) {
+            if(client_truncate_count[i] == 0)
+                continue;
+            printf("client_read_%d = %ld\n",i,  client_read_time[i]/client_read_count[i]);
+            printf("client_read_%d = %ld, count = %ld\n",i,  client_read_time[i], client_read_count[i]);
+            fflush(stdout);
+        }
+
+    }
+}
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+do { \
+    gettimeofday(end_p, NULL); \
+    pthread_mutex_lock(&timing_mutex5); \
+    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec))/1000; \
+    (*global_count)++;                                                               \
+    pthread_mutex_unlock(&timing_mutex5); \
+    PrintTimingResult5(); \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+
+#endif
+
 void RpcInit()
 {
     printf("%s Start\n", __func__ );
@@ -108,10 +253,14 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
-           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum);
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 
     _Page _return;
@@ -123,11 +272,18 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
     _relpersistence = (int32_t)relpersistence;
     _readBufferMode = mode;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_readbuffer_time[0]), &(client_readbuffer_count[0]))
+#endif
     client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode, GetLogWrtResultLsn());
 
     _return.copy(buff, BLCKSZ);
 
-    printf("%s End\n", __func__ );
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_readbuffer_time[1]), &(client_readbuffer_count[1]))
+#endif
+    printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
     fflush(stdout);
 }
 
@@ -136,6 +292,10 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     _Page _return;
     int32_t _forkNum, _blkNum;
@@ -146,61 +306,100 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
     _forkNum = forknum;
     _blkNum = blknum;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_read_time[0]), &(client_read_count[0]))
+#endif
     client->RpcMdRead(_return, _reln, _forkNum, _blkNum, GetLogWrtResultLsn());
     _return.copy(buff, BLCKSZ);
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_read_time[1]), &(client_read_count[1]))
+#endif
     printf("%s End\n", __func__ );
     fflush(stdout);
     return;
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
-           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_exist_time[0]), &(client_exist_count[0]))
+#endif
     int32_t result = client->RpcMdExists(_reln, _forknum, GetLogWrtResultLsn());
 
-    printf("%s End, exist = %d\n", __func__ , result);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_exist_time[1]), &(client_exist_count[1]))
+#endif
+    printf("%s End, exist = %d spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, result, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
     return result;
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
-           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_nblocks_time[0]), &(client_nblocks_count[0]))
+#endif
     int32_t result = client->RpcMdNblocks(_reln, _forknum, GetLogWrtResultLsn());
 
-    printf("%s End, result = %d\n", __func__ , result);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_nblocks_time[1]), &(client_nblocks_count[1]))
+#endif
+    printf("%s End, result = %d,  spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__,  result, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 
     return result;
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d\n", __func__, reln->smgr_rnode.node.spcNode,
-           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum);
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
     int32_t _isRedo = isRedo;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_create_time[0]), &(client_create_count[0]))
+#endif
     client->RpcMdCreate(_reln, _forknum, _isRedo, GetLogWrtResultLsn());
-    printf("%s End\n", __func__ );
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_create_time[1]), &(client_create_count[1]))
+#endif
+    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 }
 
@@ -209,6 +408,10 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
@@ -218,9 +421,16 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
 
     _buff.assign(buff, BLCKSZ);
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_extend_time[0]), &(client_extend_count[0]))
+#endif
     client->RpcMdExtend(_reln, _forknum, _blknum, _buff, _skipFsync, GetLogWrtResultLsn());
 
-    printf("%s End\n", __func__ );
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_extend_time[1]), &(client_extend_count[1]))
+#endif
+    printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u pageIsNew=%d\n", __func__, reln->smgr_rnode.node.spcNode,
+           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
 }
 
@@ -229,12 +439,22 @@ void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
     fflush(stdout);
 
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     _Smgr_Relation _reln = MarshalSmgrRelation2RPC(reln);
     int32_t _forknum = forknum;
     int32_t _blknum = blknum;
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_truncate_time[0]), &(client_truncate_count[0]))
+#endif
     client->RpcTruncate(_reln, _forknum, _blknum, GetLogWrtResultLsn());
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, &(client_truncate_time[1]), &(client_truncate_count[1]))
+#endif
     printf("%s End\n", __func__ );
     fflush(stdout);
 }

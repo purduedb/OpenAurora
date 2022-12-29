@@ -849,6 +849,12 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			 */
 			do
 			{
+                printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu \n",
+                       __func__ , __LINE__, bufHdr->tag.rnode.spcNode,
+                       bufHdr->tag.rnode.dbNode, bufHdr->tag.rnode.relNode,
+                       bufHdr->tag.forkNum, bufHdr->tag.blockNum);
+                fflush(stdout);
+
 				uint32		buf_state = LockBufHdr(bufHdr);
 
 				Assert(buf_state & BM_VALID);
@@ -1089,9 +1095,9 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			BufferAccessStrategy strategy,
 			bool *foundPtr)
 {
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, smgr->smgr_rnode.node.spcNode,
-           smgr->smgr_rnode.node.dbNode, smgr->smgr_rnode.node.relNode, forkNum, blockNum);
-    fflush(stdout);
+//    printf("%s    Start2, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, smgr->smgr_rnode.node.spcNode,
+//           smgr->smgr_rnode.node.dbNode, smgr->smgr_rnode.node.relNode, forkNum, blockNum);
+//    fflush(stdout);
 	BufferTag	newTag;			/* identity of requested block */
 	uint32		newHash;		/* hash value for newTag */
 	LWLock	   *newPartitionLock;	/* buffer partition lock for it */
@@ -1673,9 +1679,9 @@ ReleaseAndReadBuffer(Buffer buffer,
 static bool
 PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 {
-    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
-           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
-    fflush(stdout);
+//    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+//           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+//    fflush(stdout);
 	Buffer		b = BufferDescriptorGetBuffer(buf);
 	bool		result;
 	PrivateRefCountEntry *ref;
@@ -1802,9 +1808,9 @@ PinBuffer_Locked(BufferDesc *buf)
 static void
 UnpinBuffer(BufferDesc *buf, bool fixOwner)
 {
-    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
-           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
-    fflush(stdout);
+//    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+//           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+//    fflush(stdout);
 	PrivateRefCountEntry *ref;
 	Buffer		b = BufferDescriptorGetBuffer(buf);
 
@@ -4401,9 +4407,9 @@ rnode_comparator(const void *p1, const void *p2)
 uint32
 LockBufHdr(BufferDesc *desc)
 {
-	printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , desc->tag.rnode.spcNode,
-		   desc->tag.rnode.dbNode, desc->tag.rnode.relNode);
-	fflush(stdout);
+//	printf("pid = %d, %s starts, spc = %ld, db = %ld, rel = %ld\n", getpid(),__func__ , desc->tag.rnode.spcNode,
+//		   desc->tag.rnode.dbNode, desc->tag.rnode.relNode);
+//	fflush(stdout);
 	SpinDelayStatus delayStatus;
 	uint32		old_buf_state;
 

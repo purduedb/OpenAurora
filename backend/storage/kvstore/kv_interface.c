@@ -41,6 +41,8 @@ void InitKvStore() {
     if (db != NULL) {
         return;
     }
+    printf("%s start\n", __func__ );
+    fflush(stdout);
 
     snprintf(KvStorePath, sizeof(KvStorePath), "%s/rocksdb_test_db", DataDir);
 
@@ -59,15 +61,35 @@ void InitKvStore() {
 #else
     long cpus = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
+//    rocksdb_options_increase_parallelism(options, (int)(cpus));
+//    rocksdb_options_optimize_level_style_compaction(options, 0);
+//    // create the DB if it's not already present
+//    rocksdb_options_set_create_if_missing(options, 1);
     rocksdb_options_increase_parallelism(options, (int)(cpus));
     rocksdb_options_optimize_level_style_compaction(options, 0);
+
+    rocksdb_options_set_max_background_compactions(options, (int)(cpus));
+    rocksdb_options_set_max_background_flushes(options, (int)(cpus));
+
+    rocksdb_options_set_compression(options, (int)(cpus));
+    rocksdb_options_set_max_successive_merges(options, 1000);
+//    rocksdb_options_set_manual_wal_flush(options, 1);
+    rocksdb_options_set_write_buffer_size(options, (size_t)10*1024*1024*1024);
+
+    rocksdb_env_t *options_env = rocksdb_create_default_env();
+    rocksdb_env_set_high_priority_background_threads(options_env, (int)(cpus));
+    rocksdb_env_set_low_priority_background_threads(options_env, (int)(cpus));
+    rocksdb_options_set_env(options,options_env);
     // create the DB if it's not already present
     rocksdb_options_set_create_if_missing(options, 1);
+
 
     // open DB
     char *err = NULL;
     db = rocksdb_open(options, KvStorePath, &err);
     rocksdb_options_destroy(options);
+    printf("%s ends \n", __func__ );
+    fflush(stdout);
     return;
 }
 

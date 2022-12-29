@@ -108,6 +108,8 @@ static void ApplyXlogUntil(StringInfo input_message);
 static void SyncLsnReplay(StringInfo input_message);
 static void GetRelSize(StringInfo input_message);
 static void ApplyOneXlog(StringInfo input_message);
+static void ApplyOneXlogWithoutBasePage(StringInfo input_message);
+static void ApplyLsnListXlog(StringInfo input_message);
 
 static BufferTag target_redo_tag;
 
@@ -399,6 +401,14 @@ WalRedoMain(int argc, char *argv[],
         fflush(stdout);
         switch (firstchar)
         {
+            case 'E':
+                ApplyOneXlogWithoutBasePage(&input_message);
+                break;
+
+            case 'O':
+                ApplyLsnListXlog(&input_message);
+                break;
+
             case 'D':
                 ApplyOneXlog(&input_message);
                 break;
@@ -770,7 +780,7 @@ BeginRedoForBlock(StringInfo input_message)
 // Optimize: Startup process can put xlog to rocksdb when processing the xlogs
 //              then, rpc server can pass the xlog to this standalone process.
 static void
-ApplyOneXlog(StringInfo input_message) {
+ApplyOneXlogWithoutBasePage(StringInfo input_message) {
     printf("%s %d, start \n", __func__ , __LINE__);
     fflush(stdout);
 
@@ -802,18 +812,18 @@ ApplyOneXlog(StringInfo input_message) {
     // LSN
     pq_copymsgbytes(input_message, (char *) &lsn, sizeof(lsn));
     lsn = pg_ntoh64(lsn);
-    content = pq_getmsgbytes(input_message, BLCKSZ);
 
     // Put the original page to buffer
-    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
-    wal_redo_buffer = buf;
-    page = BufferGetPage(buf);
-    memcpy(page, content, BLCKSZ);
-    MarkBufferDirty(buf); /* pro forma */
-    UnlockReleaseBuffer(buf);
+//    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
+//    wal_redo_buffer = buf;
+//    page = BufferGetPage(buf);
+//    memcpy(page, content, BLCKSZ);
+//    MarkBufferDirty(buf); /* pro forma */
+//    UnlockReleaseBuffer(buf);
 
-    // Replay lsn which related with this page
     char *err_msg;
+#ifdef XLOG_IN_ROCKSDB
+    // Replay lsn which related with this page
     record = (XLogRecord *) pq_getmsgbytes(input_message, sizeof(XLogRecord));
     printf("%s %d, get record info, record total length is %u\n", __func__ , __LINE__, record->xl_tot_len);
     fflush(stdout);
@@ -831,8 +841,12 @@ ApplyOneXlog(StringInfo input_message) {
         elog(ERROR, "failed to decode WAL record: %s", err_msg);
 
 
+#else
 
-//    record = XLogReadRecord(reader_state, &err_msg);
+    XLogBeginRead(reader_state, lsn);
+    record = XLogReadRecord(reader_state, &err_msg);
+
+#endif
 
     printf("%s Read record succeed, ready to replay\n", __func__ );
     fflush(stdout);
@@ -935,6 +949,350 @@ ApplyOneXlog(StringInfo input_message) {
     return;
 }
 
+// Optimize: Startup process can put xlog to rocksdb when processing the xlogs
+//              then, rpc server can pass the xlog to this standalone process.
+static void
+ApplyOneXlog(StringInfo input_message) {
+    printf("%s %d, start \n", __func__ , __LINE__);
+    fflush(stdout);
+
+    RelFileNode rnode;
+    ForkNumber forknum;
+    BlockNumber blknum;
+    const char *content;
+    Buffer		buf;
+    Page		page;
+    int64_t     lsn;
+    XLogRecord * record;
+
+    /*
+      * message format:
+      *
+      * ForkNumber
+      * spcNode
+      * dbNode
+      * relNode
+      * BlockNumber
+      * lsn
+      * 8k page content
+      */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+    blknum = pq_getmsgint(input_message, 4);
+    // LSN
+    pq_copymsgbytes(input_message, (char *) &lsn, sizeof(lsn));
+    lsn = pg_ntoh64(lsn);
+    content = pq_getmsgbytes(input_message, BLCKSZ);
+
+    // Put the original page to buffer
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
+    wal_redo_buffer = buf;
+    page = BufferGetPage(buf);
+    memcpy(page, content, BLCKSZ);
+    MarkBufferDirty(buf); /* pro forma */
+    UnlockReleaseBuffer(buf);
+
+    char *err_msg;
+#ifdef XLOG_IN_ROCKSDB
+    // Replay lsn which related with this page
+    record = (XLogRecord *) pq_getmsgbytes(input_message, sizeof(XLogRecord));
+    printf("%s %d, get record info, record total length is %u\n", __func__ , __LINE__, record->xl_tot_len);
+    fflush(stdout);
+
+    int nleft = input_message->len - input_message->cursor;
+    if (record->xl_tot_len != sizeof(XLogRecord) + nleft)
+        elog(ERROR, "mismatch between record (%d) and message size (%d)",
+             record->xl_tot_len, (int) sizeof(XLogRecord) + nleft);
+
+    XLogBeginRead(reader_state, lsn);
+    reader_state->ReadRecPtr = lsn;
+    reader_state->decoded_record = record;
+
+    if (!DecodeXLogRecord(reader_state, record, &err_msg))
+        elog(ERROR, "failed to decode WAL record: %s", err_msg);
+
+
+#else
+
+    XLogBeginRead(reader_state, lsn);
+    record = XLogReadRecord(reader_state, &err_msg);
+
+#endif
+
+    printf("%s Read record succeed, ready to replay\n", __func__ );
+    fflush(stdout);
+    const char*id=NULL;
+    id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+    if (id)
+        printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+    else
+        printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+    fflush(stdout);
+
+    // redo function need read again from disk, make sure REDO() will lock the buff
+    buf = InvalidBuffer;
+
+    BufferTag bufferTag;
+    XLogRedoAction action = BLK_NOTFOUND;
+    INIT_BUFFERTAG(bufferTag, rnode, forknum, blknum);
+    switch (record->xl_rmid) {
+        case RM_XLOG_ID:
+            action = polar_xlog_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HEAP2_ID:
+            action = polar_heap2_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HEAP_ID:
+            action = polar_heap_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_BTREE_ID:
+            action = polar_btree_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_HASH_ID:
+            action = polar_hash_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GIN_ID:
+            action = polar_gin_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GIST_ID:
+            action = polar_gist_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_SEQ_ID:
+            action = polar_seq_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_SPGIST_ID:
+            action = polar_spg_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_BRIN_ID:
+            action = polar_brin_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        case RM_GENERIC_ID:
+            action = polar_generic_idx_redo(reader_state, &bufferTag, &buf);
+            break;
+        default:
+            printf("%s didn't find any corresponding polar redo function\n", __func__ );
+            break;
+    }
+    printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
+    fflush(stdout);
+
+    // If not found polar redo function, do regular original redo
+    if(action == BLK_NOTFOUND) {
+        RmgrTable[record->xl_rmid].rm_redo(reader_state);
+    } else {
+        UnlockReleaseBuffer(buf);
+    }
+
+    // For now, redo completed, find the page from buffer pool
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_NORMAL, NULL);
+    Assert(buf == wal_redo_buffer);
+    page = BufferGetPage(buf);
+//    LockBuffer(buf, LW_SHARED);
+    /* single thread, so don't bother locking the page */
+
+    /* Response: Page content */
+    int tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < BLCKSZ);
+
+    ReleaseBuffer(buf);
+    printf("%s LINE=%d \n", __func__ , __LINE__);
+    fflush(stdout);
+
+    if(PageIsNew(page)) {
+        printf("%s found page is new \n", __func__ );
+        fflush(stdout);
+    }
+//    DropRelFileNodeAllLocalBuffers(rnode);
+    wal_redo_buffer = InvalidBuffer;
+    return;
+}
+
+static void
+ApplyLsnListXlog(StringInfo input_message) {
+    printf("%s %d, start \n", __func__ , __LINE__);
+    fflush(stdout);
+
+    RelFileNode rnode;
+    ForkNumber forknum;
+    BlockNumber blknum;
+    const char *content;
+    Buffer		buf;
+    Page		page;
+    uint64_t*    lsnList;
+    unsigned int listSize;
+    XLogRecord * record;
+
+
+    /*
+      * message format:
+      *
+      * ForkNumber
+      * spcNode
+      * dbNode
+      * relNode
+      * BlockNumber
+      * listSize
+      * lsnList
+      * 8k page content
+      */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+    blknum = pq_getmsgint(input_message, 4);
+
+    listSize = pq_getmsgint(input_message, 4);
+    printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, listSize = %d\n",
+           __func__ , __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, forknum,
+           blknum, listSize);
+    fflush(stdout);
+
+    lsnList = (uint64_t*) malloc(listSize*sizeof(uint64_t));
+    for(int i = 0; i < listSize; i++) {
+        pq_copymsgbytes(input_message, (char *) &(lsnList[i]), sizeof(uint64_t));
+        lsnList[i] = pg_ntoh64(lsnList[i]);
+    }
+
+
+    content = pq_getmsgbytes(input_message, BLCKSZ);
+
+    printf("%s %d, lsn size = %d\n", __func__ , __LINE__, listSize);
+    for(int i = 0; i < listSize; i++) {
+        printf("lsn %d = %lu\n", i, lsnList[i]);
+    }
+    fflush(stdout);
+    // Put the original page to buffer
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
+    wal_redo_buffer = buf;
+    page = BufferGetPage(buf);
+    memcpy(page, content, BLCKSZ);
+    printf("%s %d page's lsn = %lu\n", __func__ , __LINE__, PageGetLSN(page));
+    fflush(stdout);
+
+    MarkBufferDirty(buf); /* pro forma */
+    UnlockReleaseBuffer(buf);
+
+    BufferTag bufferTag;
+    INIT_BUFFERTAG(bufferTag, rnode, forknum, blknum);
+
+    char *err_msg;
+    for(int i = 0; i < listSize; i++) {
+        XLogBeginRead(reader_state, lsnList[i]);
+        record = XLogReadRecord(reader_state, &err_msg);
+        const char*id=NULL;
+        id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+        if (id)
+            printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+        else
+            printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+        fflush(stdout);
+
+        // redo function need read again from disk, make sure REDO() will lock the buff
+        buf = InvalidBuffer;
+
+        XLogRedoAction action = BLK_NOTFOUND;
+        switch (record->xl_rmid) {
+            case RM_XLOG_ID:
+                action = polar_xlog_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HEAP2_ID:
+                action = polar_heap2_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HEAP_ID:
+                action = polar_heap_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_BTREE_ID:
+                action = polar_btree_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HASH_ID:
+                action = polar_hash_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GIN_ID:
+                action = polar_gin_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GIST_ID:
+                action = polar_gist_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_SEQ_ID:
+                action = polar_seq_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_SPGIST_ID:
+                action = polar_spg_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_BRIN_ID:
+                action = polar_brin_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GENERIC_ID:
+                action = polar_generic_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            default:
+                printf("%s didn't find any corresponding polar redo function\n", __func__ );
+                break;
+        }
+        printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
+        fflush(stdout);
+
+        // If not found polar redo function, do regular original redo
+        if(action == BLK_NOTFOUND) {
+            RmgrTable[record->xl_rmid].rm_redo(reader_state);
+        } else {
+            UnlockReleaseBuffer(buf);
+        }
+    }
+
+    free(lsnList);
+
+    // For now, redo completed, find the page from buffer pool
+    buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_NORMAL, NULL);
+    Assert(buf == wal_redo_buffer);
+    page = BufferGetPage(buf);
+//    LockBuffer(buf, LW_SHARED);
+    /* single thread, so don't bother locking the page */
+
+    /* Response: Page content */
+    int tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < BLCKSZ);
+
+    ReleaseBuffer(buf);
+    printf("%s LINE=%d \n", __func__ , __LINE__);
+    fflush(stdout);
+
+    if(PageIsNew(page)) {
+        printf("%s found page is new \n", __func__ );
+        fflush(stdout);
+    }
+//    DropRelFileNodeAllLocalBuffers(rnode);
+    wal_redo_buffer = InvalidBuffer;
+    return;
+}
 
 /*
  * Receive a page given by the client, and put it into buffer cache.
