@@ -282,6 +282,9 @@ polar_btree_xlog_split(bool newitemonleft, XLogReaderState *record,
 static XLogRedoAction
 polar_bt_restore_meta(XLogReaderState *record, uint8 block_id, Buffer *metabuf)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     XLogRecPtr  lsn = record->EndRecPtr;
     Page        metapg;
     BTMetaPageData *md;
@@ -290,9 +293,18 @@ polar_bt_restore_meta(XLogReaderState *record, uint8 block_id, Buffer *metabuf)
     char       *ptr;
     Size        len;
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     POLAR_INIT_BUFFER_FOR_REDO(record, block_id, metabuf);
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     ptr = XLogRecGetBlockData(record, block_id, &len);
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     Assert(len == sizeof(xl_btree_metadata));
     Assert(BufferGetBlockNumber(*metabuf) == BTREE_METAPAGE);
@@ -314,6 +326,9 @@ polar_bt_restore_meta(XLogReaderState *record, uint8 block_id, Buffer *metabuf)
     md->btm_last_cleanup_num_heap_tuples = xlrec->last_cleanup_num_heap_tuples;
     md->btm_allequalimage = xlrec->allequalimage;
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     pageop = (BTPageOpaque) PageGetSpecialPointer(metapg);
     pageop->btpo_flags = BTP_META;
 
@@ -326,6 +341,9 @@ polar_bt_restore_meta(XLogReaderState *record, uint8 block_id, Buffer *metabuf)
             ((char *) md + sizeof(BTMetaPageData)) - (char *) metapg;
 
     PageSetLSN(metapg, lsn);
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     return BLK_NEEDS_REDO;
 }
@@ -906,6 +924,9 @@ polar_btree_xlog_unlink_page(uint8 info, XLogReaderState *record, BufferTag *tag
 static XLogRedoAction
 polar_btree_xlog_newroot(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     XLogRecPtr  lsn = record->EndRecPtr;
     xl_btree_newroot *xlrec = (xl_btree_newroot *) XLogRecGetData(record);
     Page        page;
@@ -916,8 +937,14 @@ polar_btree_xlog_newroot(XLogReaderState *record, BufferTag *tag, Buffer *buffer
 
     POLAR_GET_LOG_TAG(record, tags[0], 0);
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     if (BUFFERTAGS_EQUAL(*tag, tags[0]))
     {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         POLAR_INIT_BUFFER_FOR_REDO(record, 0, buffer);
         page = (Page) BufferGetPage(*buffer);
 
@@ -940,16 +967,28 @@ polar_btree_xlog_newroot(XLogReaderState *record, BufferTag *tag, Buffer *buffer
         }
 
         PageSetLSN(page, lsn);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         return BLK_NEEDS_REDO;
     }
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     /* move _bt_clear_incomplete_split to here, important by kangxian */
     if (xlrec->level > 0)
     {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         POLAR_GET_LOG_TAG(record, tags[1], 1);
 
         if (BUFFERTAGS_EQUAL(*tag, tags[1]))
         {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
             /* Clear the incomplete-split flag in left child */
             return polar_bt_clear_incomplete_split(record, 1, buffer);
         }
@@ -957,8 +996,19 @@ polar_btree_xlog_newroot(XLogReaderState *record, BufferTag *tag, Buffer *buffer
 
     POLAR_GET_LOG_TAG(record, tags[2], 2);
 
-    if (BUFFERTAGS_EQUAL(*tag, tags[2]))
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
+    if (BUFFERTAGS_EQUAL(*tag, tags[2])){
+
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         return polar_bt_restore_meta(record, 2, buffer);
+    }
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     return BLK_NOTFOUND;
 }

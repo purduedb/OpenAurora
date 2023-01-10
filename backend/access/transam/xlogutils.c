@@ -305,6 +305,8 @@ XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
 Buffer
 XLogInitBufferForRedo(XLogReaderState *record, uint8 block_id)
 {
+    printf("%s %d start, block_id = %d\n", __func__ , __LINE__, block_id);
+    fflush(stdout);
 	Buffer		buf;
 
 	XLogReadBufferForRedoExtended(record, block_id, RBM_ZERO_AND_LOCK, false,
@@ -333,6 +335,8 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 							  ReadBufferMode mode, bool get_cleanup_lock,
 							  Buffer *buf)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	XLogRecPtr	lsn = record->EndRecPtr;
 	RelFileNode rnode;
 	ForkNumber	forknum;
@@ -358,9 +362,13 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 	if (!willinit && zeromode)
 		elog(PANIC, "block to be initialized in redo routine must be marked with WILL_INIT flag in the WAL record");
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/* If it has a full-page image and it should be restored, do it. */
 	if (XLogRecBlockImageApply(record, block_id))
 	{
+        printf("%s %d 2\n", __func__ , __LINE__);
+        fflush(stdout);
 		Assert(XLogRecHasBlockImage(record, block_id));
 		*buf = XLogReadBufferExtended(rnode, forknum, blkno,
 									  get_cleanup_lock ? RBM_ZERO_AND_CLEANUP_LOCK : RBM_ZERO_AND_LOCK);
@@ -374,10 +382,14 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 		 */
 		if (!PageIsNew(page))
 		{
+            printf("%s %d, lsn = %lu\n", __func__ , __LINE__, lsn);
+            fflush(stdout);
 			PageSetLSN(page, lsn);
 		}
+        printf("%s %d, after redo lsn = %lu\n", __func__ , __LINE__, lsn);
+        fflush(stdout);
 
-		MarkBufferDirty(*buf);
+        MarkBufferDirty(*buf);
 
 		/*
 		 * At the end of crash recovery the init forks of unlogged relations
@@ -392,9 +404,15 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 	}
 	else
 	{
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
 		*buf = XLogReadBufferExtended(rnode, forknum, blkno, mode);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
 		if (BufferIsValid(*buf))
 		{
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
 			if (mode != RBM_ZERO_AND_LOCK && mode != RBM_ZERO_AND_CLEANUP_LOCK)
 			{
 				if (get_cleanup_lock)
@@ -402,6 +420,8 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 				else
 					LockBuffer(*buf, BUFFER_LOCK_EXCLUSIVE);
 			}
+            printf("%s %d, origLsn = %lu, record_lsn = %lu\n", __func__ , __LINE__, PageGetLSN(BufferGetPage(*buf)), lsn);
+            fflush(stdout);
 			if (lsn <= PageGetLSN(BufferGetPage(*buf)))
 				return BLK_DONE;
 			else
@@ -410,6 +430,8 @@ XLogReadBufferForRedoExtended(XLogReaderState *record,
 		else
 			return BLK_NOTFOUND;
 	}
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 }
 
 /*
@@ -442,7 +464,9 @@ Buffer
 XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 					   BlockNumber blkno, ReadBufferMode mode)
 {
-	BlockNumber lastblock;
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+    BlockNumber lastblock;
 	Buffer		buffer;
 	SMgrRelation smgr;
 

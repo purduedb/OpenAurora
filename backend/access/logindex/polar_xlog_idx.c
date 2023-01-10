@@ -32,6 +32,9 @@ xlog_idx_fpi_redo(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 	{
 		BufferTag page_tag;
 		POLAR_GET_LOG_TAG(record, page_tag, block_id);
+        printf("%s %d, spc = %lu, db = %lu, rel = %lu, forknum = %d, blk = %lu\n", __func__ , __LINE__,
+               page_tag.rnode.spcNode, page_tag.rnode.dbNode, page_tag.rnode.relNode, page_tag.forkNum, page_tag.blockNum);
+        fflush(stdout);
 
 		if (BUFFERTAGS_EQUAL(*tag, page_tag))
 		{

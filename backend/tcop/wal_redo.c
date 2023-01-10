@@ -1197,9 +1197,9 @@ ApplyLsnListXlog(StringInfo input_message) {
         const char*id=NULL;
         id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
         if (id)
-            printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+            printf("%s %s %d, rm = %s info = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id, lsnList[i]);
         else
-            printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+            printf("%s %s %d, rm = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name, lsnList[i]);
         fflush(stdout);
 
         // redo function need read again from disk, make sure REDO() will lock the buff

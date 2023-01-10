@@ -267,14 +267,14 @@ public:
 
         uint64_t  replayedLsn;
         uint64_t *toReplayList;
-        int listSize;
+        int listSize = 0;
         int found = HashMapGetBlockReplayList(pageVersionHashMap, key, _lsn, &replayedLsn, &toReplayList, &listSize);
 //        int found = GetListFromRocksdb(tag, &uintList, &listSize);
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &(readBufferCommon[0]), &(readBufferCount[0]))
 #endif
-        printf("%s found = %d\n", __func__ , found);
+        printf("%s found = %d, listSize = %d\n", __func__ , found, listSize);
         fflush(stdout);
 
 
@@ -289,7 +289,7 @@ public:
 
             char* buff;
             // Try to get RpcMdExtend page as BasePage
-            if(GetPageFromRocksdb(bufferTag, 0, &buff) == 0) {
+            if(GetPageFromRocksdb(bufferTag, 1, &buff) == 0) {
                 printf("%s %d, can't find page in RocksDB-extend, try to find it from standalone\n", __func__ , __LINE__);
                 fflush(stdout);
                 // If not created by RpcMdExtend, get page from StandAlone process
@@ -306,19 +306,19 @@ public:
             fflush(stdout);
 
 
-            HashMapInsertKey(pageVersionHashMap, key, lsn, -1, 1);
-            HashMapUpdateReplayedLsn(pageVersionHashMap, key, lsn, false);
+            HashMapInsertKey(pageVersionHashMap, key, 1, -1, 1);
+            HashMapUpdateReplayedLsn(pageVersionHashMap, key, 1, false);
 
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[2]), &(readBufferCount[2]))
 #endif
             // Remove extended page from Rocksdb
-            DeletePageFromRocksdb(bufferTag, 0);
+            DeletePageFromRocksdb(bufferTag, 1);
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[3]), &(readBufferCount[3]))
 #endif
             // Put base page to Rocksdb
-            PutPage2Rocksdb(bufferTag, lsn, buff);
+            PutPage2Rocksdb(bufferTag, 1, buff);
 
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[4]), &(readBufferCount[4]))
@@ -334,7 +334,7 @@ public:
 #endif
             return;
         }
-         printf("%s %d\n", __func__ , __LINE__);
+         printf("%s %d, replayedLsn = %lu\n", __func__ , __LINE__, replayedLsn);
          fflush(stdout);
 
          // Now we found the target lsn list
@@ -367,7 +367,7 @@ public:
 //                }
                 ApplyOneLsnWithoutBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum,
                                            toReplayList[0], buff);
-            } else if (currRelSize == -1 && listSize == 0) {
+            } else if (currRelSize == -1 && listSize >= 0) { //TODO: listSize>=0 or listSize==0
                 /*
                  * For some forknum != 0 relation, the RpcMdExtend will transfer a page with inner lsn equals to 0
                  * And there won't have corresponding xlog generated with this mdextend operation. Therefore, in the prior
@@ -380,7 +380,7 @@ public:
                  * So, when we reached here, it's the basePage created by RpcMdExtend, and it's forknum should not be 0.
                  * We should just get this page from RocksDB with lsn = 0.
                  */
-                int foundBasePage = GetPageFromRocksdb(bufferTag, 0, &buff);
+                int foundBasePage = GetPageFromRocksdb(bufferTag, 1, &buff);
                 if(!foundBasePage) {
                     printf("%s %d, Error: can't find basePage in disk or rocksdb, and there is no lsn to replay\n", __func__ , __LINE__);
                     fflush(stdout);
@@ -392,19 +392,22 @@ public:
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &readBufferCommon[6], &readBufferCount[6])
 #endif
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
             XLogRecPtr lsn = PageGetLSN(buff);
 
             // Put page to Rocksdb
-            PutPage2Rocksdb(bufferTag, lsn, buff);
+            PutPage2Rocksdb(bufferTag, 1, buff);
 
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &readBufferCommon[7], &readBufferCount[7])
 #endif
             // Set first slot's lsn as this page's lsn
             // Set replayed slot
-            HashMapUpdateFirstEmptySlot(pageVersionHashMap, key, lsn);
+            HashMapUpdateFirstEmptySlot(pageVersionHashMap, key, 1);
 
-            replayedLsn = lsn;
+            replayedLsn = 1;
             printf("%s LINE=%d \n", __func__ , __LINE__);
             fflush(stdout);
 
@@ -414,7 +417,7 @@ public:
             RECORD_TIMING(&start, &end, &readBufferCommon[8], &readBufferCount[8])
 #endif
         }
-         printf("%s LINE=%d \n", __func__ , __LINE__);
+         printf("%s LINE=%d, listSize = %d, replayedLsn = %lu \n", __func__ , __LINE__, listSize, replayedLsn);
          fflush(stdout);
 
 
@@ -468,7 +471,7 @@ public:
         memcpy(page1, basePage, BLCKSZ);
         free(basePage);
 
-         printf("%s LINE=%d \n", __func__ , __LINE__);
+         printf("%s LINE=%d basePageLsn = %lu, pageIsNew = %d\n", __func__ , __LINE__, PageGetLSN(page1), PageIsNew(page1));
          fflush(stdout);
 
 #ifdef DEBUG_TIMING
@@ -514,7 +517,7 @@ public:
 
 
          if(listSize > 0) {
-             HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize-1], true);
+             HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize-1], false);
 
              free(toReplayList);
          }
@@ -752,9 +755,11 @@ public:
                 printf("%s HashMap insert failed\n", __func__ );
         }
 
-//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-//        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
-//        printf("%s end\n", __func__);
+
+        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
+
+        printf("%s end\n", __func__);
         fflush(stdout);
     }
 
@@ -781,6 +786,7 @@ public:
         uint64_t foundLsn;
         int foundPageNum;
         int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
+        //TODO: Here may have some problems: extend-page content's lsn is larger than parameter lsn
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
         if(!found || foundPageNum<_blknum+1) {
@@ -801,15 +807,21 @@ public:
         _buff.copy(extendPage, BLCKSZ);
         printf("%s %d, parameter lsn = %lu\n", __func__ , __LINE__, PageGetLSN(extendPage));
         fflush(stdout);
+
+        //TODO: maybe it not this reason
+        /*!
+         *  Important: Before we put this extended page to
+         */
         // Put version:-1 to RocksDB
-        PutPage2Rocksdb(tag, 0, extendPage);
+        PutPage2Rocksdb(tag, 1, extendPage);
+
+        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
 
         free(extendPage);
-//        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        char extendPage[BLCKSZ+16];
 //        _buff.copy(extendPage, BLCKSZ);
 //
-//        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
         printf("%s end\n", __func__);
         fflush(stdout);
     }

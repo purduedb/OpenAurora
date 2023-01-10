@@ -122,6 +122,7 @@ int			wal_retrieve_retry_interval = 5000;
 int			max_slot_wal_keep_size_mb = -1;
 
 //#define XLOG_IN_ROCKSDB
+#define ENABLE_DEBUG_INFO
 
 #ifdef WAL_DEBUG
 bool		XLOG_DEBUG = false;

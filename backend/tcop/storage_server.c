@@ -620,6 +620,8 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 // targetPage should be allocated by caller function
 // This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
 void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize, char* origPage, char* targetPage) {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -628,7 +630,7 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 
 //    pthread_mutex_lock(&replayProcessMutex);
 
-    printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, listSize = %d\n", __func__ , __FILE__, __LINE__,
+    printf("%s %s %d , spcID = %lu, dbID = %lu, tabID = %lu, fornum = %d, blkNum = %lu, listSize = %d\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, listSize);
     fflush(stdout);
 

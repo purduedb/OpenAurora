@@ -1159,7 +1159,19 @@ polar_xlog_queue_decode_heap(XLogReaderState *state)
 
     switch (info & XLOG_HEAP_OPMASK)
     {
-        case XLOG_HEAP_INSERT:
+		case XLOG_HEAP_INSERT | XLOG_HEAP_INIT_PAGE:
+		{
+			xl_heap_insert *xlrec = (xl_heap_insert *)(state->main_data);
+
+			if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED) {
+				printf("%s %d, !!!!! need parse \n", __func__ , __LINE__);
+				fflush(stdout);
+			}
+
+			break;
+
+		}
+		case XLOG_HEAP_INSERT:
         {
             xl_heap_insert *xlrec = (xl_heap_insert *)(state->main_data);
 

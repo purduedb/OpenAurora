@@ -20,6 +20,9 @@ static XLogRedoAction
 polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
                     BlockNumber heapBlk, Buffer *buffer, uint8 flags)
 {
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+
     Relation    reln = CreateFakeRelcacheEntry(*rnode);
     int         mapByte = HEAPBLK_TO_MAPBYTE(heapBlk);
     int         mapOffset = HEAPBLK_TO_OFFSET(heapBlk);
@@ -33,6 +36,9 @@ polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
         LockBuffer(*buffer, BUFFER_LOCK_EXCLUSIVE);
     }
 
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+
     map = PageGetContents(BufferGetPage(*buffer));
 
     if (map[mapByte] & mask)
@@ -44,6 +50,9 @@ polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
 
     if (PageGetLSN(page) < record->EndRecPtr)
         PageSetLSN(page, record->EndRecPtr);
+
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
 
     return BLK_NEEDS_REDO;
 }
@@ -189,7 +198,7 @@ static XLogRedoAction
 polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
     XLogRecPtr  lsn = record->EndRecPtr;
-    printf("%s %d, record lsn = %lu\n", __func__ , __LINE__, lsn);
+    printf("%s %d -- , record lsn = %lu\n", __func__ , __LINE__, lsn);
     fflush(stdout);
 
     xl_heap_insert *xlrec = (xl_heap_insert *) XLogRecGetData(record);
@@ -207,16 +216,34 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     XLogRedoAction action = BLK_NOTFOUND;
 
     POLAR_GET_LOG_TAG(record, tag0, 0);
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     INIT_BUFFERTAG(tag1, tag0.rnode, VISIBILITYMAP_FORKNUM, HEAPBLK_TO_MAPBLOCK(tag0.blockNum));
+    printf("%s %d, parameter tag: spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
+           tag->rnode.spcNode, tag->rnode.dbNode, tag->rnode.relNode, tag->forkNum, tag->blockNum);
+
+    printf("%s %d, tag0: spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
+           tag0.rnode.spcNode, tag0.rnode.dbNode, tag0.rnode.relNode, tag0.forkNum, tag0.blockNum);
+
+    printf("%s %d, tag1: spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
+           tag1.rnode.spcNode, tag1.rnode.dbNode, tag1.rnode.relNode, tag1.forkNum, tag1.blockNum);
+    fflush(stdout);
 
     if (BUFFERTAGS_EQUAL(*tag, tag1))
     {
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+
         /*
          * The visibility map may need to be fixed even if the heap page is
          * already up-to-date.
          */
         if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
         {
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+
             action = polar_heap_clear_vm(record, &tag0.rnode, tag0.blockNum, buffer,
                                          VISIBILITYMAP_VALID_BITS);
         }
@@ -1003,6 +1030,9 @@ polar_heap_xlog_freeze_page(XLogReaderState *record, BufferTag *tag, Buffer *buf
 static XLogRedoAction
 polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     XLogRecPtr  lsn = record->EndRecPtr;
     xl_heap_visible *xlrec = (xl_heap_visible *) XLogRecGetData(record);
     XLogRedoAction action = BLK_NOTFOUND;
@@ -1012,8 +1042,14 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     POLAR_GET_LOG_TAG(record, tag0, 0);
     POLAR_GET_LOG_TAG(record, tag1, 1);
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     if (BUFFERTAGS_EQUAL(*tag, tag1))
     {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         /*
          * Read the heap page, if it still exists. If the heap file has dropped or
          * truncated later in recovery, we don't need to update the page, but we'd
@@ -1023,6 +1059,9 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
         if (action == BLK_NEEDS_REDO)
         {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
             /*
              * We don't bump the LSN of the heap page when setting the visibility
              * map bit (unless checksums or wal_hint_bits is enabled, in which
@@ -1047,6 +1086,9 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         }
         else if (action == BLK_RESTORED)
         {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
             /*
              * If heap block was backed up, we already restored it and there's
              * nothing more to do. (This can only happen with checksums or
@@ -1055,8 +1097,14 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         }
     }
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
     if (BUFFERTAGS_EQUAL(*tag, tag0))
     {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         ReadBufferMode mode = BufferIsValid(*buffer) ? RBM_NORMAL : RBM_ZERO_ON_ERROR;
         /*
          * Even if we skipped the heap page update due to the LSN interlock, it's
@@ -1066,8 +1114,14 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
          */
         action = XLogReadBufferForRedoExtended(record, 0, mode, false, buffer);
 
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+
         if (action == BLK_NEEDS_REDO)
         {
+            printf("%s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+
             Page        vmpage = BufferGetPage(*buffer);
 
             /* initialize the page if it was read as zeros */
@@ -1092,6 +1146,9 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
             }
         }
     }
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 
     return action;
 }

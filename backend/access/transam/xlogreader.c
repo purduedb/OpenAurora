@@ -1489,6 +1489,8 @@ bool
 XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
 				   RelFileNode *rnode, ForkNumber *forknum, BlockNumber *blknum)
 {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	DecodedBkpBlock *bkpb;
 
 	if (!record->blocks[block_id].in_use) {
@@ -1497,6 +1499,8 @@ XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
         return false;
     }
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	bkpb = &record->blocks[block_id];
 	if (rnode)
 		*rnode = bkpb->rnode;
