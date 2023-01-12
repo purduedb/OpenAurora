@@ -327,8 +327,10 @@ void PutPage2Rocksdb(BufferTag bufferTag, uint64_t lsn, char* pageContent) {
     char tempKey[MAX_PATH_LEN];
     snprintf(tempKey, sizeof(tempKey), ROCKSDB_PAGE_VERSION_KEY, bufferTag.rnode.spcNode,
              bufferTag.rnode.dbNode, bufferTag.rnode.relNode, bufferTag.forkNum, bufferTag.blockNum, lsn);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, key = %s\n", __func__ , __LINE__, tempKey);
     fflush(stdout);
+#endif
 
     KvPut(tempKey, pageContent, BLCKSZ);
 

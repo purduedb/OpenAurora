@@ -122,7 +122,7 @@ int			wal_retrieve_retry_interval = 5000;
 int			max_slot_wal_keep_size_mb = -1;
 
 //#define XLOG_IN_ROCKSDB
-#define ENABLE_DEBUG_INFO
+//#define ENABLE_DEBUG_INFO
 
 #ifdef WAL_DEBUG
 bool		XLOG_DEBUG = false;
@@ -4448,8 +4448,10 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 		EndRecPtr = xlogreader->EndRecPtr;
 		if (record == NULL)
 		{
+#ifdef ENABLE_DEBUG_INFO
             printf("%s reached the end of xlog\n", __func__ );
             fflush(stdout);
+#endif
             reachXlogTempEnd = 1;
 			if (readFile >= 0)
 			{
@@ -7519,7 +7521,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-//#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7527,7 +7529,7 @@ StartupXLOG(void)
                 else
                     printf("%s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
-//#endif
+#endif
 
 #ifdef DEBUG_TIMING
                 RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
@@ -7590,10 +7592,14 @@ StartupXLOG(void)
                                     //      if the xlog's blockno is larger, then insert it.
                                     int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
                                     if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
+#ifdef ENABLE_DEBUG_INFO
                                         if (HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1, true) )
                                             printf("%s HashMap insert succeed\n", __func__ );
                                         else
                                             printf("%s HashMap insert failed\n", __func__ );
+#else
+                                        HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1, true);
+#endif
                                     } else if(!found) {
                                         // TODO: Could this merge with RocksDb creating list, since we will migrate list from RocksDb to inMem hashTable
                                         int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
@@ -7676,8 +7682,10 @@ StartupXLOG(void)
 #ifdef DEBUG_TIMING
                     RECORD_TIMING(&start, &end, &(startupTime[3]), &(startupCount[3]))
 #endif
-                    if(!parsed)
+                    if(!parsed) {
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+
+                    }
 
 #ifdef ENABLE_DEBUG_INFO
                     printf("%s %d, starts = %lu, ends = %lu \n",
@@ -7700,7 +7708,9 @@ StartupXLOG(void)
 #ifdef DEBUG_TIMING
                     RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
                     printf("%s parsed = %d, lsn = %lu\n", __func__ , parsed, xlogreader->ReadRecPtr);
+#endif
                 } else {
 #ifdef ENABLE_DEBUG_INFO
                     printf("%s %d Start process xlog\n", __func__ , __LINE__);
@@ -7770,6 +7780,7 @@ StartupXLOG(void)
                 }
 
 
+#ifdef ENABLE_DEBUG_INFO
 				// Debug Info
 				int block_id;
 				for (block_id = 0; block_id <= xlogreader->max_block_id; block_id++) {
@@ -7782,6 +7793,7 @@ StartupXLOG(void)
 						   __func__ , xlogreader->ReadRecPtr, tempRnode.spcNode, tempRnode.dbNode, tempRnode.relNode, tempForkNum, tempBlkNum, xlogreader->EndRecPtr);
 					fflush(stdout);
 				}
+#endif
 				/*
 				 * After redo, check whether the backup pages associated with
 				 * the WAL record are consistent with the existing pages. This
@@ -12525,8 +12537,10 @@ next_record_is_invalid:
 	/* In standby-mode, keep trying */
 	if (StandbyMode) {
         reachXlogTempEnd = 1;
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d, reachXlogTempEnd\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         goto retry;
     }
 	else

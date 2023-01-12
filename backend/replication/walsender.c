@@ -2744,8 +2744,10 @@ XLogSendPhysical(void)
 	pq_sendint64(&output_message, startptr);	/* dataStart */
 	pq_sendint64(&output_message, SendRqstPtr); /* walEnd */
 	pq_sendint64(&output_message, 0);	/* sendtime, filled in last */
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d sent xlog to followers\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
 	/*
 	 * Read the log directly into the output buffer to avoid extra memcpy

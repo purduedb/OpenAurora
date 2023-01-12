@@ -63,6 +63,8 @@ struct HashNodeHead {
     // Next head node linked by this headNode
     // Same hashSlot with different relation key
     HashNodeHead *nextHead;
+    HashNodeHead *prevHead;
+
     HashNodeEle  *nextEle;
     HashNodeEle  *tailEle;
 };

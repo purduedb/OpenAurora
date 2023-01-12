@@ -213,22 +213,22 @@ mdexists(SMgrRelation reln, ForkNumber forkNum)
     Assert(reln->smgr_rnode != NULL);
     ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forkNum);
     PartitionLock(MdPartitionMutex, (void*)&forkTagData);
-    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
-           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
+//           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, getpid(), gettid());
+//    fflush(stdout);
     /*
      * Close it first, to ensure that we notice if the fork has been unlinked
      * since we opened it.
      */
     _mdclose(reln, forkNum);
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     MdfdVec* result = mdopenfork(reln, forkNum, EXTENSION_RETURN_NULL);
 
     PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
-    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-    fflush(stdout);
+//    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//    fflush(stdout);
     return (result != NULL);
 }
 
@@ -244,16 +244,16 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
     ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forkNum);
     PartitionLock(MdPartitionMutex, (void*)&forkTagData);
 
-    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
-           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
+//           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, getpid(), gettid());
+//    fflush(stdout);
     MdfdVec    *mdfd;
     char	   *path;
     File		fd;
 
     if ((IsRpcServer||isRedo) && reln->md_num_open_segs[forkNum] > 0) {
-        printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-        fflush(stdout);
+//        printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//        fflush(stdout);
         PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
         return;					/* created and opened already... */
     }
@@ -271,8 +271,8 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
      */
     pthread_mutex_lock(&pgDataDirMutex);
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     TablespaceCreateDbspace(reln->smgr_rnode.node.spcNode,
                             reln->smgr_rnode.node.dbNode,
                             isRedo);
@@ -283,8 +283,8 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 
     fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     if (fd < 0)
     {
         int			save_errno = errno;
@@ -302,8 +302,8 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
         }
     }
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     pfree(path);
 
     _fdvec_resize(reln, forkNum, 1);
@@ -311,8 +311,8 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
     mdfd->mdfd_vfd = fd;
     mdfd->mdfd_segno = 0;
     PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
-    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-    fflush(stdout);
+//    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//    fflush(stdout);
 }
 
 /*
@@ -483,9 +483,9 @@ _mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
     int			nbytes;
     MdfdVec    *v;
 
-    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, blk=%d  pid=%d, tid=%d\n", __func__ ,
-           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum,getpid(), gettid());
-    fflush(stdout);
+//    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, blk=%d  pid=%d, tid=%d\n", __func__ ,
+//           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blocknum,getpid(), gettid());
+//    fflush(stdout);
     /*
      * If a relation manages to grow to 2^32-1 blocks, refuse to extend it any
      * more --- we mustn't create a block whose number actually is
@@ -504,12 +504,12 @@ _mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
     Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
-    printf("%s, %d, v is NULL? %d ,pid=%d, tid=%d\n", __func__ , __LINE__, (v==NULL), getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, v is NULL? %d ,pid=%d, tid=%d\n", __func__ , __LINE__, (v==NULL), getpid(), gettid());
+//    fflush(stdout);
     if ((nbytes = FileWrite(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_EXTEND)) != BLCKSZ)
     {
-        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-        fflush(stdout);
+//        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//        fflush(stdout);
         if (nbytes < 0)
             ereport(ERROR,
                     (errcode_for_file_access(),
@@ -524,15 +524,15 @@ _mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
                                nbytes, BLCKSZ, blocknum),
                         errhint("Check free disk space.")));
     }
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
 
     if (!skipFsync && !SmgrIsTemp(reln))
         register_dirty_segment(reln, forknum, v);
 
     Assert(_mdnblocks(reln, forknum, v) <= ((BlockNumber) RELSEG_SIZE));
-    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-    fflush(stdout);
+//    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//    fflush(stdout);
 }
 void
 mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
@@ -571,20 +571,20 @@ mdopenfork(SMgrRelation reln, ForkNumber forknum, int behavior)
 
     fd = PathNameOpenFile(path, O_RDWR | PG_BINARY);
 
-    printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
+//    fflush(stdout);
     if (fd < 0)
     {
         if ((behavior & EXTENSION_RETURN_NULL) &&
             FILE_POSSIBLY_DELETED(errno))
         {
-            printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
-            fflush(stdout);
+//            printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
+//            fflush(stdout);
             pfree(path);
             return NULL;
         }
-        printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
-        fflush(stdout);
+//        printf("%s, %d, result = %d ,pid=%d, tid=%d\n", __func__ , __LINE__, fd, getpid(), gettid());
+//        fflush(stdout);
         ereport(ERROR,
                 (errcode_for_file_access(),
                         errmsg("could not open file \"%s\": %m", path)));
@@ -867,9 +867,9 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 static BlockNumber
 _mdnblocksExtend(SMgrRelation reln, ForkNumber forknum) {
 
-    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
-           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s starts, spc=%ld, db=%ld, reln=%ld, fork=%d, pid=%d, tid=%d\n", __func__ ,
+//           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, getpid(), gettid());
+//    fflush(stdout);
     MdfdVec    *v = mdopenfork(reln, forknum, EXTENSION_FAIL);
     BlockNumber nblocks;
     BlockNumber segno = 0;
@@ -893,19 +893,19 @@ _mdnblocksExtend(SMgrRelation reln, ForkNumber forknum) {
     segno = reln->md_num_open_segs[forknum] - 1;
     v = &reln->md_seg_fds[forknum][segno];
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     for (;;)
     {
-        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-        fflush(stdout);
+//        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//        fflush(stdout);
 
         nblocks = _mdnblocks(reln, forknum, v);
         if (nblocks > ((BlockNumber) RELSEG_SIZE))
             elog(FATAL, "segment too big");
         if (nblocks < ((BlockNumber) RELSEG_SIZE)){
-            printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-            fflush(stdout);
+//            printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//            fflush(stdout);
             return (segno * ((BlockNumber) RELSEG_SIZE)) + nblocks;
         }
 
@@ -914,8 +914,8 @@ _mdnblocksExtend(SMgrRelation reln, ForkNumber forknum) {
          */
         segno++;
 
-        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-        fflush(stdout);
+//        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//        fflush(stdout);
         /*
          * We used to pass O_CREAT here, but that has the disadvantage that it
          * might create a segment which has vanished through some operating
@@ -925,13 +925,13 @@ _mdnblocksExtend(SMgrRelation reln, ForkNumber forknum) {
          */
         v = _mdfd_openseg(reln, forknum, segno, 0);
         if (v == NULL) {
-            printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-            fflush(stdout);
+//            printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//            fflush(stdout);
             return segno * ((BlockNumber) RELSEG_SIZE);
         }
     }
-    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
-    fflush(stdout);
+//    printf("%s ends, pid=%d, tid=%d\n", __func__ , getpid(), gettid());
+//    fflush(stdout);
 }
 /*
  *	mdnblocks() -- Get the number of blocks stored in a relation.

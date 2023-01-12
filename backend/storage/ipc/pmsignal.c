@@ -148,7 +148,7 @@ PMSignalShmemInit(void)
 void
 SendPostmasterSignal(PMSignalReason reason)
 {
-    printf("Called Postmaster\n");
+//    printf("Called Postmaster\n");
 	/* If called in a standalone backend, do nothing */
 	if (!IsUnderPostmaster && !IsRpcServer)
 		return;

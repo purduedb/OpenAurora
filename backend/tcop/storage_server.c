@@ -216,8 +216,10 @@ StartChildProcess(AuxProcType type)
 
 static void
 sigusr1_handler(SIGNAL_ARGS) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %s  received a signal \n", __FILE__, __func__ );
     fflush(stdout);
+#endif
     if (CheckPostmasterSignal(PMSIGNAL_START_WALRECEIVER))
     {
         if (WalRcvPid == 0) {
@@ -298,8 +300,10 @@ StartWalRedoProcess(int argc, char *argv[],
 pthread_mutex_t replayProcessMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr lsn) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start \n", __func__ );
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -365,8 +369,10 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
 
     targetMsgLen = 1+4+1+4+4+4;
     sendLen = 0;
+#ifdef ENABLE_DEBUG_INFO
     printf("%s send M request to standalone PG process\n", __func__ );
     fflush(stdout);
+#endif
     while(sendLen < targetMsgLen) {
         int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
@@ -383,8 +389,10 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     }
 
     Assert(recvLen == sizeof(int));
+#ifdef ENABLE_DEBUG_INFO
     printf("%s, get page number = %d\n", __func__ , nblocks);
     fflush(stdout);
+#endif
     pthread_mutex_unlock(&replayProcessMutex);
 
 #ifdef DEBUG_TIMING
@@ -413,9 +421,11 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
 void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* targetPage) {
     pthread_mutex_lock(&replayProcessMutex);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
     fflush(stdout);
+#endif
 
 #ifdef XLOG_IN_ROCKSDB
     // Read XlogRecord from RocksDB
@@ -492,8 +502,10 @@ void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, 
         recvLen += readLen;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s read %d from standalone \n", __func__ , recvLen);
     fflush(stdout);
+#endif
 
     Assert(recvLen == BLCKSZ);
     pthread_mutex_unlock(&replayProcessMutex);
@@ -511,9 +523,11 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 
 //    pthread_mutex_lock(&replayProcessMutex);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, lsn);
     fflush(stdout);
+#endif
 
 #ifdef XLOG_IN_ROCKSDB
     // Read XlogRecord from RocksDB
@@ -590,8 +604,10 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
         recvLen += readLen;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s read %d from standalone \n", __func__ , recvLen);
     fflush(stdout);
+#endif
 
     Assert(recvLen == BLCKSZ);
     pthread_mutex_unlock(&replayProcessMutex);
@@ -620,8 +636,10 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 // targetPage should be allocated by caller function
 // This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
 void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize, char* origPage, char* targetPage) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -630,9 +648,11 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 
 //    pthread_mutex_lock(&replayProcessMutex);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %s %d , spcID = %lu, dbID = %lu, tabID = %lu, fornum = %d, blkNum = %lu, listSize = %d\n", __func__ , __FILE__, __LINE__,
            relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, listSize);
     fflush(stdout);
+#endif
 
 #ifdef XLOG_IN_ROCKSDB
     // Read XlogRecord from RocksDB
@@ -666,8 +686,10 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     int origMsgLen = msgLen;
     msgLen = pg_hton32(msgLen);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     // prepare parameters to network encoding
     relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
@@ -677,11 +699,13 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 
     // Important
     int origListSize = listSize;
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, listsize = %d\n", __func__ , __LINE__, listSize);
     for(int i = 0; i < origListSize; i++) {
         printf("lsn %d = %lu\n", i, lsnList[i]);
     }
     fflush(stdout);
+#endif
 
     // h: 1 -> n:16777216
     listSize = pg_hton32(listSize);
@@ -689,8 +713,10 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 //    for(int i = 0; i < origListSize; i++) {
 //        lsnList[i] = pg_hton64(lsnList[i]);
 //    }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
 
     int currLen = 1;
@@ -714,15 +740,19 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
         currLen+=8;
     }
     memcpy(&requestBuffer[currLen], origPage, BLCKSZ);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d origin page lsn = %lu\n", __func__ , __LINE__, PageGetLSN(origPage));
     fflush(stdout);
+#endif
 #ifdef XLOG_IN_ROCKSDB
     memcpy(&requestBuffer[1+4+1+4+4+4+4+8+BLCKSZ], record, record->xl_tot_len);
 #endif
 
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d ready to send %d lsns\n", __func__ , __LINE__, origListSize);
     fflush(stdout);
+#endif
 
 
 #ifdef XLOG_IN_ROCKSDB
@@ -749,8 +779,10 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
         recvLen += readLen;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s read %d from standalone \n", __func__ , recvLen);
     fflush(stdout);
+#endif
 
     Assert(recvLen == BLCKSZ);
     pthread_mutex_unlock(&replayProcessMutex);
@@ -857,7 +889,9 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     //todo temporary
     if(WalRcv != NULL) {
         lsn = WalRcv->flushedUpto;
+#ifdef ENABLE_DEBUG_INFO
         printf("read lsn from writtenUpto, lsn = %ld\n", lsn);
+#endif
     }
     lsn = pg_hton64(lsn);
 
@@ -961,7 +995,9 @@ void SyncReplayProcess() {
     //todo temporary
     if(WalRcv != NULL) {
         lsn = WalRcv->flushedUpto;
+#ifdef ENABLE_DEBUG_INFO
         printf("read lsn from writtenUpto, lsn = %ld\n", lsn);
+#endif
     }
     lsn = pg_hton64(lsn);
 
@@ -1000,8 +1036,10 @@ void SyncReplayProcess() {
     char buffer[8];
     int recvLen = 0;
     while (recvLen < 2) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s Start reading\n", __func__ );
         fflush(stdout);
+#endif
         int readLen = read(computePipe[0], &buffer[recvLen], 2 - recvLen);
         if(readLen <= 0) {
             printf("%s read pipe line error, readLen = %d\n", __func__ , readLen);
@@ -1026,12 +1064,16 @@ RpcServerMain(int argc, char *argv[],
               const char *dbname,
               const char *username) {
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, pid = %d\n", __func__ , getpid());
     fflush(stdout);
-    HashMapInit(&pageVersionHashMap, 123);
-    HashMapInit(&relSizeHashMap, 123);
+#endif
+    HashMapInit(&pageVersionHashMap, 1023);
+    HashMapInit(&relSizeHashMap, 1023);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s HashMapAddress = %p\n", __func__ , pageVersionHashMap);
     printf("%s HashMapAddress = %p\n", __func__ , relSizeHashMap);
+#endif
     fflush(stdout);
 
     /***********Clean environment before exit********/

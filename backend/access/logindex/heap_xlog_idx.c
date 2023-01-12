@@ -20,8 +20,10 @@ static XLogRedoAction
 polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
                     BlockNumber heapBlk, Buffer *buffer, uint8 flags)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     Relation    reln = CreateFakeRelcacheEntry(*rnode);
     int         mapByte = HEAPBLK_TO_MAPBYTE(heapBlk);
@@ -36,8 +38,10 @@ polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
         LockBuffer(*buffer, BUFFER_LOCK_EXCLUSIVE);
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     map = PageGetContents(BufferGetPage(*buffer));
 
@@ -51,8 +55,10 @@ polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
     if (PageGetLSN(page) < record->EndRecPtr)
         PageSetLSN(page, record->EndRecPtr);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     return BLK_NEEDS_REDO;
 }
@@ -198,8 +204,10 @@ static XLogRedoAction
 polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
     XLogRecPtr  lsn = record->EndRecPtr;
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d -- , record lsn = %lu\n", __func__ , __LINE__, lsn);
     fflush(stdout);
+#endif
 
     xl_heap_insert *xlrec = (xl_heap_insert *) XLogRecGetData(record);
     Page        page;
@@ -216,10 +224,13 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     XLogRedoAction action = BLK_NOTFOUND;
 
     POLAR_GET_LOG_TAG(record, tag0, 0);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     INIT_BUFFERTAG(tag1, tag0.rnode, VISIBILITYMAP_FORKNUM, HEAPBLK_TO_MAPBLOCK(tag0.blockNum));
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, parameter tag: spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
            tag->rnode.spcNode, tag->rnode.dbNode, tag->rnode.relNode, tag->forkNum, tag->blockNum);
 
@@ -229,11 +240,14 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     printf("%s %d, tag1: spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
            tag1.rnode.spcNode, tag1.rnode.dbNode, tag1.rnode.relNode, tag1.forkNum, tag1.blockNum);
     fflush(stdout);
+#endif
 
     if (BUFFERTAGS_EQUAL(*tag, tag1))
     {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d \n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         /*
          * The visibility map may need to be fixed even if the heap page is
@@ -241,8 +255,10 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
          */
         if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
         {
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d \n", __func__ , __LINE__);
             fflush(stdout);
+#endif
 
             action = polar_heap_clear_vm(record, &tag0.rnode, tag0.blockNum, buffer,
                                          VISIBILITYMAP_VALID_BITS);
@@ -251,8 +267,10 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
     if (BUFFERTAGS_EQUAL(*tag, tag0))
     {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d \n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         ItemPointerSetBlockNumber(&target_tid, tag0.blockNum);
         ItemPointerSetOffsetNumber(&target_tid, xlrec->offnum);
@@ -274,8 +292,10 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
         if (action == BLK_NEEDS_REDO)
         {
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d, action need redo\n", __func__ , __LINE__);
             fflush(stdout);
+#endif
 
             Size        datalen;
             char       *data;
@@ -1030,8 +1050,10 @@ polar_heap_xlog_freeze_page(XLogReaderState *record, BufferTag *tag, Buffer *buf
 static XLogRedoAction
 polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     XLogRecPtr  lsn = record->EndRecPtr;
     xl_heap_visible *xlrec = (xl_heap_visible *) XLogRecGetData(record);
@@ -1042,13 +1064,17 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
     POLAR_GET_LOG_TAG(record, tag0, 0);
     POLAR_GET_LOG_TAG(record, tag1, 1);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     if (BUFFERTAGS_EQUAL(*tag, tag1))
     {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         /*
          * Read the heap page, if it still exists. If the heap file has dropped or
@@ -1059,8 +1085,10 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
 
         if (action == BLK_NEEDS_REDO)
         {
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+#endif
 
             /*
              * We don't bump the LSN of the heap page when setting the visibility
@@ -1086,8 +1114,10 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         }
         else if (action == BLK_RESTORED)
         {
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+#endif
 
             /*
              * If heap block was backed up, we already restored it and there's
@@ -1097,13 +1127,17 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         }
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     if (BUFFERTAGS_EQUAL(*tag, tag0))
     {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         ReadBufferMode mode = BufferIsValid(*buffer) ? RBM_NORMAL : RBM_ZERO_ON_ERROR;
         /*
@@ -1114,13 +1148,17 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
          */
         action = XLogReadBufferForRedoExtended(record, 0, mode, false, buffer);
 
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         if (action == BLK_NEEDS_REDO)
         {
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+#endif
 
             Page        vmpage = BufferGetPage(*buffer);
 
@@ -1147,8 +1185,10 @@ polar_heap_xlog_visible(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
         }
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     return action;
 }

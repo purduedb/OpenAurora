@@ -39,8 +39,8 @@ void PartitionLock(PartitionMutex partitionMutex, void* tag) {
 
     uint32 lockPos = tag_hash(tag, partitionMutex->key_size) % partitionMutex->slot_num;
 
-    printf("%s try lock %d, tid=%d\n", __func__ , lockPos, gettid());
-    fflush(stdout);
+//    printf("%s try lock %d, tid=%d\n", __func__ , lockPos, gettid());
+//    fflush(stdout);
 //    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
     pthread_mutex_lock(&(partitionMutex->mutex_list[lockPos]));
 
@@ -55,8 +55,8 @@ void PartitionUnlock(PartitionMutex partitionMutex, void* tag) {
 
     uint32 lockPos = tag_hash(tag, partitionMutex->key_size) % partitionMutex->slot_num;
 
-    printf("%s try unlock %d, tid=%d\n", __func__ , lockPos, gettid());
-    fflush(stdout);
+//    printf("%s try unlock %d, tid=%d\n", __func__ , lockPos, gettid());
+//    fflush(stdout);
 //    pthread_mutex_t targetMutex = partitionMutex->mutex_list[lockPos];
     pthread_mutex_unlock(&(partitionMutex->mutex_list[lockPos]));
 }

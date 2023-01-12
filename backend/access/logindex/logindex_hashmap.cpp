@@ -63,7 +63,7 @@ do { \
 
 #endif
 
-#define ENABLE_DEBUG_INFO
+//#define ENABLE_DEBUG_INFO2
 
 //typedef boost::shared_mutex Lock;
 //typedef boost::unique_lock< Lock >  WriterLock;
@@ -142,7 +142,10 @@ uint32_t HashKey(KeyType key) {
 //    res |= (key.RelID&0xFF) * 11;
 //    res <<= 7;
 //    res |= (key.ForkNum&0xFF) * 3;
+#ifdef ENABLE_DEBUG_INFO
     printf("%s=%u\n", __func__ , res);
+#endif
+
     return res;
 }
 
@@ -160,18 +163,24 @@ bool KeyMatch(KeyType key1, KeyType key2) {
 // Update header's first element's lsn
 // Also update header's replayedLsn
 bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, hashValue = %u, bucketPos = %u \n", __func__ , hashValue, bucketPos);
     fflush(stdout);
-    pthread_rwlock_wrlock(&hashMap->bucketList[bucketPos].bucketLock);
+#endif
+    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
 
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, got the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
     HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
     bool foundHead = false;
     while(iter != NULL) {
@@ -187,40 +196,42 @@ bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
 
     if (!foundHead) {
         pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
 
         return false;
     }
 
 
-    printf("%s %d\n", __func__ , __LINE__);
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
+    printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
+
     pthread_rwlock_wrlock(&iter->headLock);
+
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
+
     if (iter->lsnEntry[0].lsn == 0) {
         iter->lsnEntry[0].lsn = lsn;
 
         if(iter->replayedLsn < lsn) {
             iter->replayedLsn = lsn;
         }
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
 
         return true;
     } else {
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
 
         return false;
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
 }
 
@@ -228,12 +239,16 @@ bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool h
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, hashValue = %u, bucketPos = %u \n", __func__ , hashValue, bucketPos);
     fflush(stdout);
-    pthread_rwlock_wrlock(&hashMap->bucketList[bucketPos].bucketLock);
+#endif
+    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
 
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, got the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
     HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
     bool foundHead = false;
     while(iter != NULL) {
@@ -249,38 +264,41 @@ bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool h
 
     if (!foundHead) {
         pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
         fflush(stdout);
+#endif
         return false;
     }
 
 
-    printf("%s %d\n", __func__ , __LINE__);
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
+    printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
     if(!holdHeadLock)
         pthread_rwlock_wrlock(&iter->headLock);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
     if (iter->replayedLsn < lsn) {
         iter->replayedLsn = lsn;
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
         return true;
     } else {
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
         return false;
     }
 }
 
 bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, bool noEmptyFirstSlot) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %ld, lsn = %lu\n", __func__ ,
            key.SpcID, key.DbID, key.RelID, key.ForkNum, key.BlkNum, lsn);
     fflush(stdout);
+#endif
 
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
@@ -295,8 +313,10 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 //    WriterLock w_lock(hashMap->bucketList[bucketPos].bucketLock);
     pthread_rwlock_wrlock(&hashMap->bucketList[bucketPos].bucketLock);
 
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, got the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
 
     HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
     bool foundHead = false;
@@ -353,23 +373,46 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         // If toReplayLsn == 0, then no page was replayed
         head->replayedLsn = 0;
 
+        head->prevHead = NULL;
         head->nextHead = NULL;
         head->nextEle = NULL;
         head->tailEle = NULL;
 
         // Add this new head to the first position of bucket list
+
+        // if bucket nodelist is not null, then set its current first head's prev_head pointer to this new head node
+        if(head->bucket->nodeList != NULL) {
+            head->bucket->nodeList->prevHead = head;
+        }
         head->nextHead = head->bucket->nodeList;
         head->bucket->nodeList = head;
 
         pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
         fflush(stdout);
+#endif
         return true;
     }
 
+
+    // Move this recently inserted node to the first position in the bucket head list
+    if(iter->prevHead != NULL) { // if this head node is not the first head element in the list
+        iter->prevHead->nextHead = iter->nextHead;
+        if(iter->nextHead != NULL) { // if this head node is not the rear node in the list
+            iter->nextHead->prevHead = iter->prevHead;
+        }
+        iter->prevHead = NULL;
+        iter->nextHead = iter->bucket->nodeList;
+        iter->bucket->nodeList = iter;
+    }
+
     pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
     // Now, we found the matched head node in this slot
 
     // First, lock this header
@@ -377,6 +420,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
     printf("%s try to get  header lock\n", __func__ );
 #endif
 //    WriterLock w_header_lock(iter->headLock);
+
     pthread_rwlock_rdlock(&iter->headLock);
 
 #ifdef ENABLE_DEBUG_INFO
@@ -522,26 +566,35 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 //                      in this case, the replayedLsn is the version that largest lsn that <= targetLsn
 // If *listLen > 0, caller should release head's lock and free() *toReplayList
 bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t *replayedLsn, uint64_t **toReplayList, int *listLen) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d 2\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, hashValue = %u, bucketPos = %u, pid = %d \n", __func__ , hashValue, bucketPos, getpid());
     fflush(stdout);
+#endif
     // Lock this slot
     //    ReaderLock r_lock(hashMap->bucketList[bucketPos].bucketLock);
-    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
+    pthread_rwlock_wrlock(&hashMap->bucketList[bucketPos].bucketLock);
+
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, got the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
 
     // Find the match head
     HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
     bool foundHead = false;
     while(iter != NULL) {
 
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         // If found matched key, break the loop
         if(iter->hashValue == hashValue
            && KeyMatch(iter->key, key)) {
@@ -553,41 +606,66 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     }
 
     // TODO, Now we can release bucketList lock
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
 
     // If this relation doesn't exist in hash map, return false
     if(!foundHead) {
         pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
         fflush(stdout);
+#endif
         return false;
     }
 
+    // Move this recently inserted node to the first position in the bucket head list
+    if(iter->prevHead != NULL) { // if this head node is not the first head element in the list
+        iter->prevHead->nextHead = iter->nextHead;
+        if(iter->nextHead != NULL) { // if this head node is not the rear node in the list
+            iter->nextHead->prevHead = iter->prevHead;
+        }
+        iter->prevHead = NULL;
+        iter->nextHead = iter->bucket->nodeList;
+        iter->bucket->nodeList = iter;
+    }
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
+    printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
+        fflush(stdout);
+#endif
 
+
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
     // Unlock it until caller func has finished replaying task
     pthread_rwlock_wrlock(&iter->headLock);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
 
     // Check whether we need redo or not
     if (iter->replayedLsn == targetLsn) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         *listLen = 0;
         *replayedLsn = iter->replayedLsn;
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
         return true;
     }
 
     if (iter->replayedLsn > targetLsn) { // no need replay
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         // Now, in head, find the largest lsn that <= targetLsn
         if(iter->lsnEntry[iter->entryNum-1].lsn >= targetLsn) { // Should find in head
             int resultIndex = LsnListFindLowerBound(targetLsn, iter->lsnEntry, iter->entryNum);
@@ -595,29 +673,27 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             // If all list elements are larger than targetLsn, return false
             // This case should not happen
             if(resultIndex == -1) {
-                pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
                 pthread_rwlock_unlock(&iter->headLock);
 
-                printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-                fflush(stdout);
                 printf("Error, %s can't find any match lsn\n", __func__ );
                 return false;
             } else {
+#ifdef ENABLE_DEBUG_INFO
                 printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
                 fflush(stdout);
-                pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#endif
                 pthread_rwlock_unlock(&iter->headLock);
 
-                printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-                fflush(stdout);
                 *listLen = 0;
                 *replayedLsn = iter->lsnEntry[resultIndex].lsn;
                 return true;
             }
 
         }
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
 
         // Try to find it in following nodes
         // Initialize the currentLsn as the rear lsn of list
@@ -641,29 +717,29 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             // Found the desired lsn
             break;
         }
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         *replayedLsn = currentLsn;
         *listLen = 0;
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
         return true;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
     // If we have replayed all the page version in this list, and the targetLsn is larger than iter->maxLsn
     if(iter->replayedLsn == iter->maxLsn) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         *replayedLsn = iter->maxLsn;
         *listLen = 0;
-        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
         pthread_rwlock_unlock(&iter->headLock);
-        printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-        fflush(stdout);
         return true;
     }
 
@@ -679,8 +755,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     int foundReplayLsnPosition = 0;
     // last replayed lsn in head
     if(iter->replayedLsn <= iter->lsnEntry[iter->entryNum-1].lsn) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
+#endif
         foundReplayLsnPosition = 1;
         //Firstly, find the replayedLsn position, this is our start
         int replayedLsnIndex = LsnListFindLowerBound(iter->replayedLsn, iter->lsnEntry, iter->entryNum);
@@ -703,8 +781,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             }
         }
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
 
     HashNodeEle* eleIter = iter->nextEle;
     while(eleIter != NULL) {
@@ -744,20 +824,21 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
         eleIter = eleIter->nextEle;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
     *listLen = toReplayCount;
     if(toReplayCount == 0) {
         printf("ERROR: %s toReplayCount = 0\n", __func__ );
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
     fflush(stdout);
+#endif
 
     pthread_rwlock_unlock(&iter->headLock);
-    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
-    printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
-    fflush(stdout);
     // don't release head's lock
     return true;
 }
@@ -790,8 +871,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 //    ReaderLock r_lock(hashMap->bucketList[bucketPos].bucketLock);
     pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
 
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, got the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(findLowerTime[0]), &(findLowerCount[0]))
 #endif
@@ -835,8 +918,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
     // If this relation doesn't exist in hash map, return false
     if(!foundHead) {
         pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
         fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &(findLowerTime[1]), &(findLowerCount[1]))
 #endif
@@ -849,8 +934,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 #endif
     // Unlock bucketList, now it's useless
     pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(findLowerTime[2]), &(findLowerCount[2]))
 #endif
@@ -858,8 +945,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 //    ReaderLock r_head_lock(iter->headLock);
     pthread_rwlock_rdlock(&iter->headLock);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(findLowerTime[3]), &(findLowerCount[3]))
 #endif

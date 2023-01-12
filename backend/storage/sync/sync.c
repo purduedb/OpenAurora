@@ -564,11 +564,11 @@ RegisterSyncRequest(const FileTag *ftag, SyncRequestType type,
 		 * I'm inclined to assume that the checkpointer will always empty the
 		 * queue soon.
 		 */
-        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-        fflush(stdout);
+//        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+//        fflush(stdout);
 		ret = ForwardSyncRequest(ftag, type);
-        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-        fflush(stdout);
+//        printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
+//        fflush(stdout);
 
 		/*
 		 * If we are successful in queueing the request, or we failed and were

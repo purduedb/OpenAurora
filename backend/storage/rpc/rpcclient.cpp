@@ -215,8 +215,10 @@ do { \
 
 void RpcInit()
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start\n", __func__ );
     fflush(stdout);
+#endif
 
     int myPid = getpid();
     if(myPid == MyPid)
@@ -227,16 +229,20 @@ void RpcInit()
     client = new DataPageAccessClient(rpcprotocol);
     rpctransport->open();
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s transport created\n", __func__ );
     fflush(stdout);
+#endif
 
     MyPid = myPid;
 }
 
 void RpcClose() {
     int myPid = getpid();
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start\n", __func__ );
     fflush(stdout);
+#endif
     // Only close transport created by itself
     if(myPid == MyPid)
         rpctransport->close();
@@ -253,9 +259,11 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -282,15 +290,19 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_readbuffer_time[1]), &(client_readbuffer_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -315,15 +327,19 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_read_time[1]), &(client_read_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End\n", __func__ );
     fflush(stdout);
+#endif
     return;
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -341,16 +357,20 @@ int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_exist_time[1]), &(client_exist_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End, exist = %d spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, result, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
     return result;
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -369,17 +389,21 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_nblocks_time[1]), &(client_nblocks_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End, result = %d,  spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__,  result, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 
     return result;
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -398,15 +422,19 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_create_time[1]), &(client_create_count[1]))
 #endif
-    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
+#endif
 }
 
 void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u pageIsNew=%d\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -429,15 +457,19 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_extend_time[1]), &(client_extend_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u pageIsNew=%d\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
+#endif
 }
 
 void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
     fflush(stdout);
+#endif
 
 #ifdef DEBUG_TIMING
     struct timeval start, end;
@@ -455,8 +487,10 @@ void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_truncate_time[1]), &(client_truncate_count[1]))
 #endif
+#ifdef ENABLE_DEBUG_INFO
     printf("%s End\n", __func__ );
     fflush(stdout);
+#endif
 }
 
 //void TryRpcInitFile(_Page& _return, _Path& _path)

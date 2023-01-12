@@ -1489,18 +1489,25 @@ bool
 XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
 				   RelFileNode *rnode, ForkNumber *forknum, BlockNumber *blknum)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 	DecodedBkpBlock *bkpb;
 
 	if (!record->blocks[block_id].in_use) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s parse block_id %d failed\n", __func__ , block_id);
         fflush(stdout);
+#endif
         return false;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
+#endif
+
 	bkpb = &record->blocks[block_id];
 	if (rnode)
 		*rnode = bkpb->rnode;
@@ -1508,6 +1515,10 @@ XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
 		*forknum = bkpb->forknum;
 	if (blknum)
 		*blknum = bkpb->blkno;
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	return true;
 }
 

@@ -849,12 +849,6 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			 */
 			do
 			{
-                printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu \n",
-                       __func__ , __LINE__, bufHdr->tag.rnode.spcNode,
-                       bufHdr->tag.rnode.dbNode, bufHdr->tag.rnode.relNode,
-                       bufHdr->tag.forkNum, bufHdr->tag.blockNum);
-                fflush(stdout);
-
 				uint32		buf_state = LockBufHdr(bufHdr);
 
 				Assert(buf_state & BM_VALID);
@@ -1015,31 +1009,42 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
     buf_id = BufTableLookup(&bufferTag, newHash);
 
     if (buf_id >= 0) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         /*
 		 * Found it.  Now, pin the buffer so no one can steal it from the
 		 * buffer pool, and check to see if the correct data has been loaded
 		 * into the buffer.
 		 */
         buf = GetBufferDescriptor(buf_id);
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         bool valid = PinBuffer(buf, NULL);
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         /* Can release the mapping lock as soon as we've pinned it */
         LWLockRelease(newPartitionLock);
 
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
 
         if (!valid)
         {
+
+#ifdef ENABLE_DEBUG_INFO
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
+#endif
             /*
              * We can only get here if (a) someone else is still reading in
              * the page, or (b) a previous read attempt failed.  We have to
@@ -1061,8 +1066,10 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
 //        LWLockAcquire(BufferDescriptorGetContentLock(buf),
 //                      LW_EXCLUSIVE);
 
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         return BufferDescriptorGetBuffer(buf);
     }
 
@@ -1767,9 +1774,9 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy)
 static void
 PinBuffer_Locked(BufferDesc *buf)
 {
-    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
-           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
-    fflush(stdout);
+//    printf("%s starts, spc = %ld, db = %ld, rel = %ld\n", __func__ , buf->tag.rnode.spcNode,
+//           buf->tag.rnode.dbNode, buf->tag.rnode.relNode);
+//    fflush(stdout);
 	Buffer		b;
 	PrivateRefCountEntry *ref;
 	uint32		buf_state;

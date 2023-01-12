@@ -397,8 +397,10 @@ WalRedoMain(int argc, char *argv[],
          * (3) read a command (loop blocks here)
          */
         firstchar = ReadRedoCommand(&input_message);
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d start \n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         switch (firstchar)
         {
             case 'E':
@@ -538,8 +540,10 @@ ReadRedoCommand(StringInfo inBuf)
     qtype = hdr[0];
     memcpy(&len, &hdr[1], sizeof(int32));
     len = pg_ntoh32(len);
+#ifdef ENABLE_DEBUG_INFO
     printf("Replay: qtype is %d, msgLen = %d\n", qtype-'A', len);
     fflush(stdout);
+#endif
 
     if (len < 4)
         ereport(ERROR,
@@ -568,8 +572,10 @@ ReadRedoCommand(StringInfo inBuf)
     inBuf->len = len;
     inBuf->data[len] = '\0';
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Read request succeed\n", __func__ );
     fflush(stdout);
+#endif
 
     return qtype;
 }
@@ -585,8 +591,10 @@ SetBeginRead(StringInfo input_message) {
 
 static void
 SyncLsnReplay(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Start\n", __func__ );
     fflush(stdout);
+#endif
     XLogRecPtr lsn;
 
     lsn = pq_getmsgint64(input_message);
@@ -607,8 +615,10 @@ SyncLsnReplay(StringInfo input_message) {
         }
         tot_written += rc;
     } while (tot_written < 2);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s sent OK to RpcServer\n", __func__ );
     fflush(stdout);
+#endif
     return;
 }
 
@@ -620,7 +630,9 @@ ApplyXlogUntil(StringInfo input_message) {
      * LSN
      */
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s, initial EndRecPtro = %ld\n", __func__ , reader_state->EndRecPtr);
+#endif
     if(reader_state->EndRecPtr == InvalidXLogRecPtr) {
         bool crc_ok = false;
         ControlFileData* controlFile = get_controlfile(DataDir, &crc_ok);
@@ -635,7 +647,9 @@ ApplyXlogUntil(StringInfo input_message) {
             recoveryTargetTLI = controlFile->checkPointCopy.ThisTimeLineID;
 
         ThisTimeLineID = recoveryTargetTLI;
+#ifdef ENABLE_DEBUG_INFO
         printf("%s, set initial readpoint as %ld, set the recoveryTargetTLI as %d\n", __func__ , controlFile->checkPoint, recoveryTargetTLI);
+#endif
     }
 
     XLogRecPtr lsn;
@@ -643,21 +657,27 @@ ApplyXlogUntil(StringInfo input_message) {
     char *err_msg;
 
     lsn = pq_getmsgint64(input_message);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s, by parameter, target replay lsn = %ld\n", __func__ , lsn);
     fflush(stdout);
+#endif
 
     //todo, Is it correct to use ReadRecPtr? Will expected page get replayed?
     // lsn is the last_byte+1, which is the beginning of next unflushed xlog
     while(reader_state->EndRecPtr < lsn) {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s readRecPtr = %ld, pid=%d\n", __func__ , reader_state->EndRecPtr, getpid());
         fflush(stdout);
+#endif
         record = XLogReadRecord(reader_state, &err_msg);
 
         //! todo, is it correct to use WALRcv.flushUpTo
         if(record == NULL)
             break;
+#ifdef ENABLE_DEBUG_INFO
         printf("%s read Succeed, ready to replay this xlog, pid=%d\n", __func__ , getpid());
         fflush(stdout);
+#endif
 
         polar_xlog_decode_data(reader_state);
 
@@ -675,6 +695,7 @@ ApplyXlogUntil(StringInfo input_message) {
 //                exit(2);
 //            }
 //        }
+#ifdef ENABLE_DEBUG_INFO
         const char*id=NULL;
         id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
         if (id)
@@ -691,6 +712,7 @@ ApplyXlogUntil(StringInfo input_message) {
                    reader_state->blocks[i].forknum, reader_state->blocks[i].blkno);
             fflush(stdout);
         }
+#endif
 
         RmgrTable[record->xl_rmid].rm_redo(reader_state);
 
@@ -718,8 +740,10 @@ ApplyXlogUntil(StringInfo input_message) {
 				 * up the receiver so that it notices the updated
 				 * lastReplayedEndRecPtr and sends a reply to the master.
 				 */
+#ifdef ENABLE_DEBUG_INFO
         printf("pid=%d, %s redo succeed\n", getpid(), __func__ );
         fflush(stdout);
+#endif
 
         if (doRequestWalReceiverReply)
         {
@@ -727,8 +751,10 @@ ApplyXlogUntil(StringInfo input_message) {
             WalRcvForceReply();
         }
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s end\n", __func__ );
     fflush(stdout);
+#endif
 
 }
 
@@ -781,8 +807,10 @@ BeginRedoForBlock(StringInfo input_message)
 //              then, rpc server can pass the xlog to this standalone process.
 static void
 ApplyOneXlogWithoutBasePage(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, start \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     RelFileNode rnode;
     ForkNumber forknum;
@@ -848,8 +876,11 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
 
 #endif
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Read record succeed, ready to replay\n", __func__ );
     fflush(stdout);
+#endif
+#ifdef ENABLE_DEBUG_INFO
     const char*id=NULL;
     id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
     if (id)
@@ -857,6 +888,7 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
     else
         printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
     fflush(stdout);
+#endif
 
     // redo function need read again from disk, make sure REDO() will lock the buff
     buf = InvalidBuffer;
@@ -902,8 +934,10 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
             printf("%s didn't find any corresponding polar redo function\n", __func__ );
             break;
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
     fflush(stdout);
+#endif
 
     // If not found polar redo function, do regular original redo
     if(action == BLK_NOTFOUND) {
@@ -937,13 +971,17 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
     } while (tot_written < BLCKSZ);
 
     ReleaseBuffer(buf);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s LINE=%d \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
+#ifdef ENABLE_DEBUG_INFO
     if(PageIsNew(page)) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
+#endif
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
     return;
@@ -953,8 +991,10 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
 //              then, rpc server can pass the xlog to this standalone process.
 static void
 ApplyOneXlog(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, start \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     RelFileNode rnode;
     ForkNumber forknum;
@@ -1021,6 +1061,7 @@ ApplyOneXlog(StringInfo input_message) {
 
 #endif
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s Read record succeed, ready to replay\n", __func__ );
     fflush(stdout);
     const char*id=NULL;
@@ -1030,6 +1071,7 @@ ApplyOneXlog(StringInfo input_message) {
     else
         printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
     fflush(stdout);
+#endif
 
     // redo function need read again from disk, make sure REDO() will lock the buff
     buf = InvalidBuffer;
@@ -1075,8 +1117,10 @@ ApplyOneXlog(StringInfo input_message) {
             printf("%s didn't find any corresponding polar redo function\n", __func__ );
             break;
     }
+#ifdef ENABLE_DEBUG_INFO
     printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
     fflush(stdout);
+#endif
 
     // If not found polar redo function, do regular original redo
     if(action == BLK_NOTFOUND) {
@@ -1110,13 +1154,17 @@ ApplyOneXlog(StringInfo input_message) {
     } while (tot_written < BLCKSZ);
 
     ReleaseBuffer(buf);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s LINE=%d \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
+#ifdef ENABLE_DEBUG_INFO
     if(PageIsNew(page)) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
+#endif
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
     return;
@@ -1124,8 +1172,10 @@ ApplyOneXlog(StringInfo input_message) {
 
 static void
 ApplyLsnListXlog(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, start \n", __func__ , __LINE__);
     fflush(stdout);
+#endif
 
     RelFileNode rnode;
     ForkNumber forknum;
@@ -1157,10 +1207,12 @@ ApplyLsnListXlog(StringInfo input_message) {
     blknum = pq_getmsgint(input_message, 4);
 
     listSize = pq_getmsgint(input_message, 4);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, listSize = %d\n",
            __func__ , __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, forknum,
            blknum, listSize);
     fflush(stdout);
+#endif
 
     lsnList = (uint64_t*) malloc(listSize*sizeof(uint64_t));
     for(int i = 0; i < listSize; i++) {
@@ -1171,18 +1223,22 @@ ApplyLsnListXlog(StringInfo input_message) {
 
     content = pq_getmsgbytes(input_message, BLCKSZ);
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, lsn size = %d\n", __func__ , __LINE__, listSize);
     for(int i = 0; i < listSize; i++) {
         printf("lsn %d = %lu\n", i, lsnList[i]);
     }
     fflush(stdout);
+#endif
     // Put the original page to buffer
     buf = ReadBufferWithoutRelcache(rnode, forknum, blknum, RBM_ZERO_AND_LOCK, NULL);
     wal_redo_buffer = buf;
     page = BufferGetPage(buf);
     memcpy(page, content, BLCKSZ);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d page's lsn = %lu\n", __func__ , __LINE__, PageGetLSN(page));
     fflush(stdout);
+#endif
 
     MarkBufferDirty(buf); /* pro forma */
     UnlockReleaseBuffer(buf);
@@ -1194,6 +1250,7 @@ ApplyLsnListXlog(StringInfo input_message) {
     for(int i = 0; i < listSize; i++) {
         XLogBeginRead(reader_state, lsnList[i]);
         record = XLogReadRecord(reader_state, &err_msg);
+#ifdef ENABLE_DEBUG_INFO
         const char*id=NULL;
         id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
         if (id)
@@ -1201,6 +1258,7 @@ ApplyLsnListXlog(StringInfo input_message) {
         else
             printf("%s %s %d, rm = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name, lsnList[i]);
         fflush(stdout);
+#endif
 
         // redo function need read again from disk, make sure REDO() will lock the buff
         buf = InvalidBuffer;
@@ -1244,8 +1302,10 @@ ApplyLsnListXlog(StringInfo input_message) {
                 printf("%s didn't find any corresponding polar redo function\n", __func__ );
                 break;
         }
+#ifdef ENABLE_DEBUG_INFO
         printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
         fflush(stdout);
+#endif
 
         // If not found polar redo function, do regular original redo
         if(action == BLK_NOTFOUND) {
@@ -1282,6 +1342,7 @@ ApplyLsnListXlog(StringInfo input_message) {
     } while (tot_written < BLCKSZ);
 
     ReleaseBuffer(buf);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s LINE=%d \n", __func__ , __LINE__);
     fflush(stdout);
 
@@ -1289,6 +1350,7 @@ ApplyLsnListXlog(StringInfo input_message) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
+#endif
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
     return;
@@ -1452,8 +1514,10 @@ redo_block_filter(XLogReaderState *record, uint8 block_id)
 
 static void
 GetRelSize(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, pid=%d\n", __func__ , getpid());
     fflush(stdout);
+#endif
 
     RelFileNode rnode;
     ForkNumber forknum;
@@ -1473,8 +1537,10 @@ GetRelSize(StringInfo input_message) {
     rnode.spcNode = pq_getmsgint(input_message, 4);
     rnode.dbNode = pq_getmsgint(input_message, 4);
     rnode.relNode = pq_getmsgint(input_message, 4);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s  forknum = %d, spc=%ld, db=%ld, rel=%ld\n", __func__ ,forknum, rnode.spcNode, rnode.dbNode, rnode.relNode);
     fflush(stdout);
+#endif
 
     SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
@@ -1485,8 +1551,10 @@ GetRelSize(StringInfo input_message) {
         pageNum = smgrnblocks(smgrReln, forknum);
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s block number is %d\n", __func__ , pageNum);
     fflush(stdout);
+#endif
     /* Response: relation size */
     tot_written = 0;
     do {
@@ -1505,8 +1573,10 @@ GetRelSize(StringInfo input_message) {
         tot_written += rc;
     } while (tot_written < sizeof(int));
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s write %d bytes to RPC_SERVER\n", __func__ , tot_written);
     fflush(stdout);
+#endif
 }
 /*
  * Get a page image back from buffer cache.
@@ -1516,8 +1586,10 @@ GetRelSize(StringInfo input_message) {
 static void
 GetPage(StringInfo input_message)
 {
+#ifdef ENABLE_DEBUG_INFO
     printf("%s start, pid=%d\n", __func__ , getpid());
     fflush(stdout);
+#endif
 
     RelFileNode rnode;
     ForkNumber forknum;
@@ -1540,8 +1612,10 @@ GetPage(StringInfo input_message)
     rnode.dbNode = pq_getmsgint(input_message, 4);
     rnode.relNode = pq_getmsgint(input_message, 4);
     blknum = pq_getmsgint(input_message, 4);
+#ifdef ENABLE_DEBUG_INFO
     printf("%s  forknum = %d, spc=%ld, db=%ld, rel=%ld, blk=%ld\n", __func__ ,forknum, rnode.spcNode, rnode.dbNode, rnode.relNode, blknum);
     fflush(stdout);
+#endif
 
     /* FIXME: check that we got a BeginRedoForBlock message or this earlier */
 
@@ -1551,8 +1625,10 @@ GetPage(StringInfo input_message)
     LockBuffer(buf, LW_SHARED);
     /* single thread, so don't bother locking the page */
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s ReadBuffer Succeed\n", __func__ );
     fflush(stdout);
+#endif
 
     /* Response: Page content */
     tot_written = 0;
@@ -1571,18 +1647,22 @@ GetPage(StringInfo input_message)
         tot_written += rc;
     } while (tot_written < BLCKSZ);
 
+#ifdef ENABLE_DEBUG_INFO
     if(PageIsNew(page)) {
         printf("%s found page is new \n", __func__ );
         fflush(stdout);
     }
+#endif
 //    ReleaseBuffer(buf);
 //    ReleaseBuffer(buf);
     UnlockReleaseBuffer(buf);
 //    DropRelFileNodeAllLocalBuffers(rnode);
     wal_redo_buffer = InvalidBuffer;
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s write %d bytes to RPC_SERVER\n", __func__ , tot_written);
     fflush(stdout);
+#endif
     elog(TRACE, "Page sent back for block %u", blknum);
 }
 
@@ -1618,8 +1698,10 @@ buffered_read(void *buf, size_t count)
             ssize_t		ret;
 
             ret = read(serverPipe[0], stdin_buf, sizeof(stdin_buf));
+#ifdef ENABLE_DEBUG_INFO
             printf("Compute: read %d bytes from pipe\n", ret);
             fflush(stdout);
+#endif
             if (ret < 0)
             {
                 /* don't do anything here that could set 'errno' */

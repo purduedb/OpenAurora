@@ -1623,11 +1623,11 @@ PathNameOpenFile(const char *fileName, int fileFlags)
     printf("%s start \n", __func__);
     fflush(stdout);
 #endif
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     File result = PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
 //    printf("[%s] filename = %s, flag = %d, result = %d\n", __func__ , fileName, fileFlags, result);
     return result;
 //	return PathNameOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
@@ -2291,8 +2291,8 @@ FileWrite(File file, char *buffer, int amount, off_t offset,
     printf("%s start file = %d \n", __func__, file);
     fflush(stdout);
 #endif
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     int			returnCode;
     Vfd		   *vfdP;
 
@@ -2384,8 +2384,8 @@ FileWrite(File file, char *buffer, int amount, off_t offset,
             goto retry;
     }
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     return returnCode;
 }
 
@@ -2426,8 +2426,8 @@ FileSize(File file)
     DO_DB(elog(LOG, "FileSize %d (%s)",
                file, VfdCache[file].fileName));
 
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
 //    if(VfdCache[file].fileName)
 //        printf("%s start, tid = %d, vfd = %d, filename = %s, &vfd address is %p\n", __func__ , file, gettid(), VfdCache[file].fileName, &(VfdCache[file].fileName));
 //    else
@@ -2439,8 +2439,8 @@ FileSize(File file)
         VfdLruUnlock();
         if (FileAccess(file) < 0) {
 //            printf("%s FileAccess failed \n", __func__ );
-            printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-            fflush(stdout);
+//            printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//            fflush(stdout);
             return (off_t) -1;
         }
 
@@ -2451,8 +2451,8 @@ FileSize(File file)
                             errmsg("could not lseek file in 1 \"%s\": %m",
                                    VfdCache[file].fileName)));
         }
-        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-        fflush(stdout);
+//        printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//        fflush(stdout);
         return result;
     }
 
@@ -2464,8 +2464,8 @@ FileSize(File file)
                         errmsg("could not lseek file in 2 \"%s\": %m",
                                VfdCache[file].fileName)));
     }
-    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
-    fflush(stdout);
+//    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
+//    fflush(stdout);
     return result;
 
 }

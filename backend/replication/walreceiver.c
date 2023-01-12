@@ -192,8 +192,8 @@ void StartWalRcvThread(void) {
 void
 WalReceiverMain(void)
 {
-    printf("%s Start \n", __func__ );
-    fflush(stdout);
+//    printf("%s Start \n", __func__ );
+//    fflush(stdout);
 	char		conninfo[MAXCONNINFO];
 	char	   *tmp_conninfo;
 	char		slotname[NAMEDATALEN];
@@ -420,7 +420,7 @@ WalReceiverMain(void)
 		ThisTimeLineID = startpointTLI;
 		if (walrcv_startstreaming(wrconn, &options))
 		{
-            printf("%s get into for loop\n", __func__ );
+//            printf("%s get into for loop\n", __func__ );
             if (first_stream)
 				ereport(LOG,
 						(errmsg("started streaming WAL from primary at %X/%X on timeline %u",
@@ -874,8 +874,8 @@ XLogWalRcvProcessMsg(unsigned char type, char *buf, Size len)
 
 				buf += hdrlen;
 				len -= hdrlen;
-                printf("%s received a xlog, starts from %lu, len = %lu\n", __func__ , dataStart, len);
-                fflush(stdout);
+//                printf("%s received a xlog, starts from %lu, len = %lu\n", __func__ , dataStart, len);
+//                fflush(stdout);
 				XLogWalRcvWrite(buf, len, dataStart);
 				break;
 			}

@@ -469,8 +469,8 @@ SetLatch(Latch *latch)
 	 */
 	pg_memory_barrier();
 
-    printf("%s pid = %d, latch->is_set=%d\n", __func__ , getpid(), latch->is_set);
-    fflush(stdout);
+//    printf("%s pid = %d, latch->is_set=%d\n", __func__ , getpid(), latch->is_set);
+//    fflush(stdout);
 	/* Quick exit if already set */
 	if (latch->is_set)
 		return;
