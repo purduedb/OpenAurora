@@ -37,7 +37,7 @@ extern HashMap relSizeHashMap;
 
 extern int reachXlogTempEnd;
 
-#define DEBUG_TIMING 1
+//#define DEBUG_TIMING 1
 
 #ifdef DEBUG_TIMING
 
@@ -555,7 +555,7 @@ public:
 
 
          if(listSize > 0) {
-             HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize-1], false);
+             HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize-1], true);
 
              free(toReplayList);
          }

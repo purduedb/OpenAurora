@@ -4,7 +4,7 @@
 #include "access/logindex_hashmap.h"
 #include <atomic>
 
-#define DEBUG_TIMING
+//#define DEBUG_TIMING
 #ifdef DEBUG_TIMING
 
 #include <sys/time.h>
@@ -116,6 +116,9 @@ void HashMapInit(HashMap *hashMap_p, int bucketNum) {
     for(int i = 0; i < bucketNum; i++) {
         (*hashMap_p)->bucketList[i].nodeList = NULL;
         pthread_rwlock_init(&(*hashMap_p)->bucketList[i].bucketLock, NULL);
+        pthread_mutex_init(&(*hashMap_p)->bucketList[i].replayLock, NULL);
+        (*hashMap_p)->bucketList[i].lastReplayTime.tv_sec = 0;
+        (*hashMap_p)->bucketList[i].lastReplayTime.tv_usec = 0;
     }
 #ifdef ENABLE_DEBUG_INFO
     printf("Hashmap Address = %p\n", (*hashMap_p));
@@ -162,6 +165,8 @@ bool KeyMatch(KeyType key1, KeyType key2) {
 
 // Update header's first element's lsn
 // Also update header's replayedLsn
+// This function only called by ReadBufferCommon, and before this function, header lock
+// has already been acquired.
 bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
@@ -207,7 +212,7 @@ bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
     fflush(stdout);
 #endif
 
-    pthread_rwlock_wrlock(&iter->headLock);
+//    pthread_rwlock_wrlock(&iter->headLock);
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
@@ -220,11 +225,11 @@ bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
         if(iter->replayedLsn < lsn) {
             iter->replayedLsn = lsn;
         }
-        pthread_rwlock_unlock(&iter->headLock);
+//        pthread_rwlock_unlock(&iter->headLock);
 
         return true;
     } else {
-        pthread_rwlock_unlock(&iter->headLock);
+//        pthread_rwlock_unlock(&iter->headLock);
 
         return false;
     }
@@ -235,6 +240,10 @@ bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
 
 }
 
+// It can be called by two different logics
+// 1. Set the base page as the replayed page (lsn=1), and we should acquire holdHeadLock in this function
+// 2. After GetReplayLsnList (it holds the header lock and doesn't release), and ApplyLsnList, we use this function
+//      to update the final step (ReplayedLsn), and its parameter is holdHeadLock=True, we should only release lock.
 bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock) {
     uint32_t hashValue = HashKey(key);
     uint32_t bucketPos = hashValue % hashMap->bucketNum;
@@ -377,6 +386,8 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         head->nextHead = NULL;
         head->nextEle = NULL;
         head->tailEle = NULL;
+        head->finishVacuumTime.tv_sec = 0;
+        head->finishVacuumTime.tv_usec = 0;
 
         // Add this new head to the first position of bucket list
 
@@ -838,7 +849,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     fflush(stdout);
 #endif
 
-    pthread_rwlock_unlock(&iter->headLock);
+//    pthread_rwlock_unlock(&iter->headLock);
     // don't release head's lock
     return true;
 }
@@ -1174,3 +1185,4 @@ void HashMapDestroy(HashMap hashMap){
 //    std::cout << "i2nput is " << i << std::endl;
 //    return i+1;
 //}
+

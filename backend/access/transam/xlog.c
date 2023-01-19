@@ -167,7 +167,7 @@ const struct config_enum_entry sync_method_options[] = {
 	{NULL, 0, false}
 };
 
-#define DEBUG_TIMING 1
+//#define DEBUG_TIMING 1
 
 #ifdef DEBUG_TIMING
 

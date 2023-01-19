@@ -16,6 +16,7 @@
 #include "storage/kv_interface.h"
 #include "access/xlog.h"
 
+//#define ENABLE_DEBUG_INFO
 static XLogRedoAction
 polar_heap_clear_vm(XLogReaderState *record, RelFileNode *rnode,
                     BlockNumber heapBlk, Buffer *buffer, uint8 flags)

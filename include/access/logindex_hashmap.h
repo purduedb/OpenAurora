@@ -43,6 +43,8 @@ typedef struct LsnEntry LsnEntry;
 struct HashBucket {
 //    Lock bucketLock;
     pthread_rwlock_t bucketLock;
+    pthread_mutex_t replayLock;
+    struct timeval lastReplayTime;
     HashNodeHead* nodeList;
 };
 
@@ -67,6 +69,9 @@ struct HashNodeHead {
 
     HashNodeEle  *nextEle;
     HashNodeEle  *tailEle;
+
+    // Finish Vacuum Time
+    struct timeval finishVacuumTime;
 };
 
 struct HashNodeEle {

@@ -25,6 +25,7 @@ OBJS = \
 	polar_xlog_idx.o \
 	spgxlog_idx.o \
 	logindex_hashmap.o \
-	logindex_func.o
+	logindex_func.o \
+	background_hashmap_vacuumer.o
 
 include $(top_srcdir)/src/backend/common.mk

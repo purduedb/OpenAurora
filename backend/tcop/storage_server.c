@@ -41,6 +41,7 @@
 #include "storage/md.h"
 #include "access/logindex_hashmap.h"
 #include "storage/kv_interface.h"
+#include "access/background_hashmap_vacuumer.h"
 
 extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
@@ -56,7 +57,7 @@ int IsRpcServer = 0;
 pid_t WalRcvPid = 0;
 pid_t StartupPid = 0;
 
-#define DEBUG_TIMING
+//#define DEBUG_TIMING
 #ifdef DEBUG_TIMING
 struct timeval output_timing3;
 int initialized3 = 0;
@@ -70,6 +71,9 @@ long GetBasePageCount = 0;
 long GetPageByLsnTime = 0;
 long GetPageByLsnCount = 0;
 #endif
+
+#define REPLAY_PROCESS_NUM 5
+pthread_mutex_t replayProcessMutex[REPLAY_PROCESS_NUM];
 
 static void
 getInstallationPaths(const char *argv0)
@@ -235,69 +239,91 @@ sigusr1_handler(SIGNAL_ARGS) {
     latch_sigusr1_handler();
 }
 
+int **serverPipe;
+int **computePipe;
+
 static void
 proc_die(SIGNAL_ARGS) {
     HashMapDestroy(pageVersionHashMap);
     HashMapDestroy(relSizeHashMap);
+
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        free(serverPipe[i]);
+        free(computePipe[i]);
+    }
+    free(serverPipe);
+    free(computePipe);
     exit(0);
 }
 
-int serverPipe[2];
-int computePipe[2];
+// WalRedo Process will use this variable
+// it will determine which pipe should use
+int ReplayProcessNum = -1;
 
 static void
 StartWalRedoProcess(int argc, char *argv[],
                     const char *dbname,
                     const char *username) {
 
-    if(pipe(serverPipe) == -1)
-        printf("Error on pipe\n");
+    // Init ReplayProcess thread locks
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        pthread_mutex_init(&(replayProcessMutex[i]), NULL);
+    }
+    serverPipe = (int**) malloc(REPLAY_PROCESS_NUM*sizeof(int*));
+    computePipe = (int**) malloc(REPLAY_PROCESS_NUM*sizeof(int*));
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        serverPipe[i] = (int*) malloc(sizeof(int)*2);
+        computePipe[i] = (int*) malloc(sizeof(int)*2);
+    }
 
-    if(pipe(computePipe) == -1)
-        printf("Error on pipe\n");
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pipe(serverPipe[i]) == -1)
+            printf("Error on pipe\n");
 
-    __pid_t pid = fork();
-    if(pid > 0) {
-        close(computePipe[1]); // Close comp's write pipe
-        close(serverPipe[0]); //Close server's read pipe
+        if(pipe(computePipe[i]) == -1)
+            printf("Error on pipe\n");
+    }
 
-        //todo: should close at the end
-        //close(serverPipe[1]);
-        //close(computePipe[0]);
-    } else if (pid == 0) {
-        close(computePipe[0]); //Close comp's read pipe
-        close(serverPipe[1]); //Close server's write pipe
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        __pid_t pid = fork();
+        if(pid > 0) {
+            close(computePipe[i][1]); // Close comp's write pipe
+            close(serverPipe[i][0]); //Close server's read pipe
 
-//        if(computePipe[1] != STDOUT_FILENO) {
-//            if(dup2(computePipe[1], STDOUT_FILENO) == -1)
-//                exit(1);
-//            if(close(computePipe[1]) == -1)
-//                exit(2);
-//        }
-//
-//        if(serverPipe[0] != STDIN_FILENO) {
-//            if(dup2(serverPipe[0], STDIN_FILENO) == -1)
-//                exit(3);
-//            if(close(serverPipe[0]) == -1)
-//                exit(4);
-//        }
+            //todo: should close at the end
+        } else if (pid == 0) { // Child Process
+            ReplayProcessNum = i;
+
+            close(computePipe[i][0]); //Close comp's read pipe
+            close(serverPipe[i][1]); //Close server's write pipe
+
+            // Close pipes that master connects to other processes.
+            for(int j = 0; j < ReplayProcessNum; j++) {
+                if(j != i) {
+                    close(computePipe[j][0]);
+                    close(computePipe[j][1]);
+                    close(serverPipe[j][0]);
+                    close(serverPipe[j][1]);
+                }
+            }
 
 
-        InitPostmasterChild();
+            InitPostmasterChild();
 
-        /* Close the postmaster's sockets */
-        ClosePostmasterPorts(false);
+            /* Close the postmaster's sockets */
+            ClosePostmasterPorts(false);
 
-        WalRedoMain(argc, argv, dbname, username);
+            WalRedoMain(argc, argv, dbname, username);
 
-        close(computePipe[1]);
-        close(serverPipe[0]);
-        exit(0);
+            close(computePipe[i][1]);
+            close(serverPipe[i][0]);
+            exit(0);
+        }
+
     }
 
 }
 
-pthread_mutex_t replayProcessMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr lsn) {
 #ifdef ENABLE_DEBUG_INFO
@@ -309,8 +335,21 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     struct timeval start, end;
     gettimeofday(&start, NULL);
 #endif
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
 
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     char requestBuffer[1024];
@@ -374,7 +413,7 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     fflush(stdout);
 #endif
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -383,7 +422,7 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     int nblocks = 0;
     while (recvLen < sizeof(int)) {
         char* tempP = &nblocks;
-        int readLen = read(computePipe[0], &(tempP[recvLen]), sizeof(int) - recvLen);
+        int readLen = read(computePipe[replayPid][0], &(tempP[recvLen]), sizeof(int) - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -393,7 +432,7 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     printf("%s, get page number = %d\n", __func__ , nblocks);
     fflush(stdout);
 #endif
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
@@ -419,7 +458,22 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
 }
 
 void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* targetPage) {
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %s %d , spcID = %u, dbID = %u, tabID = %u, fornum = %d, blkNum = %u, lsn = %lu\n", __func__ , __FILE__, __LINE__,
@@ -485,7 +539,7 @@ void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, 
 #endif
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -497,7 +551,7 @@ void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, 
     // ------- Read target page from replay process ------
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
-        int readLen = read(computePipe[0], &targetPage[recvLen], BLCKSZ - recvLen);
+        int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -508,7 +562,7 @@ void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, 
 #endif
 
     Assert(recvLen == BLCKSZ);
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 
 }
 
@@ -519,7 +573,22 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     struct timeval start, end;
     gettimeofday(&start, NULL);
 #endif
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
 
 //    pthread_mutex_lock(&replayProcessMutex);
 
@@ -587,7 +656,7 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 #endif
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -599,7 +668,7 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     // ------- Read target page from replay process ------
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
-        int readLen = read(computePipe[0], &targetPage[recvLen], BLCKSZ - recvLen);
+        int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -610,7 +679,7 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
 #endif
 
     Assert(recvLen == BLCKSZ);
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
     ApplyOneLsnTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
@@ -644,7 +713,22 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     struct timeval start, end;
     gettimeofday(&start, NULL);
 #endif
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
 
 //    pthread_mutex_lock(&replayProcessMutex);
 
@@ -762,7 +846,7 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 #endif
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -774,7 +858,7 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     // ------- Read target page from replay process ------
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
-        int readLen = read(computePipe[0], &targetPage[recvLen], BLCKSZ - recvLen);
+        int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -785,7 +869,7 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 #endif
 
     Assert(recvLen == BLCKSZ);
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 }
 
 void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, char* buffer) {
@@ -793,7 +877,21 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     struct timeval start, end;
     gettimeofday(&start, NULL);
 #endif
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
 
 
 //    pthread_mutex_lock(&replayProcessMutex);
@@ -826,7 +924,7 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     int targetMsgLen = 1+4+1+4+4+4+4;
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -835,13 +933,13 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     // ------- Read target page from replay process ------
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
-        int readLen = read(computePipe[0], &buffer[recvLen], BLCKSZ - recvLen);
+        int readLen = read(computePipe[replayPid][0], &buffer[recvLen], BLCKSZ - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
 
     Assert(recvLen == BLCKSZ);
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
     GetBasePageTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
@@ -869,7 +967,21 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     struct timeval start, end;
     gettimeofday(&start, NULL);
 #endif
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
 
 
 
@@ -903,7 +1015,7 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 
     int sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
 
         sendLen+=writeLen;
     }
@@ -936,7 +1048,7 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     targetMsgLen = 1+4+1+4+4+4+4;
     sendLen = 0;
     while(sendLen < targetMsgLen) {
-        int writeLen = write(serverPipe[1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
         sendLen+=writeLen;
     }
 
@@ -945,13 +1057,13 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     // ------- Read target page from replay process ------
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
-        int readLen = read(computePipe[0], &buffer[recvLen], BLCKSZ - recvLen);
+        int readLen = read(computePipe[replayPid][0], &buffer[recvLen], BLCKSZ - recvLen);
         Assert(readLen >= 0);
         recvLen += readLen;
     }
 
     Assert(recvLen == BLCKSZ);
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
@@ -977,9 +1089,21 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
 }
 
 void SyncReplayProcess() {
-    pthread_mutex_lock(&replayProcessMutex);
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
 
-//    pthread_mutex_lock(&replayProcessMutex);
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
 
     // ------- Send "ApplyRecordUntil" request to replay process ------
     XLogRecPtr lsn = 0;
@@ -1055,10 +1179,13 @@ void SyncReplayProcess() {
     }
 
 
-    pthread_mutex_unlock(&replayProcessMutex);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
 }
 
 pthread_t XlogStartupTid2 = 0;
+void BackgroundHashMapCleanPageVersion() {
+    BackgroundHashMapCleanRocksdb(pageVersionHashMap);
+}
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
@@ -1070,11 +1197,17 @@ RpcServerMain(int argc, char *argv[],
 #endif
     HashMapInit(&pageVersionHashMap, 1023);
     HashMapInit(&relSizeHashMap, 1023);
+
+    for(int i = 0; i < 3; i++) {
+        printf("%s start background replayer %d\n", __func__ , i);
+        pthread_t tempTid;
+        pthread_create(&tempTid, NULL, (void*) BackgroundHashMapCleanPageVersion, NULL);
+    }
 #ifdef ENABLE_DEBUG_INFO
     printf("%s HashMapAddress = %p\n", __func__ , pageVersionHashMap);
     printf("%s HashMapAddress = %p\n", __func__ , relSizeHashMap);
-#endif
     fflush(stdout);
+#endif
 
     /***********Clean environment before exit********/
     struct sigaction catchTermSig;

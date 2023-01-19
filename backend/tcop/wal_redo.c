@@ -123,14 +123,19 @@ static BufferTag target_redo_tag;
 Buffer		wal_redo_buffer;
 bool		am_wal_redo_postgres = false;
 
-extern int serverPipe[2];
-extern int computePipe[2];
+extern int** serverPipe;
+extern int** computePipe;
+
+extern int ReplayProcessNum;
 
 static XLogReaderState *reader_state;
 
 extern bool doRequestWalReceiverReply;
 
+//#define ENABLE_DEBUG_INFO
 #define TRACE DEBUG5
+
+//#define ENABLE_DEBUG_INFO
 
 #ifdef HAVE_LIBSECCOMP
 static void
@@ -398,7 +403,7 @@ WalRedoMain(int argc, char *argv[],
          */
         firstchar = ReadRedoCommand(&input_message);
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d start \n", __func__ , __LINE__);
+        printf("%s %d %d start \n", __func__ , __LINE__, ReplayProcessNum);
         fflush(stdout);
 #endif
         switch (firstchar)
@@ -592,7 +597,7 @@ SetBeginRead(StringInfo input_message) {
 static void
 SyncLsnReplay(StringInfo input_message) {
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s Start\n", __func__ );
+    printf("%s ReplayNo = %d Start\n", __func__ , ReplayProcessNum);
     fflush(stdout);
 #endif
     XLogRecPtr lsn;
@@ -604,7 +609,7 @@ SyncLsnReplay(StringInfo input_message) {
     do {
         ssize_t		rc;
 
-        rc = write(computePipe[1], &resp[tot_written], 2 - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &resp[tot_written], 2 - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -616,7 +621,7 @@ SyncLsnReplay(StringInfo input_message) {
         tot_written += rc;
     } while (tot_written < 2);
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s sent OK to RpcServer\n", __func__ );
+    printf("%s %d %d sent OK to RpcServer\n", __func__ , __LINE__, ReplayProcessNum);
     fflush(stdout);
 #endif
     return;
@@ -631,7 +636,7 @@ ApplyXlogUntil(StringInfo input_message) {
      */
 
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s, initial EndRecPtro = %ld\n", __func__ , reader_state->EndRecPtr);
+    printf("%s %d %d, initial EndRecPtro = %ld\n", __func__, __LINE__, ReplayProcessNum , reader_state->EndRecPtr);
 #endif
     if(reader_state->EndRecPtr == InvalidXLogRecPtr) {
         bool crc_ok = false;
@@ -648,7 +653,7 @@ ApplyXlogUntil(StringInfo input_message) {
 
         ThisTimeLineID = recoveryTargetTLI;
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s, set initial readpoint as %ld, set the recoveryTargetTLI as %d\n", __func__ , controlFile->checkPoint, recoveryTargetTLI);
+        printf("%s %d %d, set initial readpoint as %ld, set the recoveryTargetTLI as %d\n", __func__ , __LINE__, ReplayProcessNum,controlFile->checkPoint, recoveryTargetTLI);
 #endif
     }
 
@@ -658,7 +663,7 @@ ApplyXlogUntil(StringInfo input_message) {
 
     lsn = pq_getmsgint64(input_message);
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s, by parameter, target replay lsn = %ld\n", __func__ , lsn);
+    printf("%s %d %d, by parameter, target replay lsn = %ld\n", __func__ , __LINE__, ReplayProcessNum, lsn);
     fflush(stdout);
 #endif
 
@@ -666,7 +671,7 @@ ApplyXlogUntil(StringInfo input_message) {
     // lsn is the last_byte+1, which is the beginning of next unflushed xlog
     while(reader_state->EndRecPtr < lsn) {
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s readRecPtr = %ld, pid=%d\n", __func__ , reader_state->EndRecPtr, getpid());
+        printf("%s %d %d readRecPtr = %ld, pid=%d\n", __func__ , __LINE__, ReplayProcessNum, reader_state->EndRecPtr, getpid());
         fflush(stdout);
 #endif
         record = XLogReadRecord(reader_state, &err_msg);
@@ -675,7 +680,7 @@ ApplyXlogUntil(StringInfo input_message) {
         if(record == NULL)
             break;
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s read Succeed, ready to replay this xlog, pid=%d\n", __func__ , getpid());
+        printf("%s %d %d read Succeed, ready to replay this xlog, pid=%d\n", __func__ , __LINE__, ReplayProcessNum, getpid());
         fflush(stdout);
 #endif
 
@@ -699,15 +704,15 @@ ApplyXlogUntil(StringInfo input_message) {
         const char*id=NULL;
         id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
         if (id)
-            printf("%s %s %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id);
+            printf("%s %s %d ReplayProcessNum = %d, rm = %s info = %s\n", __func__ , __FILE__, __LINE__, ReplayProcessNum,  RmgrTable[record->xl_rmid].rm_name ,id);
         else
-            printf("%s %s %d, rm = %s \n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name );
+            printf("%s %s %d,  ReplayProcessNum = %d rm = %s \n", __func__ , __FILE__, __LINE__, ReplayProcessNum, RmgrTable[record->xl_rmid].rm_name );
         fflush(stdout);
 
         for(int i = 0; i < reader_state->max_block_id; i++) {
 //            if(reader_state->blocks[i].has_image == false && reader_state->blocks[i].has_data == false)
 //                continue;
-            printf("%s lsn %d related with spc=%ld db=%ld rel=%ld fork=%d blk=%d\n", __func__ , reader_state->ReadRecPtr,
+            printf("%s  ReplayProcessNum = %d, lsn %d related with spc=%ld db=%ld rel=%ld fork=%d blk=%d\n", __func__ , ReplayProcessNum,  reader_state->ReadRecPtr,
                    reader_state->blocks[i].rnode.spcNode, reader_state->blocks[i].rnode.dbNode, reader_state->blocks[i].rnode.relNode,
                    reader_state->blocks[i].forknum, reader_state->blocks[i].blkno);
             fflush(stdout);
@@ -958,7 +963,7 @@ ApplyOneXlogWithoutBasePage(StringInfo input_message) {
     do {
         ssize_t		rc;
 
-        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &page[tot_written], BLCKSZ - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -1141,7 +1146,7 @@ ApplyOneXlog(StringInfo input_message) {
     do {
         ssize_t		rc;
 
-        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &page[tot_written], BLCKSZ - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -1173,7 +1178,7 @@ ApplyOneXlog(StringInfo input_message) {
 static void
 ApplyLsnListXlog(StringInfo input_message) {
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s %d, start \n", __func__ , __LINE__);
+    printf("%s %d  ReplayProcessNum = %d, start \n", __func__ , __LINE__, ReplayProcessNum);
     fflush(stdout);
 #endif
 
@@ -1208,8 +1213,8 @@ ApplyLsnListXlog(StringInfo input_message) {
 
     listSize = pq_getmsgint(input_message, 4);
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, listSize = %d\n",
-           __func__ , __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, forknum,
+    printf("%s %d, ReplayProcessNum = %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, listSize = %d\n",
+           __func__ , __LINE__, ReplayProcessNum, rnode.spcNode, rnode.dbNode, rnode.relNode, forknum,
            blknum, listSize);
     fflush(stdout);
 #endif
@@ -1224,7 +1229,7 @@ ApplyLsnListXlog(StringInfo input_message) {
     content = pq_getmsgbytes(input_message, BLCKSZ);
 
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s %d, lsn size = %d\n", __func__ , __LINE__, listSize);
+    printf("%s %d, ReplayProcessNum = %d, lsn size = %d\n", __func__ , __LINE__, ReplayProcessNum, listSize);
     for(int i = 0; i < listSize; i++) {
         printf("lsn %d = %lu\n", i, lsnList[i]);
     }
@@ -1236,7 +1241,7 @@ ApplyLsnListXlog(StringInfo input_message) {
     page = BufferGetPage(buf);
     memcpy(page, content, BLCKSZ);
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s %d page's lsn = %lu\n", __func__ , __LINE__, PageGetLSN(page));
+    printf("%s %d ReplayProcessNum = %d page's lsn = %lu\n", __func__ , __LINE__,  ReplayProcessNum, PageGetLSN(page));
     fflush(stdout);
 #endif
 
@@ -1254,9 +1259,9 @@ ApplyLsnListXlog(StringInfo input_message) {
         const char*id=NULL;
         id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
         if (id)
-            printf("%s %s %d, rm = %s info = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name ,id, lsnList[i]);
+            printf("%s %s %d  ReplayProcessNum = %d, rm = %s info = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, ReplayProcessNum,  RmgrTable[record->xl_rmid].rm_name ,id, lsnList[i]);
         else
-            printf("%s %s %d, rm = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, RmgrTable[record->xl_rmid].rm_name, lsnList[i]);
+            printf("%s %s %d ReplayProcessNum = %d, rm = %s, lsn = %lu\n", __func__ , __FILE__, __LINE__, ReplayProcessNum, RmgrTable[record->xl_rmid].rm_name, lsnList[i]);
         fflush(stdout);
 #endif
 
@@ -1299,11 +1304,11 @@ ApplyLsnListXlog(StringInfo input_message) {
                 action = polar_generic_idx_redo(reader_state, &bufferTag, &buf);
                 break;
             default:
-                printf("%s didn't find any corresponding polar redo function\n", __func__ );
+                printf("%s  ReplayProcessNum = %d, didn't find any corresponding polar redo function\n", __func__, ReplayProcessNum );
                 break;
         }
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s polar_redo succeed? %d\n", __func__, (action!=BLK_NOTFOUND) );
+        printf("%s ReplayProcessNum = %d polar_redo succeed? %d\n", __func__, ReplayProcessNum, (action!=BLK_NOTFOUND) );
         fflush(stdout);
 #endif
 
@@ -1329,7 +1334,7 @@ ApplyLsnListXlog(StringInfo input_message) {
     do {
         ssize_t		rc;
 
-        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &page[tot_written], BLCKSZ - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -1343,11 +1348,11 @@ ApplyLsnListXlog(StringInfo input_message) {
 
     ReleaseBuffer(buf);
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s LINE=%d \n", __func__ , __LINE__);
+    printf("%s LINE=%d  ReplayProcessNum = %d \n", __func__ , __LINE__, ReplayProcessNum);
     fflush(stdout);
 
     if(PageIsNew(page)) {
-        printf("%s found page is new \n", __func__ );
+        printf("%s  ReplayProcessNum = %d found page is new \n", __func__ , ReplayProcessNum);
         fflush(stdout);
     }
 #endif
@@ -1561,7 +1566,7 @@ GetRelSize(StringInfo input_message) {
         ssize_t		rc;
 
         char * tempP = (char*) &pageNum;
-        rc = write(computePipe[1], &(tempP[tot_written]), sizeof(int) - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &(tempP[tot_written]), sizeof(int) - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -1635,7 +1640,7 @@ GetPage(StringInfo input_message)
     do {
         ssize_t		rc;
 
-        rc = write(computePipe[1], &page[tot_written], BLCKSZ - tot_written);
+        rc = write(computePipe[ReplayProcessNum][1], &page[tot_written], BLCKSZ - tot_written);
         if (rc < 0) {
             /* If interrupted by signal, just retry */
             if (errno == EINTR)
@@ -1697,7 +1702,7 @@ buffered_read(void *buf, size_t count)
         {
             ssize_t		ret;
 
-            ret = read(serverPipe[0], stdin_buf, sizeof(stdin_buf));
+            ret = read(serverPipe[ReplayProcessNum][0], stdin_buf, sizeof(stdin_buf));
 #ifdef ENABLE_DEBUG_INFO
             printf("Compute: read %d bytes from pipe\n", ret);
             fflush(stdout);
