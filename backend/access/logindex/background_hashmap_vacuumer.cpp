@@ -19,6 +19,9 @@
 #define ITER_BATCH_SIZE 10
 #define MAX_REPLAY_VERSION_SIZE 20
 
+#define ITER_BUCKET_INTERVAL 30
+#define ITER_HEAD_INTERVAL 0
+
 void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag);
 void BackgroundReplayHeadNode(HashNodeHead * head);
 
@@ -35,7 +38,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
     struct timeval now;
 
     while(1) { // Iterate all buckets
-        usleep(1000);
+        usleep(100);
         // Iterate every bucket one by one
         currentBucketID = (currentBucketID+1) % hashMap->bucketNum;
         // How many heads we have processed
@@ -43,6 +46,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         // flag: finish iterate all the nodes in this bucket
         int finishIterThisBucket = 0;
 
+        int statisticFinishVacuum = 0;
 
         // Set the initial iter to bucket's first
         HashNodeHead *iter = hashMap->bucketList[currentBucketID].nodeList;
@@ -51,7 +55,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         }
         // Now get the replay lock, check whether it has enough interval before last vacuum
         gettimeofday(&now, NULL);
-        if (now.tv_sec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec < 60) {
+        if (now.tv_sec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec < ITER_BUCKET_INTERVAL) {
             pthread_mutex_unlock(&(hashMap->bucketList[currentBucketID].replayLock));
             continue;
         }
@@ -76,7 +80,9 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
             // Collect ITER_BENCH_SIZE heads
             for(int i = 0; i < ITER_BATCH_SIZE; i++) {
                 if(iter!=NULL) {
-                    headNodes[recordNumber++] = iter;
+                    if(iter->replayedLsn < iter->maxLsn)
+                        headNodes[recordNumber++] = iter;
+                    iter = iter->nextHead;
                 } else {
                     finishIterThisBucket = 1;
                     break;
@@ -105,7 +111,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 
                 struct timeval now;
                 gettimeofday(&now, NULL);
-                if(now.tv_sec - headNodes[i]->finishVacuumTime.tv_sec >= 120) {
+                if(now.tv_sec - headNodes[i]->finishVacuumTime.tv_sec >= ITER_HEAD_INTERVAL) {
                     BackgroundReplayHeadNode(headNodes[i]);
                     headNodes[i]->finishVacuumTime = now;
                 }
@@ -119,7 +125,9 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
             }
 
             // Skip these replayed heads in the next turn
-            currentFinishHeadNum += recordNumber;
+            currentFinishHeadNum += ITER_BATCH_SIZE;
+
+            statisticFinishVacuum += recordNumber;
             // If we finish iterate all the heads in this bucket, iterate next bucket.
             if(finishIterThisBucket) {
                 break;
@@ -127,12 +135,19 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         }
 
 
-        // update the last replay time for this bucket
-        gettimeofday(&now, NULL);
-        hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec = now.tv_sec;
-        hashMap->bucketList[currentBucketID].lastReplayTime.tv_usec = now.tv_usec;
+        // If we finish replayed all the heads in this bucket, wait an interval for the next scanning
+        if(statisticFinishVacuum == 0) {
+            // update the last replay time for this bucket
+            gettimeofday(&now, NULL);
+            hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec = now.tv_sec;
+            hashMap->bucketList[currentBucketID].lastReplayTime.tv_usec = now.tv_usec;
+        }
         // now other replay process can hold the lock again.
         pthread_mutex_unlock(&(hashMap->bucketList[currentBucketID].replayLock));
+        if(statisticFinishVacuum != 0) {
+            printf("%s %d, successfully cleaned %d bucket %d heads\n", __func__ , __LINE__, currentBucketID, statisticFinishVacuum);
+            fflush(stdout);
+        }
 
     }
 
