@@ -26,12 +26,23 @@
 #include "catalog/pg_control.h"
 #include "common/pg_lzcompress.h"
 #include "replication/origin.h"
+#include "storage/rpcclient.h"
 
 #ifndef FRONTEND
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "utils/memutils.h"
+
+#define RPC_REMOTE_DISK
+extern int IsRpcClient;
+int pg_pread_rpc_local2(int fd, char *p, int amount, int offset) {
+    if(IsRpcClient)
+        return RpcPgPRead(fd, p, amount, offset);
+    else
+        return pg_pread(fd, p, amount, offset);
+}
 #endif
+
 
 static void report_invalid_record(XLogReaderState *state, const char *fmt,...)
 			pg_attribute_printf(2, 3);
@@ -328,6 +339,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	 */
 	readOff = ReadPageInternal(state, targetPagePtr,
 							   Min(targetRecOff + SizeOfXLogRecord, XLOG_BLCKSZ));
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, readOff = %d\n", __func__ , __LINE__, readOff);
+    fflush(stdout);
+#endif
 	if (readOff < 0)
 		goto err;
 
@@ -338,6 +353,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	pageHeaderSize = XLogPageHeaderSize((XLogPageHeader) state->readBuf);
 	if (targetRecOff == 0)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		/*
 		 * At page start, so skip over page header.
 		 */
@@ -346,14 +365,26 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	}
 	else if (targetRecOff < pageHeaderSize)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		report_invalid_record(state, "invalid record offset at %X/%X",
 							  (uint32) (RecPtr >> 32), (uint32) RecPtr);
 		goto err;
 	}
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if ((((XLogPageHeader) state->readBuf)->xlp_info & XLP_FIRST_IS_CONTRECORD) &&
 		targetRecOff == pageHeaderSize)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		report_invalid_record(state, "contrecord is requested by %X/%X",
 							  (uint32) (RecPtr >> 32), (uint32) RecPtr);
 		goto err;
@@ -374,6 +405,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	record = (XLogRecord *) (state->readBuf + RecPtr % XLOG_BLCKSZ);
 	total_len = record->xl_tot_len;
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * If the whole record header is on this page, validate it immediately.
 	 * Otherwise do just a basic sanity check on xl_tot_len, and validate the
@@ -384,16 +419,32 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	 */
 	if (targetRecOff <= XLOG_BLCKSZ - SizeOfXLogRecord)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		if (!ValidXLogRecordHeader(state, RecPtr, state->ReadRecPtr, record,
 								   randAccess))
 			goto err;
 		gotheader = true;
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 	}
 	else
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		/* XXX: more validation should be done here */
 		if (total_len < SizeOfXLogRecord)
 		{
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+#endif
 			report_invalid_record(state,
 								  "invalid record length at %X/%X: wanted %u, got %u",
 								  (uint32) (RecPtr >> 32), (uint32) RecPtr,
@@ -403,9 +454,17 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 		gotheader = false;
 	}
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	len = XLOG_BLCKSZ - RecPtr % XLOG_BLCKSZ;
 	if (total_len > len)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		/* Need to reassemble record */
 		char	   *contdata;
 		XLogPageHeader pageHeader;
@@ -418,6 +477,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 		if (total_len > state->readRecordBufSize &&
 			!allocate_recordbuf(state, total_len))
 		{
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+#endif
 			/* We treat this as a "bogus data" condition */
 			report_invalid_record(state, "record length %u at %X/%X too long",
 								  total_len,
@@ -431,6 +494,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 		buffer = state->readRecordBuf + len;
 		gotlen = len;
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		do
 		{
 			/* Calculate pointer to beginning of next page */
@@ -441,6 +508,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 									   Min(total_len - gotlen + SizeOfXLogShortPHD,
 										   XLOG_BLCKSZ));
 
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+#endif
 			if (readOff < 0)
 				goto err;
 
@@ -450,6 +521,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 			pageHeader = (XLogPageHeader) state->readBuf;
 			if (!(pageHeader->xlp_info & XLP_FIRST_IS_CONTRECORD))
 			{
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d \n", __func__ , __LINE__);
+                fflush(stdout);
+#endif
 				report_invalid_record(state,
 									  "there is no contrecord flag at %X/%X",
 									  (uint32) (RecPtr >> 32), (uint32) RecPtr);
@@ -463,6 +538,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 			if (pageHeader->xlp_rem_len == 0 ||
 				total_len != (pageHeader->xlp_rem_len + gotlen))
 			{
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d \n", __func__ , __LINE__);
+                fflush(stdout);
+#endif
 				report_invalid_record(state,
 									  "invalid contrecord length %u at %X/%X",
 									  pageHeader->xlp_rem_len,
@@ -492,9 +571,17 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 			buffer += len;
 			gotlen += len;
 
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+            fflush(stdout);
+#endif
 			/* If we just reassembled the record header, validate it. */
 			if (!gotheader)
 			{
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d \n", __func__ , __LINE__);
+                fflush(stdout);
+#endif
 				record = (XLogRecord *) state->readRecordBuf;
 				if (!ValidXLogRecordHeader(state, RecPtr, state->ReadRecPtr,
 										   record, randAccess))
@@ -505,10 +592,18 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 
 		Assert(gotheader);
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		record = (XLogRecord *) state->readRecordBuf;
 		if (!ValidXLogRecord(state, record, RecPtr))
 			goto err;
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		pageHeaderSize = XLogPageHeaderSize((XLogPageHeader) state->readBuf);
 		state->ReadRecPtr = RecPtr;
 		state->EndRecPtr = targetPagePtr + pageHeaderSize
@@ -516,21 +611,37 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 	}
 	else
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		/* Wait for the record data to become available */
 		readOff = ReadPageInternal(state, targetPagePtr,
 								   Min(targetRecOff + total_len, XLOG_BLCKSZ));
 		if (readOff < 0)
 			goto err;
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		/* Record does not cross a page boundary */
 		if (!ValidXLogRecord(state, record, RecPtr))
 			goto err;
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		state->EndRecPtr = RecPtr + MAXALIGN(total_len);
 
 		state->ReadRecPtr = RecPtr;
 	}
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * Special processing if it's an XLOG SWITCH record
 	 */
@@ -542,6 +653,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 		state->EndRecPtr -= XLogSegmentOffset(state->EndRecPtr, state->segcxt.ws_segsize);
 	}
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if (DecodeXLogRecord(state, record, errormsg))
 		return record;
 	else
@@ -549,6 +664,10 @@ XLogReadRecord(XLogReaderState *state, char **errormsg)
 
 err:
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d Error here \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * Invalidate the read state. We might read from a different source after
 	 * failure.
@@ -581,6 +700,7 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 
 	Assert((pageptr % XLOG_BLCKSZ) == 0);
 
+    // pageptr is the desired start position of target page
 	XLByteToSeg(pageptr, targetSegNo, state->segcxt.ws_segsize);
 	targetPageOff = XLogSegmentOffset(pageptr, state->segcxt.ws_segsize);
 
@@ -602,6 +722,7 @@ ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr, int reqLen)
 	{
 		XLogRecPtr	targetSegmentPtr = pageptr - targetPageOff;
 
+        // targetSegmentPtr is the start position of the SEGMENT
 		readLen = state->routine.page_read(state, targetSegmentPtr, XLOG_BLCKSZ,
 										   state->currRecPtr,
 										   state->readBuf);
@@ -1113,7 +1234,12 @@ WALRead(XLogReaderState *state,
 
 		/* Reset errno first; eases reporting non-errno-affecting errors */
 		errno = 0;
-		readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#ifdef RPC_REMOTE_DISK
+		readbytes = pg_pread_rpc_local2(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#else
+        readbytes = pg_pread(state->seg.ws_file, p, segbytes, (off_t) startoff);
+#endif
+
 
 #ifndef FRONTEND
 		pgstat_report_wait_end();

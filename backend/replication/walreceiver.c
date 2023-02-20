@@ -977,7 +977,7 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 
 		/* OK to write the logs */
 		errno = 0;
-
+//        byteswritten = segbytes;
 		byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
 		if (byteswritten <= 0)
 		{

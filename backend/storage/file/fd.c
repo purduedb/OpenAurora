@@ -97,7 +97,10 @@
 #include "utils/guc.h"
 #include "utils/resowner_private.h"
 #include "storage/md.h"
+#include "storage/rpcclient.h"
 #include <pthread.h>
+
+#define START_FUNC_INFO
 
 /* Define PG_FLUSH_DATA_WORKS if we have an implementation for pg_flush_data */
 #if defined(HAVE_SYNC_FILE_RANGE)
@@ -341,6 +344,97 @@ static void unlink_if_exists_fname(const char *fname, bool isdir, int elevel);
 static int	fsync_parent_path(const char *fname, int elevel);
 
 extern int IsRpcClient;
+
+
+int stat_rpc_local(const char* path,struct stat* _stat) {
+    if(IsRpcClient)
+        return RpcStat(path, _stat);
+    else
+        return stat(path, _stat);
+}
+
+int pg_fsync_rpc_local(int fd) {
+#ifdef START_FUNC_INFO
+    printf("%s fd = %d, isRpc= %d\n",__func__, fd, IsRpcClient);
+    fflush(stdout);
+#endif
+    if(IsRpcClient)
+        return RpcPgFsync(fd);
+    else
+        return pg_fsync(fd);
+}
+
+int
+durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elevel) {
+    if (IsRpcClient)
+        return RpcDurableRenameExcl(oldfile, newfile, elevel);
+    else
+        return durable_rename_excl(oldfile, newfile, elevel);
+}
+
+int
+durable_unlink_rpc_local(const char *fname, int elevel) {
+    if (IsRpcClient)
+        return RpcDurableUnlink(fname, elevel);
+    else
+        return durable_unlink(fname, elevel);
+}
+
+int
+OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
+    if (IsRpcClient)
+        return RpcOpenTransientFile(fileName, fileFlags);
+    else
+        return OpenTransientFile(fileName, fileFlags);
+}
+
+int
+CloseTransientFile_Rpc_Local(int fd) {
+    if (IsRpcClient)
+        return RpcCloseTransientFile(fd);
+    else
+        return CloseTransientFile(fd);
+}
+
+int
+BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags) {
+    if (IsRpcClient)
+        return RpcBasicOpenFile(fileName, fileFlags);
+    else
+        return BasicOpenFile(fileName, fileFlags);
+}
+
+int
+Unlink_Rpc_Local(char *path) {
+    if (IsRpcClient)
+        return RpcUnlink(path);
+    else
+        return unlink(path);
+}
+
+int
+pg_fdatasync_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcPgFdatasync(fd);
+    else
+        return pg_fdatasync(fd);
+}
+
+int close_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcClose(fd);
+    else
+        return close(fd);
+}
+
+int
+pg_fsync_no_writethrough_rpc_local(int fd) {
+    if (IsRpcClient)
+        return RpcPgFsyncNoWritethrough(fd);
+    else
+        return pg_fsync_no_writethrough(fd);
+}
+
 
 void VfdLruLock() {
     pthread_mutex_lock(&mutex);
@@ -1086,8 +1180,8 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
     printf("%s start \n", __func__);
     fflush(stdout);
 #endif
-//    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
-//    fflush(stdout);
+    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
+    fflush(stdout);
     int			fd;
 
     tryAgain:
@@ -1098,6 +1192,8 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 
     if (errno == EMFILE || errno == ENFILE)
     {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
         int			save_errno = errno;
 
         ereport(LOG,
@@ -1109,6 +1205,11 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
         errno = save_errno;
     }
 
+    printf("%s %d, filename = %s , errmsge: %s\n", __func__ , __LINE__, fileName, strerror(errno));
+    fflush(stdout);
+//    ereport(LOG,
+//            (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+//                    errmsg("filename =%s check errmessage: %m; ", fileName)));
     return -1;					/* failure */
 }
 
@@ -1370,7 +1471,7 @@ static bool
 ReleaseLruFile(int alreadyLocked)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start , alreadyLocked = %d, pid = %d\n", __func__, alreadyLocked, getpid());
     fflush(stdout);
 #endif
     DO_DB(elog(LOG, "ReleaseLruFile. Opened %d", nfile));
@@ -1387,6 +1488,10 @@ ReleaseLruFile(int alreadyLocked)
         LruDelete(VfdCache[0].lruMoreRecently);
         if(!alreadyLocked)
             VfdLruUnlock();
+#ifdef START_FUNC_INFO
+        printf("%s end , alreadyLocked = %d, pid = %d\n", __func__, alreadyLocked, getpid());
+        fflush(stdout);
+#endif
         return true;			/* freed a file */
     }
     return false;				/* no files available to free */
@@ -1400,7 +1505,7 @@ static void
 ReleaseLruFiles(int alreadyLocked)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     while (nfile + numAllocatedDescs + numExternalFDs >= max_safe_fds)

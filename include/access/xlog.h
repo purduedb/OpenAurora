@@ -239,6 +239,10 @@ extern bool XLOG_DEBUG;
 #define XLOG_MARK_UNIMPORTANT	0x02	/* record not important for durability */
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Checkpoint statistics */
 typedef struct CheckpointStatsData
 {
@@ -357,11 +361,8 @@ extern int	XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 // Use this file to initialize recovery TLI for wal_redo process
 extern void ReadControlFileTimeLine(void);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 extern uint64_t GetLogWrtResultLsn(void);
+extern void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId);
 
 #ifdef __cplusplus
 }

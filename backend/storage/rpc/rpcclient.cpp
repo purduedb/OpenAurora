@@ -68,7 +68,8 @@ DataPageAccessClient *client=NULL;
 int IsRpcClient = 0;
 pid_t MyPid = 0;
 
-#define DEBUG_TIMING
+//#define DEBUG_TIMING
+#define DEBUG_TIMING2
 #ifdef DEBUG_TIMING
 
 #include <sys/time.h>
@@ -237,7 +238,7 @@ void RpcInit()
     MyPid = myPid;
 }
 
-void RpcClose() {
+void RpcTransportClose() {
     int myPid = getpid();
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start\n", __func__ );
@@ -259,6 +260,11 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
@@ -287,6 +293,13 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 
     _return.copy(buff, BLCKSZ);
 
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_readbuffer_time[1]), &(client_readbuffer_count[1]))
 #endif
@@ -298,6 +311,10 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
@@ -331,10 +348,20 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
     printf("%s End\n", __func__ );
     fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
     return;
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
@@ -362,10 +389,20 @@ int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
     return result;
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
@@ -395,10 +432,20 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
     fflush(stdout);
 #endif
 
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
     return result;
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, lsn=%lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
@@ -427,9 +474,19 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, GetLogWrtResultLsn());
     fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
 }
 
 void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u pageIsNew=%d\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
@@ -462,9 +519,19 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum, PageIsNew(buff));
     fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
 }
 
 void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
+#ifdef DEBUG_TIMING2
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forknum, blknum);
@@ -491,6 +558,653 @@ void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
     printf("%s End\n", __func__ );
     fflush(stdout);
 #endif
+#ifdef DEBUG_TIMING2
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+}
+
+
+// Following are Rpc interfaces for fd.c
+
+void RpcFileClose(const int fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    //rpctransport->open();
+    client->RpcFileClose((_File)fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return;
+}
+
+void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+//    printf("[%s] spcNode = %ld, dbNode = %ld, isRedo = %d\n", __func__ , _spcnode, _dbnode, isRedo);
+    //rpctransport->open();
+    client->RpcTablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return;
+}
+
+int RpcPathNameOpenFile(const char* path, const int32_t _flag) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+//    printf("[%s] %s %s %d \n", __func__ , _func, _file, _line);
+    _File result = 0;
+    _Path _path;
+    _path.assign(path);
+    //rpctransport->open();
+    result = client->RpcPathNameOpenFile(_path, _flag);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, const int64_t _seekpos, const int32_t _wait_event_info) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    int32_t result = 0;
+    _Page _page;
+    _page.assign(page, BLCKSZ);
+    //rpctransport->open();
+    result = client->RpcFileWrite(_fd, _page, _amount, _seekpos, _wait_event_info);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+char* RpcFilePathName(const int _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    _Path _return;
+
+    char * filename = (char*) malloc(sizeof(char*)* 1024);
+
+    //rpctransport->open();
+    client->RpcFilePathName(_return, _fd);
+    _return.copy(filename, _return.length());
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return filename;
+}
+
+int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+
+    _Page _return;
+    //rpctransport->open();
+    client->RpcFileRead(_return, _fd, _amount, _seekpos, _wait_event_info);
+    //rpctransport->close();
+    _return.copy(buff, BLCKSZ);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return _return.length();
+}
+
+int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    int32_t result;
+
+    //rpctransport->open();
+    result = client->RpcFileTruncate(_fd, _offset);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int64_t RpcFileSize(const int _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start %d , fd = %d\n", __func__ , getpid(), _fd);
+//    printf("[%s] %s %s %d\n", __func__, _func, _file, _line);
+    int64_t result;
+    //rpctransport->open();
+    result = client->RpcFileSize(_fd);
+    //rpctransport->close();
+//    printf("[%s] function end %d , result = %d , fd = %d\n", __func__ , getpid(), result, _fd);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amount, const int32_t wait_event_info) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcFilePrefetch(_fd, _offset, _amount, wait_event_info);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes, const int32_t wait_event_info) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    //rpctransport->open();
+    client->RpcFileWriteback(_fd, _offset, nbytes, wait_event_info);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return;
+}
+
+int32_t RpcUnlink(const char* filepath) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    _Path _path;
+    int32_t result = 0;
+
+    _path.assign(filepath);
+
+    //rpctransport->open();
+    result = client->RpcUnlink(_path);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcFtruncate(const int _fd, const int64_t _offset) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    int32_t result = 0;
+
+    //rpctransport->open();
+    result = client->RpcFtruncate(_fd, _offset);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+void RpcInitFile(char* _return, const char* _path) {
+
+}
+
+int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+    _File result = 0;
+    _Path _filename;
+
+    _filename.assign(filename);
+
+    //rpctransport->open();
+    result = client->RpcOpenTransientFile(_filename, _fileflags);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcCloseTransientFile(const int _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcCloseTransientFile(_fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcFileSync(_fd, _wait_event_info);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+
+    int32_t result;
+    _Page _return;
+    //rpctransport->open();
+    client->RpcPgPRead(_return, _fd, _amount, _offset);
+    //rpctransport->close();
+    _return.copy(p, _return.length());
+//    printf("[%s] return value = %d\n", __func__ , (int32_t)_return.length());
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return (int32_t)_return.length();
+}
+
+int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    _Page _page;
+    _page.assign(p, _amount);
+    //rpctransport->open();
+    result = client->RpcPgPWrite(_fd, _page, _amount, _offset);
+    //rpctransport->close();
+//    printf("[%s] result = %d \n", __func__ , result);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcClose(const int _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcClose(_fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start , path = %s\n", __func__ , path);
+
+    int32_t result;
+    _Path _path;
+    _path.assign(path);
+    //rpctransport->open();
+    result = client->RpcBasicOpenFile(_path, _flags);
+    //rpctransport->close();
+//    printf("[%s] result = %d\n", __func__ , result);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcPgFdatasync(const int32_t _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcPgFdatasync(_fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+
+int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcPgFsyncNoWritethrough(_fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcLseek(_fd, _offset, _flag);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+
+    return result;
+}
+
+int RpcStat(const char* path, struct stat* _stat) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    _Path _path;
+    _path.assign(path);
+    _Stat_Resp response;
+    response._stat_mode = 0;
+    response._result = 0;
+    //rpctransport->open();
+    client->RpcStat(response, _path);
+    //rpctransport->close();
+    _stat->st_mode = response._stat_mode;
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return response._result;
+}
+
+int32_t RpcDirectoryIsEmpty(const char* path) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    _Path _path;
+    _path.assign(path);
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcDirectoryIsEmpty(_path);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcCopyDir(const char* _src, const char* _dst) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    // create another copy of initialized-db in compute node
+    char temp_src[1024];
+    char temp_dst[1024];
+    strcpy(temp_src, _src);
+    strcpy(temp_dst, _dst);
+    copydir(temp_src, temp_dst, false);
+
+//    printf("[%s] src=%s, dst=%s \n", __func__, _src, _dst);
+    _Path _path_src, _path_dst;
+    _path_src.assign(_src);
+    _path_dst.assign(_dst);
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcCopyDir(_path_src, _path_dst);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcPgFsync(const int32_t _fd) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcPgFsync(_fd);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    _Path _fname;
+    _fname.assign(filename);
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcDurableUnlink(_fname, _flag);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+
+}
+
+int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel) {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+
+    _Path _oldFname, _newFname;
+    _oldFname.assign(oldFname);
+    _newFname.assign(newFname);
+
+    int32_t result;
+    //rpctransport->open();
+    result = client->RpcDurableRenameExcl(_oldFname, _newFname, _elevel);
+    //rpctransport->close();
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcXLogWriteWithPosition(const int _fd, char *p, const int32_t _amount, const int32_t _offset, int startIdx, int blkNum, uint64_t* xlblocks, int xlblocksBufferNum, uint64_t lsn) {
+    RpcInit();
+//    printf("[%s] function start \n", __func__ );
+
+    int32_t result;
+    _Page _page;
+    _page.assign(p, _amount);
+    vector<int64_t> xlblocksVec;
+    for(int i = 0; i < blkNum; i++) {
+        xlblocksVec.push_back( xlblocks[(startIdx+i) % xlblocksBufferNum] );
+    }
+
+    result = client->RpcXLogWrite(_fd, _page, _amount, _offset, xlblocksVec, blkNum, startIdx, lsn);
+    return result;
 }
 
 //void TryRpcInitFile(_Page& _return, _Path& _path)

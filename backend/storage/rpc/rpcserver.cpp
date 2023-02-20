@@ -31,13 +31,17 @@
 #include "storage/kv_interface.h"
 #include "storage/buf_internals.h"
 #include "access/xlog.h"
+#include "pgstat.h"
 
 extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
 
 extern int reachXlogTempEnd;
 
+
 //#define DEBUG_TIMING 1
+#define INFO_FUNC_START
+#define ENABLE_DEBUG_INFO
 
 #ifdef DEBUG_TIMING
 
@@ -134,11 +138,12 @@ void WaitParse(int64_t _lsn) {
         return;
     XLogRecPtr flushUpto = WalRcv->flushedUpto;
     if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d , parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
-               __func__ , __LINE__, _lsn, XLogParseUpto, flushUpto);
-        fflush(stdout);
-#endif
+//    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < RpcXLogFlushedLsn && XLogParseUpto != 0) {
+//#ifdef ENABLE_DEBUG_INFO
+//        printf("%s %d , parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
+//               __func__ , __LINE__, _lsn, XLogParseUpto, RpcXLogFlushedLsn);
+//        fflush(stdout);
+//#endif
         XLogRecPtr targetLsn = flushUpto;
         if(_lsn < targetLsn)
             targetLsn = _lsn;
@@ -281,7 +286,7 @@ public:
         RECORD_TIMING(&start, &end, &(readBufferCommon[0]), &(readBufferCount[0]))
 #endif
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s found = %d, listSize = %d\n", __func__ , found, listSize);
+        printf("%s found = %d, listSize = %d, XLogParseUpto = %lu\n", __func__ , found, listSize, XLogParseUpto);
         fflush(stdout);
 #endif
 
@@ -322,6 +327,7 @@ public:
 #endif
 
 
+            // (map, key, lsn, pageNum, noEnptySlot); // for pageVersionHashMap, pageNum should always be -1
             HashMapInsertKey(pageVersionHashMap, key, 1, -1, 1);
             HashMapUpdateReplayedLsn(pageVersionHashMap, key, 1, false);
 
@@ -941,6 +947,328 @@ public:
 #else
         HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum, true);
 #endif
+    }
+
+
+    // Following are fd.c interfaces
+    void RpcFileClose(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        FileClose(_fd);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
+    }
+
+    void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        TablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
+    }
+
+    _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
+#ifdef INFO_FUNC_START
+        printf("%s start, filename = %s\n", __func__, _path.c_str() );
+#endif
+        _File result =  PathNameOpenFile(_path.c_str(), _flag);
+//        printf("[%s] result = %d\n", __func__ , result);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
+        return result;
+    }
+
+    // todo
+    int32_t RpcFileWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        // Your implementation goes here
+        char buff[BLCKSZ+8];
+        _page.copy(buff, BLCKSZ);
+        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+
+//        int writeLen = 0;
+//        char * page = (char *) malloc(BLCKSZ);
+//        _page.copy(page, BLCKSZ);
+//
+//        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+//        if (relNode.parseSucc) {
+//            writeLen = RpcFileWriteWithCache(_fd, page, relNode, _seekpos);
+//        } else {
+        //We arrived here only when some rare cases occur, for example, have backendID etc.
+//            writeLen = FileWrite(_fd, page, _amount, _seekpos, _wait_event_info);
+//        }
+//
+//        free(page);
+//        return writeLen;
+    }
+
+    void RpcFilePathName(_Path& _return, const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        char * filename = FilePathName(_fd);
+        _return.assign(filename);
+#ifdef INFO_FUNC_END
+        printf("%s end\n", __func__ );
+#endif
+        return;
+    }
+
+    // todo
+    void RpcFileRead(_Page& _return, const _File _fd, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        char *page = (char *)malloc(BLCKSZ);
+        int readLen = 0;
+
+//        RpcRelation relNode = ParseRpcRequestPath(FilePathName(_fd), _seekpos);
+//        printf("[%s]parse succ=%d, spc = %d, db = %d, rel = %d, fork = %d, block = %d\n",
+//               __func__, relNode.parseSucc, relNode.spcNode, relNode.dbNode, relNode.relNode, relNode.forkNum, relNode.blockNum);
+//        if (relNode.parseSucc) {
+//            readLen = RpcFileReadWithCache(_fd, page, relNode, _seekpos);
+//        } else {
+        // We arrived here only when some rare cases occur, for example, have backendID etc.
+        readLen = FileRead(_fd, page, _amount, _seekpos, _wait_event_info);
+//        }
+
+        _return.assign(page, readLen);
+        free(page);
+        return;
+    }
+
+    // todo
+    int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
+    }
+
+    _Off_t RpcFileSize(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start, fd = %d, tid = %d\n", __func__ , _fd, gettid());
+#endif
+        _Off_t result = FileSize(_fd);
+#ifdef INFO_FUNC_END
+        printf("%s end, tid = %d, fd = %d, result = %d\n", __func__ , gettid(), _fd, result);
+#endif
+        return result;
+    }
+
+    int32_t RpcFilePrefetch(const _File _fd, const _Off_t _offset, const int32_t _amount, const int32_t wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return FilePrefetch(_fd, _offset, _amount, wait_event_info);
+    }
+
+    void RpcFileWriteback(const _File _fd, const _Off_t _offset, const _Off_t nbytes, const int32_t wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        FileWriteback(_fd, _offset, nbytes, wait_event_info);
+        return;
+    }
+
+    int32_t RpcUnlink(const _Path& _path) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return unlink(_path.c_str());
+    }
+
+    int32_t RpcFtruncate(const _File _fd, const _Off_t _offset) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return ftruncate(_fd, _offset);
+    }
+
+    void RpcInitFile(_Page& _return, const _Path& _path) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return OpenTransientFile(_filename.c_str(), _fileflags);
+    }
+
+    int32_t RpcCloseTransientFile(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return CloseTransientFile(_fd);
+    }
+
+    void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+    }
+
+    int32_t RpcFileSync(const _File _fd, const int32_t _wait_event_info) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return FileSync(_fd, _wait_event_info);
+    }
+
+    void RpcPgPRead(_Page& _return, const _File _fd, const int32_t _seg_bytes, const _Off_t _start_off) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        char *p = (char*)malloc(_seg_bytes+64);
+        pg_pread(_fd, p, _seg_bytes, _start_off);
+        _return.assign(p, _seg_bytes);
+        free(p);
+        return;
+    }
+
+    int32_t RpcPgPWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        int32_t result =  pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+//        printf("RpcPgPWrite, result = %d\n", result);
+        return result;
+    }
+
+    int32_t RpcClose(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return close(_fd);
+    }
+
+    int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
+        int32_t result = BasicOpenFile(_path.c_str(), _flags);
+#ifdef INFO_FUNC_START
+        printf("%s start, fileName = %s, result = %d\n", __func__ , _path.c_str(), result);
+        fflush(stdout);
+#endif
+        return result;
+    }
+
+    int32_t RpcPgFdatasync(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return pg_fdatasync(_fd);
+    }
+
+    int32_t RpcPgFsyncNoWritethrough(const _File _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return pg_fsync_no_writethrough(_fd);
+    }
+
+    int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return lseek(_fd, _offset, _flag);
+    }
+
+    void RpcStat(_Stat_Resp& _return, const _Path& _path) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        struct stat result;
+        _return._result = stat(_path.c_str(), &result);
+        _return._stat_mode = result.st_mode;
+        return;
+    }
+
+    int32_t RpcDirectoryIsEmpty(const _Path& _path) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return directory_is_empty(_path.c_str());
+    }
+
+    int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        char* src = (char*) malloc(1024);
+        char* dst = (char*) malloc(1024);
+//        printf("_src = %s, dst = %s\n", _src.c_str(), _dst.c_str());
+        _src.copy(src, _src.length());
+        _dst.copy(dst, _dst.length());
+        src[_src.length()] = 0;
+        dst[_dst.length()] = 0;
+//        printf("src = %s, dst = %s\n", src, dst);
+        copydir(src, dst, false);
+        free(src);
+        free(dst);
+        return 0;
+    }
+
+    int32_t RpcPgFsync(const int32_t _fd) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        int32_t result = pg_fsync(_fd);
+//        printf("RpcPgFsync, result = %d\n", result);
+        return result;
+    }
+
+    int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+        return durable_unlink(_fname.c_str(), _flag);
+    }
+
+    int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) {
+#ifdef INFO_FUNC_START
+        printf("%s start, oldName = %s, newName = %s\n", __func__ , _oldFname.c_str(), _newFname.c_str());
+        fflush(stdout);
+#endif
+        int32_t result =  durable_rename_excl(_oldFname.c_str(), _newFname.c_str(), _elevel);
+#ifdef INFO_FUNC_START
+        printf("%s end\n", __func__ );
+        fflush(stdout);
+#endif
+
+        return result;
+    }
+
+    int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) {
+        // Your implementation goes here
+        printf("%s %d, blockNum = %d, start_idx = %d, lsn = %ld\n", __func__ , __LINE__, _blknum, _idx, _lsn);
+        for(int i = 0; i < _blknum; i++){
+            printf("_xlblocks[%d] = %ld\n", i, _xlblocks[i]);
+        }
+        fflush(stdout);
+
+        int32_t result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+
+
+        // sigusr1_handler(SIGNAL_ARGS) -> should send signal to RpcServer
+        // how to set flushUpto? set it with _blknum-1 pages? Or XLogWrite also send XLogWriteResult.lsn to this function.
+
+        printf("RpcXLogWrite\n");
+        return result;
     }
     /**
      * This method has a oneway modifier. That means the client only makes

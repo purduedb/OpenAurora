@@ -106,7 +106,7 @@ proc_exit(int code)
 {
     printf("%s Start, pid = %d\n", __func__ , getpid());
     fflush(stdout);
-    RpcClose();
+    RpcTransportClose();
 	/* Clean up everything that must be cleaned up */
 	proc_exit_prepare(code);
 

@@ -1232,12 +1232,24 @@ polar_btree_xlog_unlink_page_get_bufftag_list(uint8 info, XLogReaderState *recor
 static void
 polar_btree_xlog_newroot_save(XLogReaderState *record)
 {
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+
     ParseXLogBlocksLsn(record, 0);
+
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
 
     if (XLogRecHasBlockRef(record, 1))
         ParseXLogBlocksLsn(record, 1);
 
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+
     ParseXLogBlocksLsn(record, 2);
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+
 }
 
 static void

@@ -860,6 +860,9 @@ wal_segment_open(XLogReaderState *state, XLogSegNo nextSegNo,
 	if (state->seg.ws_file >= 0)
 		return;
 
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+
 	if (errno == ENOENT)
 		ereport(ERROR,
 				(errcode_for_file_access(),

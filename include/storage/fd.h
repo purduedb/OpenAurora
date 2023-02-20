@@ -216,12 +216,37 @@ extern void SyncDataDirectory(void);
 
 extern int data_sync_elevel(int elevel);
 
-/* Filename components */
-#define PG_TEMP_FILES_DIR "pgsql_tmp"
-#define PG_TEMP_FILE_PREFIX "pgsql_tmp"
+/* functions to determine whether redirect to rpc server */
+
+extern int OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags);
+
+extern int CloseTransientFile_Rpc_Local(int fd);
+
+extern int BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags);
+
+extern int Unlink_Rpc_Local(char *path);
+
+extern int pg_fdatasync_rpc_local(int fd);
+
+extern int close_rpc_local(int fd);
+
+extern int pg_fsync_no_writethrough_rpc_local(int fd);
+
+extern int durable_unlink_rpc_local(const char *fname, int elevel);
+
+extern int durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elevel);
+
+extern int pg_fsync_rpc_local(int fd);
+
+extern int stat_rpc_local(const char* path,struct stat* _stat);
+
 
 #ifdef __cplusplus
 }
 #endif
+/* Filename components */
+#define PG_TEMP_FILES_DIR "pgsql_tmp"
+#define PG_TEMP_FILE_PREFIX "pgsql_tmp"
+
 
 #endif							/* FD_H */

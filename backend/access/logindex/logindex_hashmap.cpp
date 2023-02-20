@@ -63,7 +63,8 @@ do { \
 
 #endif
 
-//#define ENABLE_DEBUG_INFO2
+#define ENABLE_DEBUG_INFO3
+//#define ENABLE_DEBUG_INFO
 
 //typedef boost::shared_mutex Lock;
 //typedef boost::unique_lock< Lock >  WriterLock;
@@ -286,24 +287,38 @@ bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool h
     printf("%s %d, release the bucketLock, bucketPos = %u, tid = %d\n", __func__ , __LINE__, bucketPos, gettid());
     fflush(stdout);
 #endif
-    if(!holdHeadLock)
+    if(!holdHeadLock) {
+
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s try to get header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_wrlock(&iter->headLock);
+    }
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
 #endif
     if (iter->replayedLsn < lsn) {
         iter->replayedLsn = lsn;
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     } else {
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return false;
     }
 }
 
 bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, bool noEmptyFirstSlot) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO3
     printf("%s start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %ld, lsn = %lu\n", __func__ ,
            key.SpcID, key.DbID, key.RelID, key.ForkNum, key.BlkNum, lsn);
     fflush(stdout);
@@ -428,14 +443,15 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 
     // First, lock this header
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s try to get  header lock\n", __func__ );
+    printf("%s try to get header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+    fflush(stdout);
 #endif
 //    WriterLock w_header_lock(iter->headLock);
 
     pthread_rwlock_rdlock(&iter->headLock);
 
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s Get header lock\n", __func__ );
+    printf("%s Get header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
     fflush(stdout);
 #endif
 
@@ -443,6 +459,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
     if(iter->maxLsn > lsn) {
 #ifdef ENABLE_DEBUG_INFO
         printf("%s try to insert failed, logindex_maxLsn = %lu, parameter lsn = %lu\n", __func__ , iter->maxLsn, lsn);
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
         fflush(stdout);
 #endif
 
@@ -478,6 +495,10 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         }
 
 //        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -499,6 +520,10 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         iter->maxLsn = lsn;
 
 //        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -527,6 +552,10 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         iter->maxLsn = lsn;
 
 //        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -560,6 +589,10 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
     }
 
 //    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+    fflush(stdout);
+#endif
     pthread_rwlock_unlock(&iter->headLock);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
@@ -650,7 +683,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 
 
 #ifdef ENABLE_DEBUG_INFO
-    printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
+    printf("%s try to get header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
     fflush(stdout);
 #endif
     // Unlock it until caller func has finished replaying task
@@ -668,6 +701,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
         *listLen = 0;
         *replayedLsn = iter->replayedLsn;
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -684,13 +721,17 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             // If all list elements are larger than targetLsn, return false
             // This case should not happen
             if(resultIndex == -1) {
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+                fflush(stdout);
+#endif
                 pthread_rwlock_unlock(&iter->headLock);
 
                 printf("Error, %s can't find any match lsn\n", __func__ );
                 return false;
             } else {
 #ifdef ENABLE_DEBUG_INFO
-                printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
+                printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
                 fflush(stdout);
 #endif
                 pthread_rwlock_unlock(&iter->headLock);
@@ -734,6 +775,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
         *replayedLsn = currentLsn;
         *listLen = 0;
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -750,6 +795,19 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
         *replayedLsn = iter->maxLsn;
         *listLen = 0;
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+        fflush(stdout);
+#endif
+        pthread_rwlock_unlock(&iter->headLock);
+        return true;
+    }
+
+    // If this list was created by StartupProcess and hasn't ever been replayed
+    // And the first element in the list is larger than targetLSN.
+    if(iter->replayedLsn == 0 && iter->entryNum > 1 && iter->lsnEntry[0].lsn == 0 && iter->lsnEntry[1].lsn > targetLsn) {
+        *listLen = 0;
+        *replayedLsn = 0;
         pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
@@ -777,6 +835,10 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 //        fflush(stdout);
 
         for(int i = replayedLsnIndex+1; i < iter->entryNum; i++) {
+#ifdef ENABLE_DEBUG_INFO3
+            printf("%s %d, iter->lsn = %lu, targetLsn = %lu\n", __func__ , __LINE__, iter->lsnEntry[i].lsn, targetLsn);
+            fflush(stdout);
+#endif
             if(iter->lsnEntry[i].lsn <= targetLsn) {
                 (*toReplayList)[toReplayCount] = iter->lsnEntry[i].lsn;
 //                printf("%s %d, set %d slot as lsn = %lu\n", __func__ , __LINE__, toReplayCount, iter->lsnEntry[i].lsn);
@@ -841,7 +903,11 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
     *listLen = toReplayCount;
     if(toReplayCount == 0) {
-        printf("ERROR: %s toReplayCount = 0\n", __func__ );
+        //TODO check here if ERROR occurred
+        pthread_rwlock_unlock(&iter->headLock);
+        printf("ERROR: %s toReplayCount = 0, spc = %lu, db = %lu, rel = %lu, fork = %u, blk = %ld, replayed lsn = %lu, targetLsn = %lu\n", __func__ ,
+               iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum, iter->replayedLsn, targetLsn);
+        fflush(stdout);
     }
 
 #ifdef ENABLE_DEBUG_INFO
@@ -954,6 +1020,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
 #endif
     // Lock this head
 //    ReaderLock r_head_lock(iter->headLock);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s try to get header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+    fflush(stdout);
+#endif
     pthread_rwlock_rdlock(&iter->headLock);
 
 #ifdef ENABLE_DEBUG_INFO
@@ -981,6 +1051,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
         // If all list elements are larger than targetLsn, return false
         if(resultIndex == -1) {
 //            pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+            fflush(stdout);
+#endif
             pthread_rwlock_unlock(&iter->headLock);
 
 #ifdef ENABLE_DEBUG_INFO
@@ -990,6 +1064,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
             return false;
         } else {
 //            pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+            fflush(stdout);
+#endif
             pthread_rwlock_unlock(&iter->headLock);
 
             *foundLsn = iter->lsnEntry[resultIndex].lsn;
@@ -1073,6 +1151,10 @@ bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn
     *foundLsn = currentLsn;
     *foundPageNum = currentPageNum;
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
+    fflush(stdout);
+#endif
     pthread_rwlock_unlock(&iter->headLock);
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(findLowerTime[7]), &(findLowerCount[7]))
