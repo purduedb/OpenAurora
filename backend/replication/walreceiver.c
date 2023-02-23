@@ -82,6 +82,8 @@
 
 #include <pthread.h>
 
+//#define RPC_REMOTE_DISK
+
 extern pthread_t WalRcvTid;
 
 /*
@@ -143,6 +145,7 @@ static void ProcessWalSndrMessage(XLogRecPtr walEnd, TimestampTz sendTime);
 static void WalRcvSigHupHandler(SIGNAL_ARGS);
 static void WalRcvShutdownHandler(SIGNAL_ARGS);
 
+extern int IsRpcServer;
 
 /*
  * Process any interrupts the walreceiver process may have received.
@@ -922,7 +925,12 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 	{
 		int			segbytes;
 
-		if (recvFile < 0 || !XLByteInSeg(recptr, recvSegNo, wal_segment_size))
+        // storage node's receiver do nothing
+#ifdef RPC_REMOTE_DISK
+		if ((!IsRpcServer) && ( recvFile < 0 || !XLByteInSeg(recptr, recvSegNo, wal_segment_size)) )
+#else
+            if (recvFile < 0 || !XLByteInSeg(recptr, recvSegNo, wal_segment_size))
+#endif
 		{
 			bool		use_existent;
 
@@ -977,8 +985,11 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 
 		/* OK to write the logs */
 		errno = 0;
-//        byteswritten = segbytes;
-		byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
+#ifdef RPC_REMOTE_DISK
+        byteswritten = segbytes;
+#else
+        byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
+#endif
 		if (byteswritten <= 0)
 		{
 			char		xlogfname[MAXFNAMELEN];
@@ -1024,7 +1035,13 @@ XLogWalRcvFlush(bool dying)
 	{
 		WalRcvData *walrcv = WalRcv;
 
-		issue_xlog_fsync(recvFile, recvSegNo);
+#ifdef RPC_REMOTE_DISK
+        if(!IsRpcServer)
+            issue_xlog_fsync(recvFile, recvSegNo);
+#else
+        issue_xlog_fsync(recvFile, recvSegNo);
+#endif
+
 
 		LogstreamResult.Flush = LogstreamResult.Write;
 

@@ -581,7 +581,7 @@ void
 pg_flush_data(int fd, off_t offset, off_t nbytes)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start fd = %d\n", __func__, fd);
+    printf("%s start fd = %d, pid = %d\n", __func__, getpid());
     fflush(stdout);
 #endif
     /*
@@ -792,7 +792,7 @@ int
 durable_rename(const char *oldfile, const char *newfile, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			fd;
@@ -886,7 +886,7 @@ int
 durable_unlink(const char *fname, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     if (unlink(fname) < 0)
@@ -927,7 +927,7 @@ int
 durable_rename_excl(const char *oldfile, const char *newfile, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     /*
@@ -971,7 +971,7 @@ void
 InitFileAccess(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     char *pgRpcClient = getenv("RPC_CLIENT");
@@ -1016,7 +1016,7 @@ static void
 count_usable_fds(int max_to_probe, int *usable_fds, int *already_open)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int		   *fd;
@@ -1104,7 +1104,7 @@ void
 set_max_safe_fds(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			usable_fds;
@@ -1151,7 +1151,7 @@ int
 BasicOpenFile(const char *fileName, int fileFlags)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     return BasicOpenFilePerm(fileName, fileFlags, pg_file_create_mode);
@@ -1177,23 +1177,27 @@ int
 BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
-    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
-    fflush(stdout);
     int			fd;
 
     tryAgain:
     fd = open(fileName, fileFlags, fileMode);
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s filename = %s, result_fd = %d,  tid = %d\n", __func__ , fileName, fd, gettid());
+    fflush(stdout);
+#endif
     if (fd >= 0)
         return fd;				/* success! */
 
     if (errno == EMFILE || errno == ENFILE)
     {
+#ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
+#endif
         int			save_errno = errno;
 
         ereport(LOG,
@@ -1205,8 +1209,10 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
         errno = save_errno;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     printf("%s %d, filename = %s , errmsge: %s\n", __func__ , __LINE__, fileName, strerror(errno));
     fflush(stdout);
+#endif
 //    ereport(LOG,
 //            (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 //                    errmsg("filename =%s check errmessage: %m; ", fileName)));
@@ -1230,7 +1236,7 @@ bool
 AcquireExternalFD(void)
 {
 #ifdef START_FUNC_INFO
-    //    printf("%s start \n", __func__);
+    //    printf("%s start, pid = %d \n", __func__, getpid());
 //    fflush(stdout);
 #endif
     /*
@@ -1269,7 +1275,7 @@ void
 ReserveExternalFD(void)
 {
 #ifdef START_FUNC_INFO
-    //    printf("%s start \n", __func__);
+    //    printf("%s start, pid = %d \n", __func__, getpid());
 //    fflush(stdout);
 #endif
     /*
@@ -1291,7 +1297,7 @@ void
 ReleaseExternalFD(void)
 {
 #ifdef START_FUNC_INFO
-    //    printf("%s start \n", __func__);
+    //    printf("%s start, pid = %d \n", __func__, getpid());
 //    fflush(stdout);
 #endif
     Assert(numExternalFDs > 0);
@@ -1519,7 +1525,7 @@ static File
 AllocateVfd(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
 //    printf("%s start , tid = %d\n", __func__ , gettid());
@@ -1590,7 +1596,7 @@ static void
 FreeVfd(File file)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
 //    printf("%s start, vfd = %d\n", __func__ , file);
@@ -1666,7 +1672,7 @@ static void
 ReportTemporaryFileUsage(const char *path, off_t size)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     pgstat_report_tempfile(size);
@@ -1725,7 +1731,7 @@ File
 PathNameOpenFile(const char *fileName, int fileFlags)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
 //    printf("%s, %d, pid=%d, tid=%d\n", __func__ , __LINE__, getpid(), gettid());
@@ -1749,7 +1755,7 @@ File
 PathNameOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     char	   *fnamecopy;
@@ -1824,7 +1830,7 @@ void
 PathNameCreateTemporaryDir(const char *basedir, const char *directory)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     if (MakePGDirectory(directory) < 0)
@@ -1859,7 +1865,7 @@ void
 PathNameDeleteTemporaryDir(const char *dirname)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     struct stat statbuf;
@@ -1896,7 +1902,7 @@ File
 OpenTemporaryFile(bool interXact)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     File		file = 0;
@@ -1953,7 +1959,7 @@ void
 TempTablespacePath(char *path, Oid tablespace)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     /*
@@ -1982,7 +1988,7 @@ static File
 OpenTemporaryFileInTablespace(Oid tblspcOid, bool rejectError)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     char		tempdirpath[MAXPGPATH];
@@ -2043,7 +2049,7 @@ File
 PathNameCreateTemporaryFile(const char *path, bool error_on_failure)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     File		file;
@@ -2085,7 +2091,7 @@ File
 PathNameOpenTemporaryFile(const char *path)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     File		file;
@@ -2119,7 +2125,7 @@ bool
 PathNameDeleteTemporaryFile(const char *path, bool error_on_failure)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     struct stat filestats;
@@ -2638,7 +2644,7 @@ int
 FileGetRawDesc(File file)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Assert(FileIsValid(file));
@@ -2652,7 +2658,7 @@ int
 FileGetRawFlags(File file)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Assert(FileIsValid(file));
@@ -2666,7 +2672,7 @@ mode_t
 FileGetRawMode(File file)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Assert(FileIsValid(file));
@@ -2681,7 +2687,7 @@ static bool
 reserveAllocatedDesc(void)
 {
 #ifdef START_FUNC_INFO
-    //    printf("%s start \n", __func__);
+    //    printf("%s start, pid = %d \n", __func__, getpid());
 //    fflush(stdout);
 #endif
     AllocateDesc *newDescs;
@@ -2760,7 +2766,7 @@ FILE *
 AllocateFile(const char *name, const char *mode)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     FILE	   *file;
@@ -2814,7 +2820,7 @@ int
 OpenTransientFile(const char *fileName, int fileFlags)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     return OpenTransientFilePerm(fileName, fileFlags, pg_file_create_mode);
@@ -2827,7 +2833,7 @@ int
 OpenTransientFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			fd;
@@ -2875,7 +2881,7 @@ FILE *
 OpenPipeStream(const char *command, const char *mode)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     FILE	   *file;
@@ -2936,7 +2942,7 @@ static int
 FreeDesc(AllocateDesc *desc)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			result;
@@ -3011,7 +3017,7 @@ int
 CloseTransientFile(int fd)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			i;
@@ -3049,7 +3055,7 @@ DIR *
 AllocateDir(const char *dirname)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     DIR		   *dir;
@@ -3119,7 +3125,7 @@ struct dirent *
 ReadDir(DIR *dir, const char *dirname)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     return ReadDirExtended(dir, dirname, ERROR);
@@ -3138,7 +3144,7 @@ struct dirent *
 ReadDirExtended(DIR *dir, const char *dirname, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     struct dirent *dent;
@@ -3179,7 +3185,7 @@ int
 FreeDir(DIR *dir)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			i;
@@ -3213,7 +3219,7 @@ int
 ClosePipeStream(FILE *file)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			i;
@@ -3246,7 +3252,7 @@ void
 closeAllVfds(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
 //    printf("%s start \n", __func__ );
@@ -3282,7 +3288,7 @@ void
 SetTempTablespaces(Oid *tableSpaces, int numSpaces)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Assert(numSpaces >= 0);
@@ -3314,7 +3320,7 @@ bool
 TempTablespacesAreSet(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     return (numTempTableSpaces >= 0);
@@ -3333,7 +3339,7 @@ int
 GetTempTablespaces(Oid *tableSpaces, int numSpaces)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			i;
@@ -3355,7 +3361,7 @@ Oid
 GetNextTempTableSpace(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     if (numTempTableSpaces > 0)
@@ -3381,7 +3387,7 @@ AtEOSubXact_Files(bool isCommit, SubTransactionId mySubid,
                   SubTransactionId parentSubid)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Index		i;
@@ -3417,7 +3423,7 @@ void
 AtEOXact_Files(bool isCommit)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     CleanupTempFiles(isCommit, false);
@@ -3435,7 +3441,7 @@ static void
 AtProcExit_Files(int code, Datum arg)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     CleanupTempFiles(false, true);
@@ -3457,7 +3463,7 @@ static void
 CleanupTempFiles(bool isCommit, bool isProcExit)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     Index		i;
@@ -3531,7 +3537,7 @@ void
 RemovePgTempFiles(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     char		temp_path[MAXPGPATH + 10 + sizeof(TABLESPACE_VERSION_DIRECTORY) + sizeof(PG_TEMP_FILES_DIR)];
@@ -3594,7 +3600,7 @@ void
 RemovePgTempFilesInDir(const char *tmpdirname, bool missing_ok, bool unlink_all)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     DIR		   *temp_dir;
@@ -3664,7 +3670,7 @@ static void
 RemovePgTempRelationFiles(const char *tsdirname)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     DIR		   *ts_dir;
@@ -3696,7 +3702,7 @@ static void
 RemovePgTempRelationFilesInDbspace(const char *dbspacedirname)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     DIR		   *dbspace_dir;
@@ -3798,7 +3804,7 @@ void
 SyncDataDirectory(void)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     bool		xlog_is_symlink;
@@ -3941,7 +3947,7 @@ static void
 pre_sync_fname(const char *fname, bool isdir, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			fd;
@@ -3981,7 +3987,7 @@ static void
 datadir_fsync_fname(const char *fname, bool isdir, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     /*
@@ -3995,7 +4001,7 @@ static void
 unlink_if_exists_fname(const char *fname, bool isdir, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     if (isdir)
@@ -4024,7 +4030,7 @@ int
 fsync_fname_ext(const char *fname, bool isdir, bool ignore_perm, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     int			fd;
@@ -4104,7 +4110,7 @@ static int
 fsync_parent_path(const char *fname, int elevel)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     char		parentpath[MAXPGPATH];
@@ -4148,7 +4154,7 @@ int
 MakePGDirectory(const char *directoryName)
 {
 #ifdef START_FUNC_INFO
-    printf("%s start \n", __func__);
+    printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
 #endif
     return mkdir(directoryName, pg_dir_create_mode);

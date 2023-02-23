@@ -40,8 +40,8 @@ extern int reachXlogTempEnd;
 
 
 //#define DEBUG_TIMING 1
-#define INFO_FUNC_START
-#define ENABLE_DEBUG_INFO
+//#define INFO_FUNC_START
+//#define ENABLE_DEBUG_INFO
 
 #ifdef DEBUG_TIMING
 
@@ -1136,7 +1136,11 @@ public:
         printf("%s start\n", __func__ );
 #endif
         char *p = (char*)malloc(_seg_bytes+64);
-        pg_pread(_fd, p, _seg_bytes, _start_off);
+         if(_start_off == -1) {
+             read(_fd, p, _seg_bytes);
+         } else {
+             pg_pread(_fd, p, _seg_bytes, _start_off);
+         }
         _return.assign(p, _seg_bytes);
         free(p);
         return;
@@ -1146,7 +1150,12 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
-        int32_t result =  pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+         int32_t result;
+         if(_offset == -1) {
+             result = write(_fd, _page.c_str(), _amount);
+         } else {
+             result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+         }
 //        printf("RpcPgPWrite, result = %d\n", result);
         return result;
     }
@@ -1255,11 +1264,13 @@ public:
 
     int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) {
         // Your implementation goes here
+#ifdef INFO_FUNC_START
         printf("%s %d, blockNum = %d, start_idx = %d, lsn = %ld\n", __func__ , __LINE__, _blknum, _idx, _lsn);
         for(int i = 0; i < _blknum; i++){
             printf("_xlblocks[%d] = %ld\n", i, _xlblocks[i]);
         }
         fflush(stdout);
+#endif
 
         int32_t result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
 
@@ -1267,7 +1278,6 @@ public:
         // sigusr1_handler(SIGNAL_ARGS) -> should send signal to RpcServer
         // how to set flushUpto? set it with _blknum-1 pages? Or XLogWrite also send XLogWriteResult.lsn to this function.
 
-        printf("RpcXLogWrite\n");
         return result;
     }
     /**

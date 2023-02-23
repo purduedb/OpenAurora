@@ -46,6 +46,9 @@
 extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
 
+//extern XLogRecPtr *RpcXlblocks;
+//extern char* RpcXLogPages;
+//extern pthread_rwlock_t *RpcXLogPagesLocks;
 
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
@@ -53,10 +56,12 @@ void sigIntHandler(int sig) {
     proc_exit(0);
 }
 
+uint64_t RpcXLogFlushedLsn = 0;
 int IsRpcServer = 0;
 pid_t WalRcvPid = 0;
 pid_t StartupPid = 0;
 
+//#define ENABLE_DEBUG_INFO
 //#define DEBUG_TIMING
 #ifdef DEBUG_TIMING
 struct timeval output_timing3;
@@ -246,6 +251,10 @@ static void
 proc_die(SIGNAL_ARGS) {
     HashMapDestroy(pageVersionHashMap);
     HashMapDestroy(relSizeHashMap);
+
+//    free(RpcXlblocks);
+//    free(RpcXLogPages);
+//    free(RpcXLogPagesLocks);
 
     for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
         free(serverPipe[i]);

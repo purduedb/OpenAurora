@@ -255,7 +255,39 @@ static bool TransactionIdInRecentPast(TransactionId xid, uint32 epoch);
 static void WalSndSegmentOpen(XLogReaderState *state, XLogSegNo nextSegNo,
 							  TimeLineID *tli_p);
 
+#define RPC_REMOTE_DISK
 
+#ifdef RPC_REMOTE_DISK
+
+//#define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
+#define OpenTransientFile(_Path, _Flag) OpenTransientFile_Rpc_Local(_Path, _Flag)
+#define CloseTransientFile(_Fd) CloseTransientFile_Rpc_Local(_Fd)
+//#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
+//#define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
+//#define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
+//#define FileClose(_File) RpcFileClose(_File)
+//#define FileRead(_file, _buffer, _amount, _offset, _flag) RpcFileRead(_buffer, _file, _offset)
+//#define FileTruncate(_file, _size, _flag) RpcFileTruncate(_file, _size)
+//#define FileSync(_file, _flag) RpcFileSync(_file, _flag)
+//#define pg_pread(_fd, p, _amount, _offset) RpcPgPRead(_fd, p, _amount, _offset)
+//#define pg_pwrite(_fd, p, _amount, _offset) RpcPgPWrite(_fd, p, _amount, _offset)
+//#define BasicOpenFile(_path, _flags) RpcBasicOpenFile(_path, _flags)
+#define BasicOpenFile(_path, _flags) BasicOpenFile_Rpc_Local(_path, _flags)
+//#define FileSize(_file) RpcFileSize(_file)
+//#define FilePathName(_file) RpcFilePathName(_file)
+//#define TablespaceCreateDbspace(_spc, _db, _isRedo) RpcTablespaceCreateDbspace(_spc, _db, _isRedo)
+#define unlink(_path) Unlink_Rpc_Local(_path)
+//#define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
+#define close(_fd) close_rpc_local(_fd)
+
+#define pg_fdatasync(_fd) pg_fdatasync_rpc_local(_fd)
+#define pg_fsync_no_writethrough(_fd) pg_fsync_no_writethrough_rpc_local(_fd)
+
+#define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
+//#define stat(_path, _stat) stat_rpc_local(_path, _stat)
+#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag)
+#define durable_rename_excl(_old, _new, _elevel) durable_rename_excl_rpc_local(_old, _new, _elevel)
+#endif
 /* Initialize walsender process before entering the main command loop */
 void
 InitWalSender(void)
@@ -3245,6 +3277,7 @@ offset_to_interval(TimeOffset offset)
 	return result;
 }
 
+//TODO
 /*
  * Returns activity of walsenders, including pids and xlog locations sent to
  * standby servers.
@@ -3445,6 +3478,7 @@ pg_stat_get_wal_senders(PG_FUNCTION_ARGS)
  * let nearby code that we're waiting for that response, to avoid
  * repeated requests.
  */
+//TODO
 static void
 WalSndKeepalive(bool requestReply)
 {
