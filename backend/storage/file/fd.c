@@ -1179,6 +1179,8 @@ BasicOpenFilePerm(const char *fileName, int fileFlags, mode_t fileMode)
 #ifdef START_FUNC_INFO
     printf("%s start, pid = %d \n", __func__, getpid());
     fflush(stdout);
+    printf("%s filename = %s, tid = %d\n", __func__ , fileName, gettid());
+    fflush(stdout);
 #endif
     int			fd;
 

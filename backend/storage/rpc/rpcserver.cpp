@@ -37,6 +37,13 @@ extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
 
 extern int reachXlogTempEnd;
+extern int XLOGbuffers;
+
+extern XLogRecPtr *RpcXlblocks;
+extern char* RpcXLogPages;
+extern pthread_rwlock_t *RpcXLogPagesLocks;
+
+extern uint64_t RpcXLogFlushedLsn;
 
 
 //#define DEBUG_TIMING 1
@@ -134,17 +141,17 @@ extern XLogRecPtr XLogParseUpto;
 
 
 void WaitParse(int64_t _lsn) {
-    if(WalRcvRunning() == false)
-        return;
-    XLogRecPtr flushUpto = WalRcv->flushedUpto;
-    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
-//    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < RpcXLogFlushedLsn && XLogParseUpto != 0) {
-//#ifdef ENABLE_DEBUG_INFO
-//        printf("%s %d , parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
-//               __func__ , __LINE__, _lsn, XLogParseUpto, RpcXLogFlushedLsn);
-//        fflush(stdout);
-//#endif
-        XLogRecPtr targetLsn = flushUpto;
+//    if(WalRcvRunning() == false)
+//        return;
+//    XLogRecPtr flushUpto = WalRcv->flushedUpto;
+//    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < flushUpto && XLogParseUpto != 0) {
+    if((XLogRecPtr)_lsn > XLogParseUpto && XLogParseUpto < RpcXLogFlushedLsn && XLogParseUpto != 0) {
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d , parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
+               __func__ , __LINE__, _lsn, XLogParseUpto, RpcXLogFlushedLsn);
+        fflush(stdout);
+#endif
+        XLogRecPtr targetLsn = RpcXLogFlushedLsn;
         if(_lsn < targetLsn)
             targetLsn = _lsn;
 
@@ -159,7 +166,7 @@ void WaitParse(int64_t _lsn) {
             count++;
             if(count % 10 == 0) {
                 printf("%s %d keep waiting , parameter_lsn = %lu, ParseUpto = %lu, flushUpto = %lu\n",
-                       __func__ , __LINE__, _lsn, XLogParseUpto, flushUpto);
+                       __func__ , __LINE__, _lsn, XLogParseUpto, RpcXLogFlushedLsn);
                 fflush(stdout);
                 count = 0;
             }
@@ -1274,6 +1281,24 @@ public:
 
         int32_t result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
 
+        // Need some lock
+        for(int i = 0; i < _blknum; i++) {
+            pthread_rwlock_wrlock(&(RpcXLogPagesLocks[(_idx+i)]));
+            RpcXlblocks[(_idx+i)%XLOGbuffers] = _xlblocks[i];
+        }
+
+        // Based on XLogWrite code, startIdx+_blknum <= XLogBuffers-1
+        // So, RpcXLogPages + (_idx*BLCKSZ) + (_blknum*BLCKSZ) will smaller than or equal with end of RpcXLogPages
+        memcpy( RpcXLogPages+(XLOG_BLCKSZ*_idx), _page.c_str(), XLOG_BLCKSZ*_blknum );
+
+        for(int i = 0; i < _blknum; i++) {
+            pthread_rwlock_unlock(&(RpcXLogPagesLocks[(_idx+i)]));
+        }
+
+        if(RpcXLogFlushedLsn < _lsn) {
+            RpcXLogFlushedLsn = (uint64_t) _lsn;
+        }
+        WakeupRecovery();
 
         // sigusr1_handler(SIGNAL_ARGS) -> should send signal to RpcServer
         // how to set flushUpto? set it with _blknum-1 pages? Or XLogWrite also send XLogWriteResult.lsn to this function.
