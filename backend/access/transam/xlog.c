@@ -948,7 +948,8 @@ typedef enum
 	XLOG_FROM_ANY = 0,			/* request to read WAL from any source */
 	XLOG_FROM_ARCHIVE,			/* restored using restore_command */
 	XLOG_FROM_PG_WAL,			/* existing file in pg_wal */
-	XLOG_FROM_STREAM			/* streamed from master */
+	XLOG_FROM_STREAM,			/* streamed from master */
+    XLOG_FROM_RPC               /* RpcServer Mode, compute node write xlog directly to rpc server */
 } XLogSource;
 
 /* human-readable names for XLogSources, for debugging output */
@@ -2560,6 +2561,10 @@ XLogCheckpointNeeded(XLogSegNo new_segno)
 	return false;
 }
 
+XLogRecPtr *RpcXlblocks;
+char* RpcXLogPages;
+pthread_rwlock_t *RpcXLogPagesLocks;
+
 /*
  * Write and/or fsync the log at least as far as WriteRqst indicates.
  *
@@ -3914,6 +3919,7 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 
 		case XLOG_FROM_PG_WAL:
 		case XLOG_FROM_STREAM:
+        case XLOG_FROM_RPC:
 			XLogFilePath(path, tli, segno, wal_segment_size);
 			restoredFromArchive = false;
 			break;
@@ -4060,7 +4066,7 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 			}
 		}
 
-		if (source == XLOG_FROM_ANY || source == XLOG_FROM_PG_WAL)
+		if (source == XLOG_FROM_ANY || source == XLOG_FROM_PG_WAL || source == XLOG_FROM_RPC)
 		{
 			fd = XLogFileRead(segno, emode, tli,
 							  XLOG_FROM_PG_WAL, true);
@@ -4629,7 +4635,7 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			 * StandbyMode that only happens if we have been triggered, so we
 			 * shouldn't loop anymore in that case.
 			 */
-			if (errormsg)
+			if (!IsRpcServer && errormsg)
 				ereport(emode_for_corrupt_record(emode, EndRecPtr),
 						(errmsg_internal("%s", errormsg) /* already translated */ ));
 #ifdef ENABLE_DEBUG_INFO
@@ -4745,6 +4751,8 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			/* In standby mode, loop back to retry. Otherwise, give up. */
 			if (StandbyMode && !CheckForStandbyTrigger())
 				continue;
+            if (IsRpcServer) // Rpc Server will retry to read via RPC messages
+                continue;
 			else
 				return NULL;
 		}
@@ -6632,8 +6640,16 @@ ReadControlFileTimeLine(void) {
 void
 StartupXLOG(void)
 {
-    if(IsRpcServer)
-        sleep(5);
+    //if(IsRpcServer)
+    //    sleep(5);
+    printf("%s %d, XLOGbuffers = %d\n", __func__ , __LINE__, XLOGbuffers);
+    fflush(stdout);
+    RpcXlblocks = (XLogRecPtr*) malloc(sizeof(XLogRecPtr)*XLOGbuffers);
+    RpcXLogPages = (char*) malloc(XLOG_BLCKSZ * XLOGbuffers);
+    RpcXLogPagesLocks = (pthread_rwlock_t*) malloc(sizeof(pthread_rwlock_t) * XLOGbuffers);
+    memset(RpcXlblocks, 0, sizeof(XLogRecPtr)*XLOGbuffers);
+//    if(IsRpcServer)
+//        sleep(5);
     printf("%s Start\n", __func__ );
 	XLogCtlInsert *Insert;
 	CheckPoint	checkPoint;
@@ -7253,7 +7269,7 @@ StartupXLOG(void)
 	}
 	else if (ControlFile->state != DB_SHUTDOWNED)
 		InRecovery = true;
-	else if (ArchiveRecoveryRequested)
+	else if (ArchiveRecoveryRequested || IsRpcServer)
 	{
 		/* force recovery due to presence of recovery signal file */
 		InRecovery = true;
@@ -12605,7 +12621,9 @@ retry:
     //! Need to understand the difference between currentSource and readSource
 	if (readFile < 0 ||
 		(readSource == XLOG_FROM_STREAM &&
-		 flushedUpto < targetPagePtr + reqLen))
+		 flushedUpto < targetPagePtr + reqLen) ||
+         ( (currentSource == XLOG_FROM_RPC||readSource == XLOG_FROM_RPC) &&
+         RpcXLogFlushedLsn < targetPagePtr + reqLen))
 	{
 		if (!WaitForWALToBecomeAvailable(targetPagePtr + reqLen,
 										 private->randAccess,
@@ -12652,6 +12670,23 @@ retry:
 			readLen = XLogSegmentOffset(flushedUpto, wal_segment_size) -
 				targetPageOff;
 	}
+    else if (readSource == XLOG_FROM_RPC) {
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
+#endif
+
+        if(readFile == -1)
+            readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2, XLOG_FROM_RPC);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
+        fflush(stdout);
+#endif
+        if (((targetPagePtr) / XLOG_BLCKSZ) < (RpcXLogFlushedLsn / XLOG_BLCKSZ))
+            readLen = XLOG_BLCKSZ;
+        else
+            readLen = XLogSegmentOffset(flushedUpto, wal_segment_size) -
+                      targetPageOff;
+    }
 	else
 		readLen = XLOG_BLCKSZ;
 
@@ -12662,12 +12697,41 @@ retry:
 //    printf("%s %d, reachXlogTempEnd\n", __func__ , __LINE__);
 //    fflush(stdout);
 	pgstat_report_wait_start(WAIT_EVENT_WAL_READ);
-#ifdef RPC_REMOTE_DISK
-    r = pg_pread_rpc_local(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
-#else
-    r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+    // todo , add logic here, if the target page matches buffer's page, read from buffer, else read from xlog
+
+    int bufferIdx = XLogRecPtrToBufIdx(targetPagePtr);
+#ifdef ENABLE_DEBUG_INFO2
+    printf("%s %d, targetPagePtr = %lu\n", __func__ , __LINE__, targetPagePtr);
 #endif
-//    r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+    if(IsRpcServer) {
+        pthread_rwlock_rdlock(&(RpcXLogPagesLocks[bufferIdx]));
+    }
+    if(0 && IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
+#ifdef ENABLE_DEBUG_INFO2
+        printf("%s %d read xlog from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
+        fflush(stdout);
+#endif
+        memcpy(readBuf, RpcXLogPages+(BLCKSZ*bufferIdx), BLCKSZ);
+#ifdef ENABLE_DEBUG_INFO2
+        printf("%s %d read xlog successfully from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
+        fflush(stdout);
+#endif
+        r = BLCKSZ;
+    } else {
+#ifdef ENABLE_DEBUG_INFO2
+        printf("%s %d read xlog from disk\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
+#ifdef RPC_REMOTE_DISK
+        r = pg_pread_rpc_local(readFile, readBuf, XLOG_BLCKSZ, (int) readOff);
+#else
+        r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
+#endif
+    }
+    if(IsRpcServer) {
+        pthread_rwlock_unlock(&(RpcXLogPagesLocks[bufferIdx]));
+    }
+
 	if (r != XLOG_BLCKSZ)
 	{
 		char		fname[MAXFNAMELEN];
@@ -12755,8 +12819,8 @@ next_record_is_invalid:
 	readLen = 0;
 	readSource = XLOG_FROM_ANY;
 
-	/* In standby-mode, keep trying */
-	if (StandbyMode) {
+	/* In standby-mode or rpc server mode, keep trying */
+	if (StandbyMode || IsRpcServer) {
         reachXlogTempEnd = 1;
 
         goto retry;
@@ -12830,7 +12894,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 	 * the end of recovery.
 	 *-------
 	 */
-	if (!InArchiveRecovery)
+	if (!InArchiveRecovery && !IsRpcServer)
 		currentSource = XLOG_FROM_PG_WAL;
 	else if (currentSource == XLOG_FROM_ANY ||
 			 (!StandbyMode && currentSource == XLOG_FROM_STREAM))
@@ -12890,16 +12954,88 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 *
 					 * XI: RpcServer mode can receive data via RPC call, and RpcServer is not in StandbyMode
 					 */
-					if (!StandbyMode)
+					if (!StandbyMode && !IsRpcServer)
 						return false;
 
 					/*
 					 * Move to XLOG_FROM_STREAM state, and set to start a
 					 * walreceiver if necessary.
 					 */
-					currentSource = XLOG_FROM_STREAM;
-					startWalReceiver = true;
+                    if(StandbyMode) {
+                        currentSource = XLOG_FROM_STREAM;
+                        startWalReceiver = true;
+                    } else { // In RpcServer mode
+                        currentSource = XLOG_FROM_RPC;
+                    }
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
 					break;
+
+                case XLOG_FROM_RPC:
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
+                    // Reuse Streaming wakeup lock. if within expected time, no xlog
+                    // appears from rpc, then switch to WAL/Archive mode(do we need this switch?)
+                    // Previously switch to WAL because pg need to read from file in the following section.
+                    // However, currently, we don't need to read from WAL anymore,
+                    // we read from buffer (if buffer miss, read from WAL, but it should be old xlogs)
+                    now = GetCurrentTimestamp();
+                    if (!TimestampDifferenceExceeds(last_fail_time, now,
+                                                    wal_retrieve_retry_interval))
+                    {
+                        long		secs,
+                                wait_time;
+                        int			usecs;
+
+                        TimestampDifference(last_fail_time, now, &secs, &usecs);
+                        wait_time = wal_retrieve_retry_interval -
+                                    (secs * 1000 + usecs / 1000);
+
+                        if(RecPtr < RpcXLogFlushedLsn) {
+#ifdef ENABLE_DEBUG_INFO
+                            printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
+                            fflush(stdout);
+#endif
+                            readSource = XLOG_FROM_RPC;
+                            lastSourceFailed = false;
+                            return true;
+                        }
+#ifdef ENABLE_DEBUG_INFO
+                        printf("%s %d, start waitlatch\n", __func__ , __LINE__);
+#endif
+                        (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+                                         WL_LATCH_SET | WL_TIMEOUT |
+                                         WL_EXIT_ON_PM_DEATH,
+                                         wait_time,
+                                         WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
+#ifdef ENABLE_DEBUG_INFO
+                        printf("%s %d, got latch\n", __func__ , __LINE__);
+#endif
+                        ResetLatch(&XLogCtl->recoveryWakeupLatch);
+                        now = GetCurrentTimestamp();
+
+                        if(RecPtr < RpcXLogFlushedLsn) {
+#ifdef ENABLE_DEBUG_INFO
+                            printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
+                            fflush(stdout);
+#endif
+                            readSource = XLOG_FROM_RPC;
+                            lastSourceFailed = false;
+                            return true;
+                        }
+                    }
+                    last_fail_time = now;
+                    currentSource = XLOG_FROM_RPC;
+
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
+                    break;
 
 				case XLOG_FROM_STREAM:
 
@@ -13264,6 +13400,29 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					ResetLatch(&XLogCtl->recoveryWakeupLatch);
 					break;
 				}
+            case XLOG_FROM_RPC:
+                if(RecPtr < RpcXLogFlushedLsn) {
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
+                    fflush(stdout);
+#endif
+                    readSource = XLOG_FROM_RPC;
+                    return true;
+                }
+                (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+                                 WL_LATCH_SET | WL_TIMEOUT |
+                                 WL_EXIT_ON_PM_DEATH,
+                                 5000L, WAIT_EVENT_RECOVERY_WAL_STREAM);
+                ResetLatch(&XLogCtl->recoveryWakeupLatch);
+                if(RecPtr < RpcXLogFlushedLsn) {
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
+                    fflush(stdout);
+#endif
+                    readSource = XLOG_FROM_RPC;
+                    return true;
+                }
+                break;
 
 			default:
 				elog(ERROR, "unexpected WAL source %d", currentSource);

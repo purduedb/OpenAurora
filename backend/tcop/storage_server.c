@@ -46,9 +46,9 @@
 extern HashMap pageVersionHashMap;
 extern HashMap relSizeHashMap;
 
-//extern XLogRecPtr *RpcXlblocks;
-//extern char* RpcXLogPages;
-//extern pthread_rwlock_t *RpcXLogPagesLocks;
+extern XLogRecPtr *RpcXlblocks;
+extern char* RpcXLogPages;
+extern pthread_rwlock_t *RpcXLogPagesLocks;
 
 void sigIntHandler(int sig) {
     printf("Start to clean up process\n");
@@ -252,9 +252,9 @@ proc_die(SIGNAL_ARGS) {
     HashMapDestroy(pageVersionHashMap);
     HashMapDestroy(relSizeHashMap);
 
-//    free(RpcXlblocks);
-//    free(RpcXLogPages);
-//    free(RpcXLogPagesLocks);
+    free(RpcXlblocks);
+    free(RpcXLogPages);
+    free(RpcXLogPagesLocks);
 
     for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
         free(serverPipe[i]);
@@ -1207,7 +1207,7 @@ RpcServerMain(int argc, char *argv[],
     HashMapInit(&pageVersionHashMap, 1023);
     HashMapInit(&relSizeHashMap, 1023);
 
-    for(int i = 0; i < 3; i++) {
+    for(int i = 0; i < 0; i++) {
         printf("%s start background replayer %d\n", __func__ , i);
         pthread_t tempTid;
         pthread_create(&tempTid, NULL, (void*) BackgroundHashMapCleanPageVersion, NULL);

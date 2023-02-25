@@ -128,11 +128,13 @@ extern int** computePipe;
 
 extern int ReplayProcessNum;
 
+extern int IsRpcServer;
+
 static XLogReaderState *reader_state;
 
 extern bool doRequestWalReceiverReply;
 
-//#define ENABLE_DEBUG_INFO
+#define ENABLE_DEBUG_INFO
 #define TRACE DEBUG5
 
 //#define ENABLE_DEBUG_INFO
@@ -203,6 +205,12 @@ void
 WalRedoMain(int argc, char *argv[],
             const char *username)
 {
+    // Not the rpc server process.
+    // Rpc Server process will try to read xlog from local buffer,
+    // which is unaccessible for this process
+    IsRpcServer = 0;
+
+
     int			firstchar;
     StringInfoData input_message;
     XLogPageReadPrivate private;
