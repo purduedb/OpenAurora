@@ -100,7 +100,7 @@
 #include "storage/rpcclient.h"
 #include <pthread.h>
 
-#define START_FUNC_INFO
+//#define START_FUNC_INFO
 
 /* Define PG_FLUSH_DATA_WORKS if we have an implementation for pg_flush_data */
 #if defined(HAVE_SYNC_FILE_RANGE)

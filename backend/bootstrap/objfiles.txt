@@ -1,1 +1,0 @@
-src/backend/bootstrap/bootparse.o src/backend/bootstrap/bootstrap.o

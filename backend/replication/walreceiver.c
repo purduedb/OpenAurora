@@ -82,7 +82,7 @@
 
 #include <pthread.h>
 
-//#define RPC_REMOTE_DISK
+#define RPC_REMOTE_DISK
 
 extern pthread_t WalRcvTid;
 

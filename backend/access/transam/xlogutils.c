@@ -30,7 +30,7 @@
 #include "utils/hsearch.h"
 #include "utils/rel.h"
 
-//#define RPC_REMOTE_DISK
+#define RPC_REMOTE_DISK
 
 #ifdef RPC_REMOTE_DISK
 

@@ -1,1 +1,0 @@
-src/backend/storage/large_object/inv_api.o

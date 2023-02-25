@@ -440,10 +440,10 @@ XLogInsert(RmgrId rmid, uint8 info)
 	{
 		XLogResetInsertion();
 		EndPos = SizeOfXLogLongPHD; /* start of 1st chkpt record */
-        const char*id=NULL;
-        id = RmgrTable[rmid].rm_identify( info );
-        printf("%s %d, RM= %s, End lsn = %lu, id = %s\n", __func__, __LINE__, RmgrTable[rmid].rm_name, EndPos, id);
-        fflush(stdout);
+//        const char*id=NULL;
+//        id = RmgrTable[rmid].rm_identify( info );
+//        printf("%s %d, RM= %s, End lsn = %lu, id = %s\n", __func__, __LINE__, RmgrTable[rmid].rm_name, EndPos, id);
+//        fflush(stdout);
 		return EndPos;
 	}
 
@@ -470,10 +470,10 @@ XLogInsert(RmgrId rmid, uint8 info)
 
 	XLogResetInsertion();
 
-    const char*id=NULL;
-    id = RmgrTable[rmid].rm_identify( info );
-    printf("%s %d, RM= %s, End lsn = %lu, id = %s\n", __func__, __LINE__, RmgrTable[rmid].rm_name, EndPos, id);
-    fflush(stdout);
+//    const char*id=NULL;
+//    id = RmgrTable[rmid].rm_identify( info );
+//    printf("%s %d, RM= %s, End lsn = %lu, id = %s\n", __func__, __LINE__, RmgrTable[rmid].rm_name, EndPos, id);
+//    fflush(stdout);
 
     return EndPos;
 }

@@ -69,7 +69,7 @@ int IsRpcClient = 0;
 pid_t MyPid = 0;
 
 //#define DEBUG_TIMING
-#define DEBUG_TIMING2
+//#define DEBUG_TIMING2
 #ifdef DEBUG_TIMING
 
 #include <sys/time.h>
