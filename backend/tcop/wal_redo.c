@@ -134,7 +134,7 @@ static XLogReaderState *reader_state;
 
 extern bool doRequestWalReceiverReply;
 
-#define ENABLE_DEBUG_INFO
+//#define ENABLE_DEBUG_INFO
 #define TRACE DEBUG5
 
 //#define ENABLE_DEBUG_INFO

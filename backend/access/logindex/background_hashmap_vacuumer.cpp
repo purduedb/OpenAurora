@@ -19,8 +19,8 @@
 #define ITER_BATCH_SIZE 10
 #define MAX_REPLAY_VERSION_SIZE 20
 
-#define ITER_BUCKET_INTERVAL 30
-#define ITER_HEAD_INTERVAL 0
+#define ITER_BUCKET_INTERVAL 500
+#define ITER_HEAD_INTERVAL 1000
 
 void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag);
 void BackgroundReplayHeadNode(HashNodeHead * head);
@@ -38,7 +38,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
     struct timeval now;
 
     while(1) { // Iterate all buckets
-        usleep(100);
+        usleep(3000);
         // Iterate every bucket one by one
         currentBucketID = (currentBucketID+1) % hashMap->bucketNum;
         // How many heads we have processed
@@ -136,7 +136,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 
 
         // If we finish replayed all the heads in this bucket, wait an interval for the next scanning
-        if(statisticFinishVacuum == 0) {
+        if(1 || statisticFinishVacuum == 0) {
             // update the last replay time for this bucket
             gettimeofday(&now, NULL);
             hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec = now.tv_sec;

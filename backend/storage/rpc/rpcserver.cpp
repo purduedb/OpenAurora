@@ -46,8 +46,9 @@ extern pthread_rwlock_t *RpcXLogPagesLocks;
 extern uint64_t RpcXLogFlushedLsn;
 
 
-//#define DEBUG_TIMING 1
-//#define INFO_FUNC_START
+#define DEBUG_TIMING 1
+#define INFO_FUNC_START
+#define INFO_FUNC_START2
 //#define ENABLE_DEBUG_INFO
 
 #ifdef DEBUG_TIMING
@@ -218,12 +219,13 @@ public:
         fflush(stdout);
 #endif
 
-        WaitParse(_lsn);
-
 #ifdef DEBUG_TIMING
         struct timeval start, end;
         START_TIMING(&start);
 #endif
+
+        WaitParse(_lsn);
+
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
@@ -760,9 +762,12 @@ public:
         uint64_t foundLsn;
         int foundPageNum;
         int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
-        if(found) {
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &existsTime[0], &existsCount[0])
+#endif
+        if(found) {
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, &existsTime[1], &existsCount[1])
 #endif
             if(foundPageNum == -1)
                 return 0;
@@ -774,7 +779,7 @@ public:
 //        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
 
 #ifdef DEBUG_TIMING
-        RECORD_TIMING(&start, &end, &existsTime[1], &existsCount[1])
+        RECORD_TIMING(&start, &end, &existsTime[2], &existsCount[2])
 #endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, _lsn);
 #ifdef ENABLE_DEBUG_INFO
@@ -794,7 +799,7 @@ public:
         fflush(stdout);
 #endif
 #ifdef DEBUG_TIMING
-        RECORD_TIMING(&start, &end, &existsTime[2], &existsCount[2])
+        RECORD_TIMING(&start, &end, &existsTime[3], &existsCount[3])
 #endif
         return (relSize>=0);
     }
@@ -878,10 +883,6 @@ public:
 #ifdef ENABLE_DEBUG_INFO
             printf("%s %d\n", __func__ , __LINE__);
             fflush(stdout);
-            if (HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum+1, true) )
-                printf("%s HashMap insert succeed, lsn=%lu, pageNum=%d\n", __func__, _lsn, _blknum+1 );
-            else
-                printf("%s HashMap insert failed\n", __func__ );
 #else
             HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum+1, true);
 #endif
@@ -1271,7 +1272,7 @@ public:
 
     int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) {
         // Your implementation goes here
-#ifdef INFO_FUNC_START
+#ifdef INFO_FUNC_START2
         printf("%s %d, blockNum = %d, start_idx = %d, lsn = %ld\n", __func__ , __LINE__, _blknum, _idx, _lsn);
         for(int i = 0; i < _blknum; i++){
             printf("_xlblocks[%d] = %ld\n", i, _xlblocks[i]);

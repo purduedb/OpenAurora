@@ -90,6 +90,7 @@
 
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
+// #define ENABLE_STARTUP_DEBUG_INFO3
 
 #ifndef FRONTEND
 #define RPC_REMOTE_DISK
@@ -6640,8 +6641,8 @@ ReadControlFileTimeLine(void) {
 void
 StartupXLOG(void)
 {
-    //if(IsRpcServer)
-    //    sleep(5);
+    if(IsRpcServer)
+        sleep(5);
     printf("%s %d, XLOGbuffers = %d\n", __func__ , __LINE__, XLOGbuffers);
     fflush(stdout);
     RpcXlblocks = (XLogRecPtr*) malloc(sizeof(XLogRecPtr)*XLOGbuffers);
@@ -7730,7 +7731,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-#ifdef ENABLE_STARTUP_DEBUG_INFO2
+#ifdef ENABLE_STARTUP_DEBUG_INFO3
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -13658,10 +13659,12 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
 #endif
 
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d, max_block_id = %d, recordBlockId = %d\n", __func__ , __LINE__, record->max_block_id, recordBlockId);
         fflush(stdout);
     }
+#endif
     BufferTag tag;
 
     if(record->max_block_id < recordBlockId) {
@@ -13670,30 +13673,36 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
         return;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
     }
+#endif
     if(!XLogRecHasBlockRef(record, recordBlockId)) {
         printf("%s this block is not used\n", __func__ );
         fflush(stdout);
         return;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
     }
+#endif
     if(!XLogRecGetBlockTag(record, recordBlockId, &tag.rnode, &tag.forkNum, &tag.blockNum)) {
         printf("%s get block tag failed \n", __func__ );
         fflush(stdout);
         return;
     }
 
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
     }
+#endif
     KeyType key;
     key.SpcID = record->blocks[recordBlockId].rnode.spcNode;
     key.DbID = record->blocks[recordBlockId].rnode.dbNode;
@@ -13701,17 +13710,19 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
     key.ForkNum = record->blocks[recordBlockId].forknum;
     key.BlkNum = record->blocks[recordBlockId].blkno;
 
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
     }
+#endif
     HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, false);
 
+#ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
     }
-#ifdef ENABLE_DEBUG_INFO
     printf("%s Ends \n", __func__ );
     fflush(stdout);
 #endif
