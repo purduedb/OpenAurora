@@ -59,6 +59,7 @@ extern "C" {
     int32_t RpcDurableUnlink(const char * filename, const int32_t _flag);
     int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel);
     int32_t RpcXLogWriteWithPosition(const int _fd, char *p, const int32_t _amount, const int32_t _offset, int startIdx, int blkNum, uint64_t* xlblocks, int xlblocksBufferNum, uint64_t  lsn);
+    int RpcXLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock);
 #ifdef __cplusplus
 }
 #endif

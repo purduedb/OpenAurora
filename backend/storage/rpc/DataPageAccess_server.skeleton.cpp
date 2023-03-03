@@ -228,6 +228,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcXLogWrite\n");
   }
 
+  void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock) {
+    // Your implementation goes here
+    printf("RpcXLogFileInit\n");
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods

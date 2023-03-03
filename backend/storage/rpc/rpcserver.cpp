@@ -46,9 +46,9 @@ extern pthread_rwlock_t *RpcXLogPagesLocks;
 extern uint64_t RpcXLogFlushedLsn;
 
 
-#define DEBUG_TIMING 1
-#define INFO_FUNC_START
-#define INFO_FUNC_START2
+//#define DEBUG_TIMING 1
+//#define INFO_FUNC_START
+//#define INFO_FUNC_START2
 //#define ENABLE_DEBUG_INFO
 
 #ifdef DEBUG_TIMING
@@ -1271,6 +1271,9 @@ public:
     }
 
     int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
         // Your implementation goes here
 #ifdef INFO_FUNC_START2
         printf("%s %d, blockNum = %d, start_idx = %d, lsn = %ld\n", __func__ , __LINE__, _blknum, _idx, _lsn);
@@ -1306,6 +1309,23 @@ public:
 
         return result;
     }
+
+    void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock) {
+#ifdef INFO_FUNC_START
+        printf("%s start\n", __func__ );
+#endif
+
+        bool use_existent = (_use_existent == 1);
+        bool use_lock = (_use_lock == 1);
+
+        int fd = XLogFileInit(_logsegno, &use_existent, use_lock);
+
+        _return._fd = fd;
+        _return._use_existent = use_existent;
+
+    }
+
+
     /**
      * This method has a oneway modifier. That means the client only makes
      * a request and does not listen for any response at all. Oneway methods

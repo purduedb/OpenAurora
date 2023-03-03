@@ -1207,6 +1207,19 @@ int32_t RpcXLogWriteWithPosition(const int _fd, char *p, const int32_t _amount, 
     return result;
 }
 
+int RpcXLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock) {
+    RpcInit();
+    int64_t _logsegno = logsegno;
+    int _use_existent = *use_existent;
+    int _use_lock = use_lock;
+
+    _XLog_Init_File_Resp resp;
+    client->RpcXLogFileInit(resp, _logsegno, _use_existent, _use_lock);
+
+    *use_existent = resp._use_existent;
+    return resp._fd;
+}
+
 //void TryRpcInitFile(_Page& _return, _Path& _path)
 //{
 //    int trycount=0;

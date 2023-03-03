@@ -88,6 +88,8 @@
 #include "tcop/wal_redo.h"
 #include "storage/rpcclient.h"
 
+//#define ENABLE_DEBUG_INFO3
+//#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
 // #define ENABLE_STARTUP_DEBUG_INFO3
@@ -3447,6 +3449,16 @@ XLogNeedsFlush(XLogRecPtr record)
 int
 XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 {
+#ifdef RPC_REMOTE_DISK
+    if(IsRpcClient)
+        return RpcXLogFileInit(logsegno, use_existent, use_lock);
+#endif
+
+#ifdef ENABLE_DEBUG_INFO3
+    printf("%s, %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	PGAlignedXLogBlock zbuffer;
@@ -3458,7 +3470,7 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 
 	XLogFilePath(path, ThisTimeLineID, logsegno, wal_segment_size);
 
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO3
     printf("%s %d, filename = %s\n", __func__ , __LINE__, path);
     fflush(stdout);
 #endif
@@ -3467,6 +3479,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 	 */
 	if (*use_existent)
 	{
+
+#ifdef ENABLE_DEBUG_INFO3
+        printf("%s, %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		fd = BasicOpenFile(path, O_RDWR | PG_BINARY | get_sync_bit(sync_method));
 		if (fd < 0)
 		{
@@ -3480,6 +3497,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 			return fd;
 	}
 
+
+#ifdef ENABLE_DEBUG_INFO3
+    printf("%s, %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * Initialize an empty (all zeroes) segment.  NOTE: it is possible that
 	 * another process is doing the same thing.  If so, we will end up
@@ -3501,6 +3523,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 
 	memset(zbuffer.data, 0, XLOG_BLCKSZ);
 
+
+#ifdef ENABLE_DEBUG_INFO3
+    printf("%s, %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	pgstat_report_wait_start(WAIT_EVENT_WAL_INIT_WRITE);
 	save_errno = 0;
 	if (wal_init_zero)
@@ -3548,6 +3575,11 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 	}
 	pgstat_report_wait_end();
 
+
+#ifdef ENABLE_DEBUG_INFO3
+    printf("%s, %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if (save_errno)
 	{
 		/*
@@ -3824,9 +3856,9 @@ InstallXLogFileSegment(XLogSegNo *segno, char *tmppath,
 	{
 		/* Find a free slot to put it in */
 #ifdef RPC_REMOTE_DISK
-		while (stat(path, &stat_buf) == 0)
-#else
         while (stat_rpc_local(path, &stat_buf) == 0)
+#else
+        while (stat(path, &stat_buf) == 0)
 #endif
 		{
 			if ((*segno) >= max_segno)
@@ -4156,7 +4188,7 @@ PreallocXlogFiles(XLogRecPtr endptr)
 	{
 		_logSegNo++;
 		use_existent = true;
-		lf = XLogFileInit(_logSegNo, &use_existent, true);
+        lf = XLogFileInit(_logSegNo, &use_existent, true);
 		close(lf);
 		if (!use_existent)
 			CheckpointStats.ckpt_segs_added++;
@@ -5615,7 +5647,7 @@ BootStrapXLOG(void)
 
 	/* Create first XLOG segment file */
 	use_existent = false;
-	openLogFile = XLogFileInit(1, &use_existent, false);
+    openLogFile = XLogFileInit(1, &use_existent, false);
 
 	/*
 	 * We needn't bother with Reserve/ReleaseExternalFD here, since we'll
@@ -5931,7 +5963,7 @@ exitArchiveRecovery(TimeLineID endTLI, XLogRecPtr endOfLog)
 		bool		use_existent = true;
 		int			fd;
 
-		fd = XLogFileInit(startLogSegNo, &use_existent, true);
+        fd = XLogFileInit(startLogSegNo, &use_existent, true);
 
 		if (close(fd) != 0)
 		{

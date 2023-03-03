@@ -39,6 +39,8 @@ typedef std::string _Page;
 
 class _Stat_Resp;
 
+class _XLog_Init_File_Resp;
+
 class _Smgr_Relation;
 
 typedef struct __Stat_Resp__isset {
@@ -88,6 +90,54 @@ class _Stat_Resp : public virtual ::apache::thrift::TBase {
 void swap(_Stat_Resp &a, _Stat_Resp &b);
 
 std::ostream& operator<<(std::ostream& out, const _Stat_Resp& obj);
+
+typedef struct __XLog_Init_File_Resp__isset {
+  __XLog_Init_File_Resp__isset() : _fd(false), _use_existent(false) {}
+  bool _fd :1;
+  bool _use_existent :1;
+} __XLog_Init_File_Resp__isset;
+
+class _XLog_Init_File_Resp : public virtual ::apache::thrift::TBase {
+ public:
+
+  _XLog_Init_File_Resp(const _XLog_Init_File_Resp&);
+  _XLog_Init_File_Resp& operator=(const _XLog_Init_File_Resp&);
+  _XLog_Init_File_Resp() : _fd(0), _use_existent(0) {
+  }
+
+  virtual ~_XLog_Init_File_Resp() noexcept;
+  int32_t _fd;
+  int32_t _use_existent;
+
+  __XLog_Init_File_Resp__isset __isset;
+
+  void __set__fd(const int32_t val);
+
+  void __set__use_existent(const int32_t val);
+
+  bool operator == (const _XLog_Init_File_Resp & rhs) const
+  {
+    if (!(_fd == rhs._fd))
+      return false;
+    if (!(_use_existent == rhs._use_existent))
+      return false;
+    return true;
+  }
+  bool operator != (const _XLog_Init_File_Resp &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const _XLog_Init_File_Resp & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  virtual void printTo(std::ostream& out) const;
+};
+
+void swap(_XLog_Init_File_Resp &a, _XLog_Init_File_Resp &b);
+
+std::ostream& operator<<(std::ostream& out, const _XLog_Init_File_Resp& obj);
 
 typedef struct __Smgr_Relation__isset {
   __Smgr_Relation__isset() : _spc_node(false), _db_node(false), _rel_node(false), _backend_id(false) {}

@@ -84,6 +84,11 @@ struct _Stat_Resp {
 	2: i32 _stat_mode,
 }
 
+struct _XLog_Init_File_Resp {
+	1: i32 _fd,
+	2: i32 _use_existent,
+}
+
 struct _Smgr_Relation {
 	1: _Oid _spc_node,
 	2: _Oid _db_node,
@@ -182,6 +187,9 @@ service DataPageAccess {
    i32 RpcDurableRenameExcl(1:_Path _oldFname, 2:_Path _newFname, 3:i32 _elevel),
 
    i32 RpcXLogWrite(1: _File _fd, 2:_Page _page, 3:i32 _amount, 4: _Off_t _offset, 5: list<i64> _xlblocks, 6: i32 _blknum, 7: i32 _idx, 8: i64 _lsn),
+
+   _XLog_Init_File_Resp RpcXLogFileInit(1:i64 _logsegno, 2:i32 _use_existent, 3:i32 _use_lock),
+  
    /**
     * This method has a oneway modifier. That means the client only makes
     * a request and does not listen for any response at all. Oneway methods

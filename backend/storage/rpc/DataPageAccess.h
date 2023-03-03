@@ -79,6 +79,7 @@ class DataPageAccessIf {
   virtual int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) = 0;
   virtual int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) = 0;
   virtual int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) = 0;
+  virtual void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock) = 0;
 
   /**
    * This method has a oneway modifier. That means the client only makes
@@ -256,6 +257,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
   int32_t RpcXLogWrite(const _File /* _fd */, const _Page& /* _page */, const int32_t /* _amount */, const _Off_t /* _offset */, const std::vector<int64_t> & /* _xlblocks */, const int32_t /* _blknum */, const int32_t /* _idx */, const int64_t /* _lsn */) {
     int32_t _return = 0;
     return _return;
+  }
+  void RpcXLogFileInit(_XLog_Init_File_Resp& /* _return */, const int64_t /* _logsegno */, const int32_t /* _use_existent */, const int32_t /* _use_lock */) {
+    return;
   }
   void zip() {
     return;
@@ -4665,6 +4669,124 @@ class DataPageAccess_RpcXLogWrite_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcXLogFileInit_args__isset {
+  _DataPageAccess_RpcXLogFileInit_args__isset() : _logsegno(false), _use_existent(false), _use_lock(false) {}
+  bool _logsegno :1;
+  bool _use_existent :1;
+  bool _use_lock :1;
+} _DataPageAccess_RpcXLogFileInit_args__isset;
+
+class DataPageAccess_RpcXLogFileInit_args {
+ public:
+
+  DataPageAccess_RpcXLogFileInit_args(const DataPageAccess_RpcXLogFileInit_args&);
+  DataPageAccess_RpcXLogFileInit_args& operator=(const DataPageAccess_RpcXLogFileInit_args&);
+  DataPageAccess_RpcXLogFileInit_args() : _logsegno(0), _use_existent(0), _use_lock(0) {
+  }
+
+  virtual ~DataPageAccess_RpcXLogFileInit_args() noexcept;
+  int64_t _logsegno;
+  int32_t _use_existent;
+  int32_t _use_lock;
+
+  _DataPageAccess_RpcXLogFileInit_args__isset __isset;
+
+  void __set__logsegno(const int64_t val);
+
+  void __set__use_existent(const int32_t val);
+
+  void __set__use_lock(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcXLogFileInit_args & rhs) const
+  {
+    if (!(_logsegno == rhs._logsegno))
+      return false;
+    if (!(_use_existent == rhs._use_existent))
+      return false;
+    if (!(_use_lock == rhs._use_lock))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcXLogFileInit_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcXLogFileInit_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcXLogFileInit_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcXLogFileInit_pargs() noexcept;
+  const int64_t* _logsegno;
+  const int32_t* _use_existent;
+  const int32_t* _use_lock;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcXLogFileInit_result__isset {
+  _DataPageAccess_RpcXLogFileInit_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcXLogFileInit_result__isset;
+
+class DataPageAccess_RpcXLogFileInit_result {
+ public:
+
+  DataPageAccess_RpcXLogFileInit_result(const DataPageAccess_RpcXLogFileInit_result&);
+  DataPageAccess_RpcXLogFileInit_result& operator=(const DataPageAccess_RpcXLogFileInit_result&);
+  DataPageAccess_RpcXLogFileInit_result() {
+  }
+
+  virtual ~DataPageAccess_RpcXLogFileInit_result() noexcept;
+  _XLog_Init_File_Resp success;
+
+  _DataPageAccess_RpcXLogFileInit_result__isset __isset;
+
+  void __set_success(const _XLog_Init_File_Resp& val);
+
+  bool operator == (const DataPageAccess_RpcXLogFileInit_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcXLogFileInit_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcXLogFileInit_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcXLogFileInit_presult__isset {
+  _DataPageAccess_RpcXLogFileInit_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcXLogFileInit_presult__isset;
+
+class DataPageAccess_RpcXLogFileInit_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcXLogFileInit_presult() noexcept;
+  _XLog_Init_File_Resp* success;
+
+  _DataPageAccess_RpcXLogFileInit_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 
 class DataPageAccess_zip_args {
  public:
@@ -4857,6 +4979,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn);
   void send_RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn);
   int32_t recv_RpcXLogWrite();
+  void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock);
+  void send_RpcXLogFileInit(const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock);
+  void recv_RpcXLogFileInit(_XLog_Init_File_Resp& _return);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -4918,6 +5043,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcDurableUnlink(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcDurableRenameExcl(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcXLogWrite(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcXLogFileInit(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_zip(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
  public:
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
@@ -4961,6 +5087,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcDurableUnlink"] = &DataPageAccessProcessor::process_RpcDurableUnlink;
     processMap_["RpcDurableRenameExcl"] = &DataPageAccessProcessor::process_RpcDurableRenameExcl;
     processMap_["RpcXLogWrite"] = &DataPageAccessProcessor::process_RpcXLogWrite;
+    processMap_["RpcXLogFileInit"] = &DataPageAccessProcessor::process_RpcXLogFileInit;
     processMap_["zip"] = &DataPageAccessProcessor::process_zip;
   }
 
@@ -5362,6 +5489,16 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return ifaces_[i]->RpcXLogWrite(_fd, _page, _amount, _offset, _xlblocks, _blknum, _idx, _lsn);
   }
 
+  void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcXLogFileInit(_return, _logsegno, _use_existent, _use_lock);
+    }
+    ifaces_[i]->RpcXLogFileInit(_return, _logsegno, _use_existent, _use_lock);
+    return;
+  }
+
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
@@ -5538,6 +5675,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn);
   int32_t send_RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn);
   int32_t recv_RpcXLogWrite(const int32_t seqid);
+  void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock);
+  int32_t send_RpcXLogFileInit(const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock);
+  void recv_RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int32_t seqid);
   /**
    * This method has a oneway modifier. That means the client only makes
    * a request and does not listen for any response at all. Oneway methods
