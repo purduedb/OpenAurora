@@ -178,6 +178,8 @@ static const char *const BuiltinTrancheNames[] = {
 	"ParallelAppend",
 	/* LWTRANCHE_PER_XACT_PREDICATE_LIST: */
 	"PerXactPredicateList",
+    /* LWTRANCHE_REL_SIZE_HASHMAP */
+    "RelSizeHashMap",
 	"WAL_LOGINDEX_MEM_TBL",
 	"WAL_LOGINDEX_HASH_LOCK",
 	"WAL_LOGINDEX_IO",

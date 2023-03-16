@@ -41,7 +41,10 @@
 #include "storage/rpcclient.h"
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
+#include "storage/rel_cache.h"
 
+#define ENABLE_REL_SIZE_CACHE
+#define ENABLE_REL_SIZE_CACHE2
 /*
  *	The magnetic disk storage manager keeps track of open file
  *	descriptors in its own descriptor pool.  This is done to make it
@@ -131,6 +134,29 @@ static BlockNumber _rpc_mdnblocks(SMgrRelation reln, ForkNumber forknum,
 							  MdfdVec *seg);
 
 
+#define CHECK_EQUAL(a, b)  \
+do {                         \
+    if(a != b) printf("%s %d, %lu, %lu doesn't equal\n", __func__, __LINE__, a, b); \
+} while(0);
+
+#define CHECK_REL_EQUAL(a, b)  \
+do {                         \
+    if(a.spcNode != b.spcNode) printf("%s %d, %lu, %lu spc doesn't equal\n", __func__, __LINE__, a.spcNode, b.spcNode); \
+    if(a.dbNode != b.dbNode) printf("%s %d, %lu, %lu db doesn't equal\n", __func__, __LINE__, a.dbNode, b.dbNode); \
+    if(a.relNode != b.relNode) printf("%s %d, %lu, %lu rel doesn't equal\n", __func__, __LINE__, a.relNode, b.relNode); \
+} while(0);
+
+#define CHECK_PARA_CONSIST
+
+
+static void TransRelNode2RelKey(SMgrRelation relSmgr, RelKey *relKey, ForkNumber forkNumber) {
+    relKey->SpcId = relSmgr->smgr_rnode.node.spcNode;
+    relKey->DbId = relSmgr->smgr_rnode.node.dbNode;
+    relKey->RelId = relSmgr->smgr_rnode.node.relNode;
+
+    relKey->forkNum = forkNumber;
+    return;
+}
 /*
  *	mdinit() -- Initialize private state for magnetic disk storage manager.
  */
@@ -147,12 +173,62 @@ rpcmdinit(void)
 bool
 rpcmdexists(SMgrRelation reln, ForkNumber forkNum)
 {
-    return RpcMdExists(reln, forkNum);
+
+#ifdef ENABLE_REL_SIZE_CACHE2
+    uint32_t result=-1;
+    RelKey relKey;
+
+    TransRelNode2RelKey(reln, &relKey, forkNum);
+
+
+    //! TODO After add these locks, sysbench will crash
+    RelSizeSharedLock(relKey);
+    if(GetRelSizeCache(relKey, &result)) {
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        RelSizeReleaseLock(relKey);
+        return result >= 0;
+    }
+    RelSizeReleaseLock(relKey);
+#endif
+
+    // If not cached locally, get from remote
+    uint32_t rpcResult = RpcMdExists(reln, forkNum);
+#ifdef ENABLE_REL_SIZE_CACHE
+    if(result != -1 && (result>=0) != rpcResult) {
+        printf("%s %d, %lu_%lu_%lu_%d cache=%u, rpc=%u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, (result>=0), rpcResult);
+        fflush(stdout);
+    }
+#endif
+
+    return rpcResult;
 }
 
 void
 rpcmdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
+
+#ifdef ENABLE_REL_SIZE_CACHE2
+    uint32_t result;
+    RelKey relKey;
+
+    TransRelNode2RelKey(reln, &relKey, forkNum);
+
+    RelSizeExclusiveLock(relKey);
+    if(GetRelSizeCache(relKey, &result)) {
+        if(result < 0) { // If it was deleted?
+//            printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, 0);
+//            fflush(stdout);
+            InsertRelSizeCache(relKey, 0);
+        }
+    } else { // Not exist in buffer, init blkNum as 0
+//        printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, 0);
+//        fflush(stdout);
+        InsertRelSizeCache(relKey, 0);
+    }
+    RelSizeReleaseLock(relKey);
+#endif
+
     // Secondary compute node won't alter the shared relation
     if(!InRecovery)
         RpcMdCreate(reln, forkNum, isRedo);
@@ -172,6 +248,30 @@ void
 rpcmdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
+
+#ifdef ENABLE_REL_SIZE_CACHE
+    uint32_t result;
+    RelKey relKey;
+
+    TransRelNode2RelKey(reln, &relKey, forknum);
+
+//    printf("%s %d\n", __func__ , __LINE__);
+//    fflush(stdout);
+    RelSizeExclusiveLock(relKey);
+    if(GetRelSizeCache(relKey, &result)) { //After extend, blkNum increased
+        if(blocknum+1 > result) {
+//            printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, blocknum+1);
+//            fflush(stdout);
+            InsertRelSizeCache(relKey, blocknum+1);
+        }
+    } else { // Not exist
+//        printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, blocknum+1);
+//        fflush(stdout);
+        InsertRelSizeCache(relKey, blocknum+1);
+    }
+    RelSizeReleaseLock(relKey);
+#endif
+
     // Secondary compute node won't alter the shared relation
     if(!InRecovery)
         RpcMdExtend(reln, forknum, blocknum, buffer, skipFsync);
@@ -220,12 +320,59 @@ rpcmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 BlockNumber
 rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
 {
-    return RpcMdNblocks(reln, forknum);
+#ifdef ENABLE_REL_SIZE_CACHE
+    uint32_t result = -1;
+    RelKey relKey;
+
+    TransRelNode2RelKey(reln, &relKey, forknum);
+//    printf("%s %d\n", __func__ , __LINE__);
+//    fflush(stdout);
+    RelSizeSharedLock(relKey);
+    if(GetRelSizeCache(relKey, &result)) { //After extend, blkNum increased
+        RelSizeReleaseLock(relKey);
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        return result;
+    }
+    RelSizeReleaseLock(relKey);
+#endif
+
+    uint32_t blckNum = RpcMdNblocks(reln, forknum);
+
+
+#ifdef ENABLE_REL_SIZE_CACHE
+    if(result != -1 && result != blckNum) {
+        printf("%s %d, %lu_%lu_%lu_%d cache=%u, rpc=%u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, result, blckNum);
+        fflush(stdout);
+    }
+//    printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, blckNum);
+//    fflush(stdout);
+    RelSizeExclusiveLock(relKey);
+
+    // Before we create a new relSize entry, check whether other process has already created
+    bool found = GetRelSizeCache(relKey, &result);
+    if(!found)
+        InsertRelSizeCache(relKey, blckNum);
+    RelSizeReleaseLock(relKey);
+#endif
+    return blckNum;
 }
 
 void
 rpcmdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+#ifdef ENABLE_REL_SIZE_CACHE
+    RelKey relKey;
+
+    TransRelNode2RelKey(reln, &relKey, forknum);
+//    printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, nblocks);
+//    fflush(stdout);
+
+    RelSizeExclusiveLock(relKey);
+    InsertRelSizeCache(relKey, nblocks);
+    RelSizeReleaseLock(relKey);
+#endif
+
     // Secondary compute node won't alter the shared relation
     if(!InRecovery)
         return RpcMdTruncate(reln, forknum, nblocks);

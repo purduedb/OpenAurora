@@ -44,6 +44,8 @@
 #include "storage/procsignal.h"
 #include "storage/sinvaladt.h"
 #include "storage/spin.h"
+#include "storage/rel_cache.h"
+#include "storage/builtin_shmht.h"
 #include "utils/snapmgr.h"
 #include "access/polar_logindex.h"
 
@@ -151,6 +153,8 @@ CreateSharedMemoryAndSemaphores(void)
 		size = add_size(size, SyncScanShmemSize());
 		size = add_size(size, AsyncShmemSize());
 
+        size = add_size(size, RelSizeShmemSize()); // LWLock size
+        size = add_size(size, RelSizeTableShmemSize()); // Shared HashTable Size
 		size = add_size(size, polar_logindex_shmem_size(24, 0));
 #ifdef EXEC_BACKEND
 		size = add_size(size, ShmemBackendArraySize());
@@ -216,6 +220,8 @@ CreateSharedMemoryAndSemaphores(void)
 	/*
 	 * Set up xlog, clog, and buffers
 	 */
+    RelSizeShmemInit();// Init LWLocks
+    InitRelSizeTable();// Init Shared Hash Table
 	XLOGShmemInit();
 	CLOGShmemInit();
 	CommitTsShmemInit();
