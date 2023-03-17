@@ -103,7 +103,6 @@ int LsnListFindLowerBound(uint64_t targetLsn, LsnEntry* entryList, int listSize)
 }
 
 
-HashMap relSizeHashMap;
 HashMap pageVersionHashMap;
 
 void HashMapInit(HashMap *hashMap_p, int bucketNum) {

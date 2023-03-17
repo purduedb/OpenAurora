@@ -87,6 +87,7 @@
 #include "tcop/storage_server.h"
 #include "tcop/wal_redo.h"
 #include "storage/rpcclient.h"
+#include "storage/rel_cache.h"
 
 //#define ENABLE_DEBUG_INFO3
 //#define ENABLE_DEBUG_INFO
@@ -167,13 +168,21 @@ int write_rpc_local(int fd, char *p, int amount) {
         return write(fd, p, amount);
 }
 
+static void TransRelNode2RelKey(RelFileNode node, RelKey *relKey, ForkNumber forkNumber) {
+    relKey->SpcId = node.spcNode;
+    relKey->DbId = node.dbNode;
+    relKey->RelId = node.relNode;
+
+    relKey->forkNum = forkNumber;
+    return;
+}
+
 extern uint32 bootstrap_data_checksum_version;
 
 extern int IsRpcServer;
 extern bool	am_wal_redo_postgres;
 
 extern HashMap pageVersionHashMap;
-extern HashMap relSizeHashMap;
 
 extern uint64_t RpcXLogFlushedLsn;
 /* Unsupported old recovery command file names (relative to $PGDATA) */
@@ -7811,12 +7820,16 @@ StartupXLOG(void)
                                     if(!xlogreader->blocks[i].in_use)
                                         continue;
 
-                                    KeyType key;
-                                    key.SpcID = xlogreader->blocks[i].rnode.spcNode;
-                                    key.DbID = xlogreader->blocks[i].rnode.dbNode;
-                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
-                                    key.ForkNum = xlogreader->blocks[i].forknum;
-                                    key.BlkNum = -1;
+//                                    printf("%s %d\n", __func__ , __LINE__);
+//                                    fflush(stdout);
+                                    RelKey relKey;
+                                    TransRelNode2RelKey(xlogreader->blocks[i].rnode, &relKey, xlogreader->blocks[i].forknum);
+//                                    KeyType key;
+//                                    key.SpcID = xlogreader->blocks[i].rnode.spcNode;
+//                                    key.DbID = xlogreader->blocks[i].rnode.dbNode;
+//                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
+//                                    key.ForkNum = xlogreader->blocks[i].forknum;
+//                                    key.BlkNum = -1;
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                                     printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
                                            key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
@@ -7832,25 +7845,25 @@ StartupXLOG(void)
 
                                     //TODO: do we need FindLowerBound? If the lsn is monotonic increasing, we just need to compare it with the last item,
                                     //      if the xlog's blockno is larger, then insert it.
-                                    int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, xlogreader->ReadRecPtr, &foundLsn, &foundPageNum);
-                                    if(found && foundPageNum<xlogreader->blocks[i].blkno+1) {
-#ifdef ENABLE_STARTUP_DEBUG_INFO
-                                        if (HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1, true) )
-                                            printf("%s HashMap insert succeed\n", __func__ );
-                                        else
-                                            printf("%s HashMap insert failed\n", __func__ );
-#else
-                                        HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, (int)xlogreader->blocks[i].blkno+1, true);
-#endif
+//                                    RelSizeExclusiveLock(relKey);
+//                                    printf("%s %d\n", __func__ , __LINE__);
+//                                    fflush(stdout);
+                                    uint32_t result = -1;
+                                    bool found = GetRelSizeCache(relKey, &result);
+                                    if(found && result<xlogreader->blocks[i].blkno+1) {
+                                        InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
                                     } else if(!found) {
                                         // TODO: Could this merge with RocksDb creating list, since we will migrate list from RocksDb to inMem hashTable
                                         int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
                                         if(baseRelSize > xlogreader->blocks[i].blkno+1) {
-                                            HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, baseRelSize, true);
+                                            InsertRelSizeCache(relKey, baseRelSize);
                                         } else {
-                                            HashMapInsertKey(relSizeHashMap, key, xlogreader->ReadRecPtr, xlogreader->blocks[i].blkno+1, true);
+                                            InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
                                         }
                                     }
+//                                    printf("%s %d\n", __func__ , __LINE__);
+//                                    fflush(stdout);
+//                                    RelSizeReleaseLock(relKey);
                                 }
 
                             }

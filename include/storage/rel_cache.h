@@ -5,6 +5,10 @@
 #ifndef DB2_PG_REL_CACHE_H
 #define DB2_PG_REL_CACHE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "postgres.h"
 
 #define NUM_REL_SIZE_LWLOCKS 128
@@ -46,6 +50,22 @@ extern Size RelSizeShmemSize();
 extern void RelSizeShmemInit();
 
 extern void RelSizeExclusiveLock(RelKey relKey);
+
 extern void RelSizeSharedLock(RelKey relKey);
+
 extern void RelSizeReleaseLock(RelKey relKey);
+
+extern void RelSizePthreadLockInit();
+
+extern void RelSizePthreadLocksDestroy();
+
+extern void RelSizePthreadWriteLock(RelKey relKey);
+
+extern void RelSizePthreadReadLock(RelKey relKey);
+
+extern void RelSizePthreadUnlock(RelKey relKey);
+#ifdef __cplusplus
+}
+#endif
+
 #endif //DB2_PG_REL_CACHE_H

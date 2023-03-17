@@ -32,9 +32,9 @@
 #include "storage/buf_internals.h"
 #include "access/xlog.h"
 #include "pgstat.h"
+#include "storage/rel_cache.h"
 
 extern HashMap pageVersionHashMap;
-extern HashMap relSizeHashMap;
 
 extern int reachXlogTempEnd;
 extern int XLOGbuffers;
@@ -50,6 +50,7 @@ extern uint64_t RpcXLogFlushedLsn;
 //#define INFO_FUNC_START
 //#define INFO_FUNC_START2
 //#define ENABLE_DEBUG_INFO
+//#define ENABLE_DEBUG_INFO2
 
 #ifdef DEBUG_TIMING
 
@@ -140,6 +141,14 @@ do { \
 
 extern XLogRecPtr XLogParseUpto;
 
+static void TransRelNode2RelKey(RelFileNode node, RelKey *relKey, ForkNumber forkNumber) {
+    relKey->SpcId = node.spcNode;
+    relKey->DbId = node.dbNode;
+    relKey->RelId = node.relNode;
+
+    relKey->forkNum = forkNumber;
+    return;
+}
 
 void WaitParse(int64_t _lsn) {
 //    if(WalRcvRunning() == false)
@@ -656,7 +665,7 @@ public:
     }
 
     int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
@@ -680,39 +689,52 @@ public:
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 
         XLogRecPtr lsn = _lsn;
-        KeyType keyType;
-        keyType.SpcID = rnode.spcNode;
-        keyType.DbID = rnode.dbNode;
-        keyType.RelID = rnode.relNode;
-        keyType.ForkNum = _forknum;
-        keyType.BlkNum = -1;
+        RelKey relKey;
+        TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
+
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &nblocksTime[0], &nblocksCount[0])
 #endif
-        uint64_t foundLsn;
-        int foundPageNum;
 
-        if ( HashMapFindLowerBoundEntry(relSizeHashMap, keyType, lsn, &foundLsn, &foundPageNum) ) {
-#ifdef ENABLE_DEBUG_INFO
-            printf("%s cached, lsn = %lu, pageNum = %d\n", __func__ , foundLsn, foundPageNum);
+        uint32_t foundPageNum = 0;
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
+        RelSizePthreadReadLock(relKey);
+        if ( GetRelSizeCache(relKey, &foundPageNum) ) {
+//            printf("%s %d\n", __func__ , __LINE__);
+//            fflush(stdout);
+            RelSizePthreadUnlock(relKey);
+#ifdef ENABLE_DEBUG_INFO2
+            printf("%s cached, pageNum = %u\n", __func__, foundPageNum);
             fflush(stdout);
 #endif
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &nblocksTime[1], &nblocksCount[1])
 #endif
-            return foundPageNum;
+            return (int32_t)foundPageNum;
         }
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
+        RelSizePthreadUnlock(relKey);
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &nblocksTime[2], &nblocksCount[2])
 #endif
         int relSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO2
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
         fflush(stdout);
 #endif
-        bool insertSucc = HashMapInsertKey(relSizeHashMap, keyType, lsn, relSize, true);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
+        RelSizePthreadWriteLock(relKey);
+        uint32 tempResult = 0;
+        if(relSize>=0 && GetRelSizeCache(relKey, &tempResult) == false)
+            InsertRelSizeCache(relKey, (uint32) relSize);
+        RelSizePthreadUnlock(relKey);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
         if(insertSucc) {
             printf("%s insert key successfully\n", __func__ );
@@ -752,28 +774,28 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        KeyType key{};
-        key.SpcID = rnode.spcNode;
-        key.DbID = rnode.dbNode;
-        key.RelID = rnode.relNode;
-        key.ForkNum = _forknum;
-        key.BlkNum = -1;
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        RelKey relKey;
+        TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
 
-        uint64_t foundLsn;
-        int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
+        uint32_t foundPageNum;
+        RelSizePthreadReadLock(relKey);
+        int found = GetRelSizeCache(relKey, &foundPageNum);
+        RelSizePthreadUnlock(relKey);
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &existsTime[0], &existsCount[0])
 #endif
         if(found) {
+//            printf("%s %d\n", __func__ , __LINE__);
+//            fflush(stdout);
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &existsTime[1], &existsCount[1])
 #endif
-            if(foundPageNum == -1)
-                return 0;
-            else
                 return 1;
         }
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 
 //        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
 //        int32_t result = mdexists(smgrReln, (ForkNumber)_forknum);
@@ -785,7 +807,13 @@ public:
 #ifdef ENABLE_DEBUG_INFO
         printf("%s get relsize=%d from standalone pg\n", __func__ , relSize);
 #endif
-        bool insertSucc = HashMapInsertKey(relSizeHashMap, key, _lsn, relSize, true);
+        uint32 tempResult = -1;
+        RelSizePthreadWriteLock(relKey);
+        if(relSize >= 0 && GetRelSizeCache(relKey, &tempResult)==false)
+            InsertRelSizeCache(relKey, (uint32)relSize);
+        RelSizePthreadUnlock(relKey);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
         if(insertSucc) {
             printf("%s insert key successfully\n", __func__ );
@@ -819,26 +847,22 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        KeyType key{};
-        key.SpcID = rnode.spcNode;
-        key.DbID = rnode.dbNode;
-        key.RelID = rnode.relNode;
-        key.ForkNum = _forknum;
-        key.BlkNum = -1;
+        RelKey relKey;
+        TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 
         uint64_t foundLsn;
-        int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
-        if(!found || foundPageNum<0) {
-            HashMapInsertKey(relSizeHashMap, key, _lsn, 0, true);
-#ifdef ENABLE_DEBUG_INFO
-            if (HashMapInsertKey(relSizeHashMap, key, _lsn, 0, true) )
-                printf("%s HashMap insert succeed\n", __func__ );
-            else
-                printf("%s HashMap insert failed\n", __func__ );
-#endif
+        uint32 foundPageNum;
+        RelSizePthreadWriteLock(relKey);
+        int found = GetRelSizeCache(relKey, &foundPageNum);
+        if(!found) {
+            InsertRelSizeCache(relKey, 0);
         }
+        RelSizePthreadUnlock(relKey);
 
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 
         SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
         mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
@@ -864,30 +888,27 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        KeyType key{};
-        key.SpcID = rnode.spcNode;
-        key.DbID = rnode.dbNode;
-        key.RelID = rnode.relNode;
-        key.ForkNum = _forknum;
-        key.BlkNum = -1;
+        RelKey relKey;
+        TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
 
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
         uint64_t foundLsn;
-        int foundPageNum;
-        int found = HashMapFindLowerBoundEntry(relSizeHashMap, key, _lsn, &foundLsn, &foundPageNum);
+        uint32_t foundPageNum;
+        RelSizePthreadWriteLock(relKey);
+        int found = GetRelSizeCache(relKey, &foundPageNum);
         //TODO: Here may have some problems: extend-page content's lsn is larger than parameter lsn
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
 #endif
         if(!found || foundPageNum<_blknum+1) {
-#ifdef ENABLE_DEBUG_INFO
-            printf("%s %d\n", __func__ , __LINE__);
-            fflush(stdout);
-#else
-            HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum+1, true);
-#endif
+            InsertRelSizeCache(relKey, _blknum+1);
         }
+        RelSizePthreadUnlock(relKey);
 
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
@@ -937,24 +958,16 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        KeyType key;
-        key.SpcID = rnode.spcNode;
-        key.DbID = rnode.dbNode;
-        key.RelID = rnode.relNode;
-        key.ForkNum = _forknum;
-        key.BlkNum = -1;
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
+        RelKey relKey;
+        TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
 
-#ifdef ENABLE_DEBUG_INFO
-        if (HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum, true) )
-            printf("%s HashMap insert succeed\n", __func__ );
-        else
-            printf("%s HashMap insert failed\n", __func__ );
-
-        printf("%s end\n", __func__);
-        fflush(stdout);
-#else
-        HashMapInsertKey(relSizeHashMap, key, _lsn, _blknum, true);
-#endif
+        RelSizePthreadWriteLock(relKey);
+        InsertRelSizeCache(relKey, _blknum);
+        RelSizePthreadUnlock(relKey);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
     }
 
 

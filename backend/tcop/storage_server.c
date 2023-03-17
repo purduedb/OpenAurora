@@ -24,6 +24,7 @@
 #include "storage/bufmgr.h"
 #include "storage/proc.h"
 #include "storage/smgr.h"
+#include "storage/rel_cache.h"
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
@@ -44,7 +45,6 @@
 #include "access/background_hashmap_vacuumer.h"
 
 extern HashMap pageVersionHashMap;
-extern HashMap relSizeHashMap;
 
 extern XLogRecPtr *RpcXlblocks;
 extern char* RpcXLogPages;
@@ -250,7 +250,7 @@ int **computePipe;
 static void
 proc_die(SIGNAL_ARGS) {
     HashMapDestroy(pageVersionHashMap);
-    HashMapDestroy(relSizeHashMap);
+    RelSizePthreadLocksDestroy();
 
     free(RpcXlblocks);
     free(RpcXLogPages);
@@ -1205,7 +1205,7 @@ RpcServerMain(int argc, char *argv[],
     fflush(stdout);
 #endif
     HashMapInit(&pageVersionHashMap, 1023);
-    HashMapInit(&relSizeHashMap, 1023);
+    RelSizePthreadLockInit();
 
     for(int i = 0; i < 0; i++) {
         printf("%s start background replayer %d\n", __func__ , i);
@@ -1214,7 +1214,6 @@ RpcServerMain(int argc, char *argv[],
     }
 #ifdef ENABLE_DEBUG_INFO
     printf("%s HashMapAddress = %p\n", __func__ , pageVersionHashMap);
-    printf("%s HashMapAddress = %p\n", __func__ , relSizeHashMap);
     fflush(stdout);
 #endif
 

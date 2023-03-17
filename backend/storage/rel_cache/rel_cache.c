@@ -5,9 +5,13 @@
 #include "storage/shmem.h"
 #include "storage/builtin_shmht.h"
 
+#include <pthread.h>
+
 #define MAX_PATH_LEN (256)
 
 LWLockPadded *relSizeLwLocks;
+
+pthread_rwlock_t *relSizePthreadLocks;
 
 // spc, db, rel, fork
 #define REL_SIZE_CACHE_KEY  ("rel_cache_%lu_%lu_%lu_%u\0")
@@ -30,6 +34,7 @@ static uint32_t HashRelKey(RelKey key) {
     return res;
 }
 
+
 void RelSizeExclusiveLock(RelKey relKey) {
     uint32_t bucket = HashRelKey(relKey) % NUM_REL_SIZE_LWLOCKS;
 //    printf("%s %d, exclusive lock %u\n", __func__ , __LINE__, bucket);
@@ -37,6 +42,7 @@ void RelSizeExclusiveLock(RelKey relKey) {
 
     LWLockAcquire(&relSizeLwLocks[bucket].lock, LW_EXCLUSIVE);
 }
+
 
 void RelSizeSharedLock(RelKey relKey) {
     uint32_t bucket = HashRelKey(relKey) % NUM_REL_SIZE_LWLOCKS;
@@ -77,14 +83,14 @@ void InsertRelSizeCache(RelKey relKey, uint32_t blockNum) {
 //    printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, tag.reln.spcNode,
 //           tag.reln.dbNode, tag.reln.relNode, tag.forkNumber, blockNum);
 //    fflush(stdout);
-    int result = RelSizeTableInsert(&tag, hashCode, (int)blockNum);
+    RelSizeTableInsert(&tag, hashCode, (int)blockNum);
 //    printf("%s %d\n", __func__ , __LINE__);
 //    fflush(stdout);
     // If this value already exists, delete it and insert the latest value
-    if(result != -1) {
-        RelSizeTableDelete(&tag, hashCode);
-        RelSizeTableInsert(&tag, hashCode, (int)blockNum);
-    }
+//    if(result != -1) {
+//        RelSizeTableDelete(&tag, hashCode);
+//        RelSizeTableInsert(&tag, hashCode, (int)blockNum);
+//    }
 }
 
 bool GetRelSizeCache(RelKey relKey, uint32_t *result) {
@@ -100,15 +106,15 @@ bool GetRelSizeCache(RelKey relKey, uint32_t *result) {
     RelTag tag;
     ParseRelKey2RelTag(relKey, &tag);
     uint32 hashCode = RelSizeTableHashCode(&tag);
-//    printf("%s %d,  %lu_%lu_%lu_%d, hashcode=%u\n", __func__ , __LINE__, tag.reln.spcNode, tag.reln.dbNode,
-//           tag.reln.relNode, tag.forkNumber, hashCode);
-//    fflush(stdout);
 
 
     int re = RelSizeTableLookup(&tag, hashCode);
     if(re == -1)
         return false;
 
+//    printf("%s %d,  %lu_%lu_%lu_%d, hashcode=%u, result = %d\n", __func__ , __LINE__, tag.reln.spcNode, tag.reln.dbNode,
+//           tag.reln.relNode, tag.forkNumber, hashCode, re);
+//    fflush(stdout);
     *result = re;
     return true;
 }
@@ -164,4 +170,30 @@ void RelSizeShmemInit() {
     }
 
     return;
+}
+
+void RelSizePthreadLockInit() {
+    relSizePthreadLocks = (pthread_rwlock_t*) malloc(sizeof(pthread_rwlock_t) * NUM_REL_SIZE_LWLOCKS);
+    for(int i = 0; i < NUM_REL_SIZE_LWLOCKS; i++) {
+        pthread_rwlock_init(&(relSizePthreadLocks[i]), NULL);
+    }
+}
+
+void RelSizePthreadLocksDestroy() {
+    free(relSizePthreadLocks);
+}
+
+void RelSizePthreadWriteLock(RelKey relKey) {
+    uint32_t bucket = HashRelKey(relKey) % NUM_REL_SIZE_LWLOCKS;
+    pthread_rwlock_wrlock(&(relSizePthreadLocks[bucket]));
+}
+
+void RelSizePthreadReadLock(RelKey relKey) {
+    uint32_t bucket = HashRelKey(relKey) % NUM_REL_SIZE_LWLOCKS;
+    pthread_rwlock_rdlock(&(relSizePthreadLocks[bucket]));
+}
+
+void RelSizePthreadUnlock(RelKey relKey) {
+    uint32_t bucket = HashRelKey(relKey) % NUM_REL_SIZE_LWLOCKS;
+    pthread_rwlock_unlock(&(relSizePthreadLocks[bucket]));
 }

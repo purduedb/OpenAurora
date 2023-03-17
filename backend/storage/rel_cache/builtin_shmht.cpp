@@ -18,12 +18,16 @@
 static HTAB* SharedRelSizeHash;
 
 Size RelSizeTableShmemSize() {
+//    std::cout << __func__  << ", " << __LINE__ << std::endl;
+//    fflush(stdout);
     return hash_estimate_size(REL_SIZE_ESTIMATE_SIZE, sizeof(RelSizeLookupEntry));
 }
 
 void
 InitRelSizeTable()
 {
+//    std::cout << __func__  << ", " << __LINE__ << std::endl;
+//    fflush(stdout);
     HASHCTL		info;
 
     MemSet(&info, 0, sizeof(info));
@@ -78,7 +82,7 @@ RelSizeTableLookup(RelTag *tagPtr, uint32 hashcode)
 }
 
 // Return -1 on successfully insertion
-// Otherwise, if key has already existed, return existed value
+// Otherwise, if key has already existed, update the value and return the current value
 int
 RelSizeTableInsert(RelTag *tagPtr, uint32 hashcode, int relSize)
 {
@@ -99,6 +103,7 @@ RelSizeTableInsert(RelTag *tagPtr, uint32 hashcode, int relSize)
 //    fflush(stdout);
     if (found)					/* found something already in the table */
     {
+        result->relSize = relSize;
         return result->relSize;
     }
 
