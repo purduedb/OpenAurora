@@ -7834,6 +7834,9 @@ StartupXLOG(void)
                                     printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
                                            key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
 #endif
+//                                    printf("%s , spc = %lu, db = %lu, rel = %lu, fork = %u, blkNo = %u\n", __func__ , relKey.SpcId,
+//                                           relKey.DbId, relKey.RelId, relKey.forkNum, xlogreader->blocks[i].blkno);
+//                                    fflush(stdout);
 
                                     uint64_t foundLsn;
                                     int foundPageNum;

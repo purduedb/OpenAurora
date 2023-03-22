@@ -258,8 +258,37 @@ _Smgr_Relation MarshalSmgrRelation2RPC(SMgrRelation reln) {
     return _reln;
 }
 
+//#define ENABLE_FUNCTION_TIMING
+#ifdef ENABLE_FUNCTION_TIMING
+#include <sys/time.h>
+#include <pthread.h>
+#include <cstdlib>
+
+class FunctionTiming {
+public:
+    struct timeval start;
+    char* funcname;
+    FunctionTiming(char* paraFuncName) {
+        funcname = paraFuncName;
+        gettimeofday(&start, NULL);
+    }
+    inline ~FunctionTiming() {
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        printf("%s function timeing = %ld us\n", funcname,
+               (end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));                            \
+    }
+};
+#endif
+
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+    printf("%s start, pid = %d, spc = %ld, db = %ld, rel = %ld, fork = %d, blk = %ld, pid = %d\n", __func__ , getpid(),
+           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, getpid());
+    ::fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -311,6 +340,9 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -358,6 +390,9 @@ void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 }
 
 int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -399,6 +434,9 @@ int32_t RpcMdExists(SMgrRelation reln, int32_t forknum) {
 }
 
 int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -442,6 +480,9 @@ int32_t RpcMdNblocks(SMgrRelation reln, int32_t forknum) {
 }
 
 void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -483,6 +524,9 @@ void RpcMdCreate(SMgrRelation reln, int32_t forknum, int32_t isRedo) {
 }
 
 void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff, int32_t skipFsync) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -528,6 +572,9 @@ void RpcMdExtend(SMgrRelation reln, int32_t forknum, int32_t blknum, char* buff,
 }
 
 void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -570,6 +617,9 @@ void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum) {
 // Following are Rpc interfaces for fd.c
 
 void RpcFileClose(const int fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -589,6 +639,9 @@ void RpcFileClose(const int fd) {
 }
 
 void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -609,6 +662,9 @@ void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, c
 }
 
 int RpcPathNameOpenFile(const char* path, const int32_t _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -632,6 +688,9 @@ int RpcPathNameOpenFile(const char* path, const int32_t _flag) {
 }
 
 int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, const int64_t _seekpos, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -654,6 +713,9 @@ int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, con
 }
 
 char* RpcFilePathName(const int _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -678,6 +740,9 @@ char* RpcFilePathName(const int _fd) {
 }
 
 int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -699,6 +764,9 @@ int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t
 }
 
 int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -720,6 +788,9 @@ int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
 }
 
 int64_t RpcFileSize(const int _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -742,6 +813,9 @@ int64_t RpcFileSize(const int _fd) {
 }
 
 int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amount, const int32_t wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -762,6 +836,9 @@ int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amo
 }
 
 void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes, const int32_t wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -781,6 +858,9 @@ void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes
 }
 
 int32_t RpcUnlink(const char* filepath) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -805,6 +885,9 @@ int32_t RpcUnlink(const char* filepath) {
 }
 
 int32_t RpcFtruncate(const int _fd, const int64_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -830,6 +913,9 @@ void RpcInitFile(char* _return, const char* _path) {
 }
 
 int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -854,6 +940,9 @@ int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
 }
 
 int32_t RpcCloseTransientFile(const int _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -875,6 +964,9 @@ int32_t RpcCloseTransientFile(const int _fd) {
 }
 
 int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -896,6 +988,9 @@ int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
 }
 
 int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -919,6 +1014,9 @@ int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t 
 }
 
 int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -943,6 +1041,9 @@ int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t
 }
 
 int32_t RpcClose(const int _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -964,6 +1065,9 @@ int32_t RpcClose(const int _fd) {
 }
 
 int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -988,6 +1092,9 @@ int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
 }
 
 int32_t RpcPgFdatasync(const int32_t _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1010,6 +1117,9 @@ int32_t RpcPgFdatasync(const int32_t _fd) {
 
 
 int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1031,6 +1141,9 @@ int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
 }
 
 int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1051,6 +1164,9 @@ int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) 
 }
 
 int RpcStat(const char* path, struct stat* _stat) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1075,6 +1191,9 @@ int RpcStat(const char* path, struct stat* _stat) {
 }
 
 int32_t RpcDirectoryIsEmpty(const char* path) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1096,6 +1215,9 @@ int32_t RpcDirectoryIsEmpty(const char* path) {
 }
 
 int32_t RpcCopyDir(const char* _src, const char* _dst) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1126,6 +1248,9 @@ int32_t RpcCopyDir(const char* _src, const char* _dst) {
 }
 
 int32_t RpcPgFsync(const int32_t _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1145,6 +1270,9 @@ int32_t RpcPgFsync(const int32_t _fd) {
 }
 
 int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1168,6 +1296,9 @@ int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
 }
 
 int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -1192,6 +1323,9 @@ int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const i
 }
 
 int32_t RpcXLogWriteWithPosition(const int _fd, char *p, const int32_t _amount, const int32_t _offset, int startIdx, int blkNum, uint64_t* xlblocks, int xlblocksBufferNum, uint64_t lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
@@ -1208,6 +1342,9 @@ int32_t RpcXLogWriteWithPosition(const int _fd, char *p, const int32_t _amount, 
 }
 
 int RpcXLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
     RpcInit();
     int64_t _logsegno = logsegno;
     int _use_existent = *use_existent;

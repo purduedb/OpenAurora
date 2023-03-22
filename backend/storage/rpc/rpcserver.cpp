@@ -52,6 +52,30 @@ extern uint64_t RpcXLogFlushedLsn;
 //#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 
+//#define ENABLE_FUNCTION_TIMING
+
+#ifdef ENABLE_FUNCTION_TIMING
+#include <sys/time.h>
+#include <pthread.h>
+#include <cstdlib>
+
+class FunctionTiming {
+public:
+    struct timeval start;
+    char* funcname;
+    FunctionTiming(char* paraFuncName) {
+        funcname = paraFuncName;
+        gettimeofday(&start, NULL);
+    }
+    inline ~FunctionTiming() {
+        struct timeval end;
+        gettimeofday(&end, NULL);
+        printf("%s function timeing = %ld us\n", funcname,
+               (end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));                            \
+    }
+};
+#endif
+
 #ifdef DEBUG_TIMING
 
 #include <sys/time.h>
@@ -184,7 +208,7 @@ void WaitParse(int64_t _lsn) {
 
 //            printf("%s get into sleep\n", __func__ );
 //            fflush(stdout);
-            usleep(200);
+            usleep(50);
 //            if(reachXlogTempEnd && XLogParseUpto != prevParse) {
 //                reachXlogTempEnd = 0;
 //            }
@@ -222,6 +246,9 @@ public:
      * @param _fd
      */
      void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d, lsn = %ld\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn);
@@ -321,6 +348,7 @@ public:
 #endif
 
             char* buff;
+            bool gotPageFromStandAlone = false;
             // Try to get RpcMdExtend page as BasePage
             if(GetPageFromRocksdb(bufferTag, 1, &buff) == 0) {
 #ifdef ENABLE_DEBUG_INFO
@@ -328,6 +356,7 @@ public:
                 fflush(stdout);
 #endif
                 // If not created by RpcMdExtend, get page from StandAlone process
+                gotPageFromStandAlone = true;
                 buff = (char*) malloc(BLCKSZ);
                 GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
             }
@@ -352,13 +381,15 @@ public:
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[2]), &(readBufferCount[2]))
 #endif
-            // Remove extended page from Rocksdb
-            DeletePageFromRocksdb(bufferTag, 1);
+            if(gotPageFromStandAlone) {
+                // Remove extended page from Rocksdb
+                DeletePageFromRocksdb(bufferTag, 1);
 #ifdef DEBUG_TIMING
-            RECORD_TIMING(&start, &end, &(readBufferCommon[3]), &(readBufferCount[3]))
+                RECORD_TIMING(&start, &end, &(readBufferCommon[3]), &(readBufferCount[3]))
 #endif
-            // Put base page to Rocksdb
-            PutPage2Rocksdb(bufferTag, 1, buff);
+                // Put base page to Rocksdb
+                PutPage2Rocksdb(bufferTag, 1, buff);
+            }
 
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &(readBufferCommon[4]), &(readBufferCount[4]))
@@ -387,11 +418,13 @@ public:
         // Then this list was created by replay process, which won't consist base page's lsn.
         // So, we need to get base page from standalone process and insert it lsn as
         // the first element of the list. Also, update $currPos to 1 (base page "replayed")
+
+        char* basePage = (char*) malloc(BLCKSZ);
+        bool gotBasePageFromRocksDb = false;
+        BufferTag bufferTag;
+        INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
         if(replayedLsn == 0) {
-            char* buff = (char*) malloc(BLCKSZ);
             //TODO
-            BufferTag bufferTag;
-            INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
 //            if(GetPageFromRocksdb(bufferTag, 0, &buff) == 0) {
 //                printf("%s %d, can't find page in RocksDB-extend, try to find it from standalone\n", __func__ , __LINE__);
 //                fflush(stdout);
@@ -403,14 +436,27 @@ public:
             // It's possible that this base page doesn't exist in disk
             // We need to redo at least one lsn
             // Use Exist at first (memory and standalone), if not exist, replay one xlog
-            int currRelSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+            int currRelSize = 0;
+            uint32 uintCurrRelSize;
+            RelKey relKey;
+            TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
+            RelSizePthreadReadLock(relKey);
+            bool foundPageSize =  GetRelSizeCache(relKey, &uintCurrRelSize);
+            RelSizePthreadUnlock(relKey);
+            if(!foundPageSize)
+                currRelSize = SyncGetRelSize(rnode, (ForkNumber)_forknum, 0);
+            else
+                currRelSize = int(uintCurrRelSize);
+
+
+            // TODO we should check whether the currRelSize is larger than current _blknum
             if(currRelSize == -1 && listSize != 0) { // we don't have base page in disk, should redo at least one lsn
 //                if(listSize == 0) {
 //                    printf("Error: %s %d, can't get basePage and any lsn\n", __func__ , __LINE__);
 //                    fflush(stdout);
 //                }
                 ApplyOneLsnWithoutBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum,
-                                           toReplayList[0], buff);
+                                           toReplayList[0], basePage);
             } else if (currRelSize == -1 && listSize >= 0) { //TODO: listSize>=0 or listSize==0
                 /*
                  * For some forknum != 0 relation, the RpcMdExtend will transfer a page with inner lsn equals to 0
@@ -424,14 +470,16 @@ public:
                  * So, when we reached here, it's the basePage created by RpcMdExtend, and it's forknum should not be 0.
                  * We should just get this page from RocksDB with lsn = 0.
                  */
-                int foundBasePage = GetPageFromRocksdb(bufferTag, 1, &buff);
+                free(basePage);
+                gotBasePageFromRocksDb = true;
+                int foundBasePage = GetPageFromRocksdb(bufferTag, 1, &basePage);
                 if(!foundBasePage) {
                     printf("%s %d, Error: can't find basePage in disk or rocksdb, and there is no lsn to replay\n", __func__ , __LINE__);
                     //fflush(stdout);
                 }
             }
             else {
-                GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, buff);
+                GetBasePage(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, basePage);
             }
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &readBufferCommon[6], &readBufferCount[6])
@@ -441,10 +489,8 @@ public:
             fflush(stdout);
 #endif
 
-            XLogRecPtr lsn = PageGetLSN(buff);
+//            XLogRecPtr lsn = PageGetLSN(buff);
 
-            // Put page to Rocksdb
-            PutPage2Rocksdb(bufferTag, 1, buff);
 
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &readBufferCommon[7], &readBufferCount[7])
@@ -453,17 +499,27 @@ public:
             // Set replayed slot
             HashMapUpdateFirstEmptySlot(pageVersionHashMap, key, 1);
 
-            replayedLsn = 1;
 #ifdef ENABLE_DEBUG_INFO
             printf("%s LINE=%d \n", __func__ , __LINE__);
             fflush(stdout);
 #endif
 
-            free(buff);
-
 #ifdef DEBUG_TIMING
             RECORD_TIMING(&start, &end, &readBufferCommon[8], &readBufferCount[8])
 #endif
+        }
+
+        // if replayedLsn == 0, then we have already got basePage from previous section
+        if(replayedLsn != 0) {
+            gotBasePageFromRocksDb = true;
+            free(basePage);
+
+            int foundBasePage = GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+            if(!foundBasePage) {
+                printf("%s %d, Error: can't find basePage in disk or rocksdb, and there is no lsn to replay\n", __func__ , __LINE__);
+                //fflush(stdout);
+            }
+
         }
 #ifdef ENABLE_DEBUG_INFO
          printf("%s LINE=%d, listSize = %d, replayedLsn = %lu \n", __func__ , __LINE__, listSize, replayedLsn);
@@ -474,17 +530,21 @@ public:
         // For now, we got the lsn list and at least one version was replayed
         // No need to replay the xlog
          if(listSize == 0) {
-             char* page;
-             BufferTag bufferTag;
-             INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
-             if(!GetPageFromRocksdb(bufferTag, replayedLsn, &page)) {
-                 // Not found page in rocksdb, report error
-                 printf("%s Error, get replayed page failed\n", __func__ );
-                 return;
-             }
+//             char* page;
+//             BufferTag bufferTag;
+//             INIT_BUFFERTAG(bufferTag,rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
+//             if(!GetPageFromRocksdb(bufferTag, replayedLsn, &page)) {
+//                 printf("%s Error, get replayed page failed\n", __func__ );
+//                 return;
+//             }
 
-             _return.assign(page, BLCKSZ);
-             free(page);
+             _return.assign(basePage, BLCKSZ);
+             // Put page to Rocksdb
+             // If this basePage got from standAlone, then this page must be basePage(lsn = 1)
+             if(!gotBasePageFromRocksDb) {
+                 PutPage2Rocksdb(bufferTag, 1, basePage);
+                 free(basePage);
+             }
 #ifdef DEBUG_TIMING
              RECORD_TIMING(&start, &end, &readBufferCommon[9], &readBufferCount[9])
 #endif
@@ -500,19 +560,11 @@ public:
         // The xlog sublist we need to replay is [ uintList[1]+2 , foundPos ]
 
 
-        BufferTag bufferTag;
-        INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)_forknum, (BlockNumber)_blknum);
 
 #ifdef ENABLE_DEBUG_INFO
          printf("%s LINE=%d \n", __func__ , __LINE__);
          fflush(stdout);
 #endif
-
-         char* basePage;
-         if(GetPageFromRocksdb(bufferTag, replayedLsn, &basePage) == 0) {
-             printf("%s Error get base page for replay failed \n", __func__ );
-             return;
-         }
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &readBufferCommon[10], &readBufferCount[10])
@@ -525,7 +577,8 @@ public:
         char* page2 = (char*) malloc(BLCKSZ);
         char* tempPage;
         memcpy(page1, basePage, BLCKSZ);
-        free(basePage);
+        if(!gotBasePageFromRocksDb)
+            free(basePage);
 
 #ifdef ENABLE_DEBUG_INFO
          printf("%s LINE=%d basePageLsn = %lu, pageIsNew = %d\n", __func__ , __LINE__, PageGetLSN(page1), PageIsNew(page1));
@@ -536,7 +589,7 @@ public:
         RECORD_TIMING(&start, &end, &readBufferCommon[11], &readBufferCount[11])
 #endif
 
-        ApplyLsnList(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, toReplayList, listSize, page1, page2);
+        ApplyLsnList(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, reinterpret_cast<XLogRecPtr *>(toReplayList), listSize, page1, page2);
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d, rel = %lu, replayLsnSize = %d targetLsn = %lu, page real lsn = %lu\n",
         __func__, __LINE__, rnode.relNode, listSize, toReplayList[listSize-1], PageGetLSN(page2));
@@ -584,6 +637,14 @@ public:
              free(toReplayList);
          }
 
+         // Delete base page
+         if(gotBasePageFromRocksDb) {
+             if(replayedLsn == 0)
+                DeletePageFromRocksdb(bufferTag, 1);
+             else
+                 DeletePageFromRocksdb(bufferTag, replayedLsn);
+         }
+
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &readBufferCommon[14], &readBufferCount[14])
 #endif
@@ -612,6 +673,9 @@ public:
     }
 
     void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %ld\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum);
@@ -665,6 +729,9 @@ public:
     }
 
     int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO2
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
@@ -702,8 +769,6 @@ public:
 //        fflush(stdout);
         RelSizePthreadReadLock(relKey);
         if ( GetRelSizeCache(relKey, &foundPageNum) ) {
-//            printf("%s %d\n", __func__ , __LINE__);
-//            fflush(stdout);
             RelSizePthreadUnlock(relKey);
 #ifdef ENABLE_DEBUG_INFO2
             printf("%s cached, pageNum = %u\n", __func__, foundPageNum);
@@ -756,6 +821,9 @@ public:
     }
 
     int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef DEBUG_TIMING
         struct timeval start, end;
         START_TIMING(&start);
@@ -774,8 +842,6 @@ public:
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
 
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
         RelKey relKey;
         TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
 
@@ -833,19 +899,23 @@ public:
     }
 
     void RpcMdCreate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _isRedo, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, lsn = %lu tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _lsn, gettid());
         fflush(stdout);
 #endif
 
-//        SyncReplayProcess();
-        WaitParse(_lsn);
-
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
+
+#ifdef PASS
+//        SyncReplayProcess();
+        WaitParse(_lsn);
 
         RelKey relKey;
         TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
@@ -860,6 +930,7 @@ public:
             InsertRelSizeCache(relKey, 0);
         }
         RelSizePthreadUnlock(relKey);
+#endif
 
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
@@ -874,19 +945,23 @@ public:
     }
 
     void RpcMdExtend(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const _Page& _buff, const int32_t skipFsync, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
         fflush(stdout);
 #endif
 
-//        SyncReplayProcess();
-        WaitParse(_lsn);
-
         RelFileNode rnode;
         rnode.spcNode = _reln._spc_node;
         rnode.dbNode = _reln._db_node;
         rnode.relNode = _reln._rel_node;
+
+#ifdef PASS
+//        SyncReplayProcess();
+        WaitParse(_lsn);
 
         RelKey relKey;
         TransRelNode2RelKey(rnode, &relKey, (ForkNumber)_forknum);
@@ -906,6 +981,7 @@ public:
             InsertRelSizeCache(relKey, _blknum+1);
         }
         RelSizePthreadUnlock(relKey);
+#endif
 
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
@@ -945,6 +1021,9 @@ public:
 
 
     void RpcTruncate(const _Smgr_Relation& _reln, const int32_t _forknum, const int32_t _blknum, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
@@ -973,6 +1052,9 @@ public:
 
     // Following are fd.c interfaces
     void RpcFileClose(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -983,6 +1065,9 @@ public:
     }
 
     void RpcTablespaceCreateDbspace(const _Oid _spcnode, const _Oid _dbnode, const bool isRedo) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -993,6 +1078,9 @@ public:
     }
 
     _File RpcPathNameOpenFile(const _Path& _path, const _Flag _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start, filename = %s\n", __func__, _path.c_str() );
 #endif
@@ -1006,6 +1094,9 @@ public:
 
     // todo
     int32_t RpcFileWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1031,6 +1122,9 @@ public:
     }
 
     void RpcFilePathName(_Path& _return, const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1044,6 +1138,9 @@ public:
 
     // todo
     void RpcFileRead(_Page& _return, const _File _fd, const int32_t _amount, const _Off_t _seekpos, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1067,13 +1164,19 @@ public:
 
     // todo
     int32_t RpcFileTruncate(const _File _fd, const _Off_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
-        printf("%s start\n", __func__ );
+        printf("%s :start\n", __func__ );
 #endif
         return FileTruncate(_fd, _offset, WAIT_EVENT_DATA_FILE_TRUNCATE);
     }
 
     _Off_t RpcFileSize(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start, fd = %d, tid = %d\n", __func__ , _fd, gettid());
 #endif
@@ -1085,6 +1188,9 @@ public:
     }
 
     int32_t RpcFilePrefetch(const _File _fd, const _Off_t _offset, const int32_t _amount, const int32_t wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1092,6 +1198,9 @@ public:
     }
 
     void RpcFileWriteback(const _File _fd, const _Off_t _offset, const _Off_t nbytes, const int32_t wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1100,6 +1209,9 @@ public:
     }
 
     int32_t RpcUnlink(const _Path& _path) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1107,6 +1219,9 @@ public:
     }
 
     int32_t RpcFtruncate(const _File _fd, const _Off_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1114,12 +1229,18 @@ public:
     }
 
     void RpcInitFile(_Page& _return, const _Path& _path) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
     }
 
     _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1127,6 +1248,9 @@ public:
     }
 
     int32_t RpcCloseTransientFile(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1134,18 +1258,27 @@ public:
     }
 
     void Rpcread(_Page& _return, const _File _fd, const int32_t size) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
     }
 
     int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
     }
 
     int32_t RpcFileSync(const _File _fd, const int32_t _wait_event_info) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1153,6 +1286,9 @@ public:
     }
 
     void RpcPgPRead(_Page& _return, const _File _fd, const int32_t _seg_bytes, const _Off_t _start_off) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1168,6 +1304,9 @@ public:
     }
 
     int32_t RpcPgPWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1182,6 +1321,9 @@ public:
     }
 
     int32_t RpcClose(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1189,6 +1331,9 @@ public:
     }
 
     int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
         int32_t result = BasicOpenFile(_path.c_str(), _flags);
 #ifdef INFO_FUNC_START
         printf("%s start, fileName = %s, result = %d\n", __func__ , _path.c_str(), result);
@@ -1198,6 +1343,9 @@ public:
     }
 
     int32_t RpcPgFdatasync(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1205,6 +1353,9 @@ public:
     }
 
     int32_t RpcPgFsyncNoWritethrough(const _File _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1212,6 +1363,9 @@ public:
     }
 
     int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1219,6 +1373,9 @@ public:
     }
 
     void RpcStat(_Stat_Resp& _return, const _Path& _path) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1229,6 +1386,9 @@ public:
     }
 
     int32_t RpcDirectoryIsEmpty(const _Path& _path) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1236,6 +1396,9 @@ public:
     }
 
     int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1254,6 +1417,9 @@ public:
     }
 
     int32_t RpcPgFsync(const int32_t _fd) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1263,6 +1429,9 @@ public:
     }
 
     int32_t RpcDurableUnlink(const _Path& _fname, const int32_t _flag) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1270,6 +1439,9 @@ public:
     }
 
     int32_t RpcDurableRenameExcl(const _Path& _oldFname, const _Path& _newFname, const int32_t _elevel) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start, oldName = %s, newName = %s\n", __func__ , _oldFname.c_str(), _newFname.c_str());
         fflush(stdout);
@@ -1284,6 +1456,9 @@ public:
     }
 
     int32_t RpcXLogWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset, const std::vector<int64_t> & _xlblocks, const int32_t _blknum, const int32_t _idx, const int64_t _lsn) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
@@ -1324,6 +1499,9 @@ public:
     }
 
     void RpcXLogFileInit(_XLog_Init_File_Resp& _return, const int64_t _logsegno, const int32_t _use_existent, const int32_t _use_lock) {
+#ifdef ENABLE_FUNCTION_TIMING
+        FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
