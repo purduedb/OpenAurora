@@ -174,6 +174,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
 
     INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum);
     int foundBasePage = 1;
+    bool gotBasePageFromRocksDb = false;
 
     if(replayedLsn == 0) { // Don't have basePage in RocksDB
         if(GetPageFromRocksdb(bufferTag, 1, &basePage) == 0) {
@@ -184,9 +185,12 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
                 basePage = (char*) malloc(BLCKSZ);
                 GetBasePage(rnode, (ForkNumber)head->key.ForkNum, (BlockNumber)head->key.BlkNum, basePage);
             }
+        } else {
+            gotBasePageFromRocksDb = true;
         }
     } else {
         GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+        gotBasePageFromRocksDb = true;
     }
 
 #ifdef ENABLE_DEBUG_INFO
@@ -300,7 +304,10 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
         PutPage2Rocksdb(bufferTag, lsnList[listSize-1], replayedPage);
         DeletePageFromRocksdb(bufferTag, replayedLsn);
         head->replayedLsn = lsnList[listSize-1];
-        free(basePage);
+        if(!gotBasePageFromRocksDb)
+            free(basePage);
+        if(gotBasePageFromRocksDb)
+            DeletePageFromRocksdb(bufferTag, replayedLsn==0?1:replayedLsn);
         free(replayedPage);
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
@@ -313,12 +320,13 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
 #endif
-    if(replayedLsn == 0) {
+    if(replayedLsn == 0 && !gotBasePageFromRocksDb) {
         PutPage2Rocksdb(bufferTag, 1, basePage);
         head->replayedLsn = 1;
     }
 
-    free(basePage);
+    if(!gotBasePageFromRocksDb)
+        free(basePage);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
@@ -330,9 +338,9 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
 // Delete corresponding RocksDb pages and hashNodeEle
 // Should remember ele->prev/next in advance, ele will be erased in this func
 void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag) {
-    for(int i = 0; i < ele->entryNum; i++) {
-        DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
-    }
+//    for(int i = 0; i < ele->entryNum; i++) {
+//        DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
+//    }
     if(ele == head->nextEle) { // if it is the first node
         head->nextEle = ele->nextEle;
         if(ele->nextEle != NULL) {
