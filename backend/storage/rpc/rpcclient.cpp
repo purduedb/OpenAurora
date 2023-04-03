@@ -285,9 +285,9 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
                           BlockNumber blockNum, ReadBufferMode mode) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
-    printf("%s start, pid = %d, spc = %ld, db = %ld, rel = %ld, fork = %d, blk = %ld, pid = %d\n", __func__ , getpid(),
-           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, getpid());
-    ::fflush(stdout);
+//    printf("%s start, pid = %d, spc = %ld, db = %ld, rel = %ld, fork = %d, blk = %ld, pid = %d\n", __func__ , getpid(),
+//           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, getpid());
+//    ::fflush(stdout);
 #endif
 #ifdef DEBUG_TIMING2
     struct timeval start, end;

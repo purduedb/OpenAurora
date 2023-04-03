@@ -43,6 +43,7 @@
 #include "access/logindex_hashmap.h"
 #include "storage/kv_interface.h"
 #include "access/background_hashmap_vacuumer.h"
+#include "access/wakeup_latch.h"
 
 extern HashMap pageVersionHashMap;
 
@@ -240,7 +241,8 @@ sigusr1_handler(SIGNAL_ARGS) {
 
     }
 //    SetLatch(MyLatch);
-    WakeupRecovery();
+//    WakeupRecovery();
+    WakeupStartupRecovery();
     latch_sigusr1_handler();
 }
 
@@ -251,6 +253,7 @@ static void
 proc_die(SIGNAL_ARGS) {
     HashMapDestroy(pageVersionHashMap);
     RelSizePthreadLocksDestroy();
+    WakeupStartupResourceDestroy();
 
     free(RpcXlblocks);
     free(RpcXLogPages);

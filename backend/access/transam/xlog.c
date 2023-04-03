@@ -42,6 +42,7 @@
 #include "access/logindex_func.h"
 #include "access/polar_logindex.h"
 #include "access/logindex_func.h"
+#include "access/wakeup_latch.h"
 #include "catalog/catversion.h"
 #include "catalog/pg_control.h"
 #include "catalog/pg_database.h"
@@ -89,7 +90,12 @@
 #include "storage/rpcclient.h"
 #include "storage/rel_cache.h"
 
-//#define ENABLE_DEBUG_INFO3
+//#define ITER_TIMING
+#ifdef ITER_TIMING
+#include <sys/time.h>
+#endif
+
+//#define ENABLE_DEBUG_INFO4
 //#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
@@ -5413,6 +5419,10 @@ XLOGShmemSize(void)
 	/* and the buffers themselves */
 	size = add_size(size, mul_size(XLOG_BLCKSZ, XLOGbuffers));
 
+    /* to cache XLOGs in the buffer */
+    size = add_size(size, mul_size(sizeof(XLogRecPtr), XLOGbuffers));
+    size = add_size(size, mul_size(XLOG_BLCKSZ, XLOGbuffers+1));
+
 	/*
 	 * Note: we don't count ControlFileData, it comes out of the "slop factor"
 	 * added by CreateSharedMemoryAndSemaphores.  This lets us use this
@@ -5515,6 +5525,15 @@ XLOGShmemInit(void)
 		WALInsertLocks[i].l.insertingAt = InvalidXLogRecPtr;
 		WALInsertLocks[i].l.lastImportantAt = InvalidXLogRecPtr;
 	}
+
+    allocptr = (char *) TYPEALIGN(XLOG_BLCKSZ, allocptr);
+    RpcXLogPages = allocptr;
+    allocptr += (Size) XLOG_BLCKSZ * XLOGbuffers;
+    memset(RpcXLogPages, 0, (Size) XLOG_BLCKSZ * XLOGbuffers);
+
+    RpcXlblocks = (XLogRecPtr*) allocptr;
+    allocptr += (Size) sizeof(XLogRecPtr) * XLOGbuffers;
+
 
 	/*
 	 * Align the start of the page buffers to a full xlog block size boundary.
@@ -6686,8 +6705,8 @@ StartupXLOG(void)
         sleep(5);
     printf("%s %d, XLOGbuffers = %d\n", __func__ , __LINE__, XLOGbuffers);
     fflush(stdout);
-    RpcXlblocks = (XLogRecPtr*) malloc(sizeof(XLogRecPtr)*XLOGbuffers);
-    RpcXLogPages = (char*) malloc(XLOG_BLCKSZ * XLOGbuffers);
+//    RpcXlblocks = (XLogRecPtr*) malloc(sizeof(XLogRecPtr)*XLOGbuffers);
+//    RpcXLogPages = (char*) malloc(XLOG_BLCKSZ * XLOGbuffers);
     RpcXLogPagesLocks = (pthread_rwlock_t*) malloc(sizeof(pthread_rwlock_t) * XLOGbuffers);
     memset(RpcXlblocks, 0, sizeof(XLogRecPtr)*XLOGbuffers);
 //    if(IsRpcServer)
@@ -7612,6 +7631,11 @@ StartupXLOG(void)
 			record = ReadRecord(xlogreader, LOG, false);
 		}
 
+#ifdef ITER_TIMING
+        struct timeval start;
+        gettimeofday(&start, NULL);
+#endif
+
 		if (record != NULL)
 		{
 			ErrorContextCallback errcallback;
@@ -7782,6 +7806,15 @@ StartupXLOG(void)
                 fflush(stdout);
 #endif
 
+#ifdef ITER_TIMING
+                struct timeval end;
+                gettimeofday(&end, NULL);
+                printf("%s%d function timeing = %ld us\n", __func__ , __LINE__,
+                       (end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+                fflush(stdout);
+
+                gettimeofday(&start, NULL);
+#endif
 #ifdef DEBUG_TIMING
                 RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
 #endif
@@ -12755,19 +12788,37 @@ retry:
     if(IsRpcServer) {
         pthread_rwlock_rdlock(&(RpcXLogPagesLocks[bufferIdx]));
     }
-    if(0 && IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
-#ifdef ENABLE_DEBUG_INFO2
+    if(IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
+#ifdef ENABLE_DEBUG_INFO4
         printf("%s %d read xlog from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
         fflush(stdout);
 #endif
+//        printf("%s %d read xlog from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
+//        fflush(stdout);
         memcpy(readBuf, RpcXLogPages+(BLCKSZ*bufferIdx), BLCKSZ);
-#ifdef ENABLE_DEBUG_INFO2
+#ifdef ENABLE_DEBUG_INFO4
         printf("%s %d read xlog successfully from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
         fflush(stdout);
 #endif
         r = BLCKSZ;
     } else {
-#ifdef ENABLE_DEBUG_INFO2
+
+#ifdef ENABLE_DEBUG_INFO4
+        if(IsRpcServer) {
+            printf("%s %d read xlog from disk, targetPagePtr = %lu\n", __func__ , __LINE__, targetPagePtr);
+            fflush(stdout);
+        } else{
+            if(RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
+                printf("%s %d, replay process can read from RPC\n", __func__ , __LINE__);
+                fflush(stdout);
+            } else {
+                printf("%s %d, replay process should read from disk\n", __func__ , __LINE__);
+                fflush(stdout);
+            }
+        }
+#endif
+
+#ifdef ENABLE_DEBUG_INFO4
         printf("%s %d read xlog from disk\n", __func__ , __LINE__);
         fflush(stdout);
 #endif
@@ -13055,16 +13106,19 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
                         }
 #ifdef ENABLE_DEBUG_INFO
                         printf("%s %d, start waitlatch\n", __func__ , __LINE__);
+                        printf("%s %d, get into RPC Latch waiting, flushedLsn = %lu\n", __func__ , __LINE__, RpcXLogFlushedLsn);
+                        fflush(stdout);
 #endif
-                        (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
-                                         WL_LATCH_SET | WL_TIMEOUT |
-                                         WL_EXIT_ON_PM_DEATH,
-                                         wait_time,
-                                         WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
+                        WaitForNewXLog(0, 5000000);
+//                        (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+//                                         WL_LATCH_SET | WL_TIMEOUT |
+//                                         WL_EXIT_ON_PM_DEATH,
+//                                         wait_time,
+//                                         WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
 #ifdef ENABLE_DEBUG_INFO
                         printf("%s %d, got latch\n", __func__ , __LINE__);
 #endif
-                        ResetLatch(&XLogCtl->recoveryWakeupLatch);
+//                        ResetLatch(&XLogCtl->recoveryWakeupLatch);
                         now = GetCurrentTimestamp();
 
                         if(RecPtr < RpcXLogFlushedLsn) {
@@ -13152,6 +13206,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						wait_time = wal_retrieve_retry_interval -
 							(secs * 1000 + usecs / 1000);
 
+//                        printf("%s %d, get into Standby Latch waiting\n", __func__ , __LINE__);
+//                        fflush(stdout);
 						(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 										 WL_LATCH_SET | WL_TIMEOUT |
 										 WL_EXIT_ON_PM_DEATH,
@@ -13440,6 +13496,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 */
 //                    printf("%s %d, pid = %d start waitlatch\n", __func__ , __LINE__, getpid());
 //                    fflush(stdout);
+//                    printf("%s %d, get into Standby Latch waiting\n", __func__ , __LINE__);
+//                    fflush(stdout);
                     (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 									 WL_LATCH_SET | WL_TIMEOUT |
 									 WL_EXIT_ON_PM_DEATH,
@@ -13458,11 +13516,16 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
                     readSource = XLOG_FROM_RPC;
                     return true;
                 }
-                (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
-                                 WL_LATCH_SET | WL_TIMEOUT |
-                                 WL_EXIT_ON_PM_DEATH,
-                                 5000L, WAIT_EVENT_RECOVERY_WAL_STREAM);
-                ResetLatch(&XLogCtl->recoveryWakeupLatch);
+//                printf("%s %d, get into RPC Latch waiting, flushedLsn = %lu, pid = %d\n", __func__ , __LINE__, RpcXLogFlushedLsn, gettid());
+//                fflush(stdout);
+                WaitForNewXLog(0, 5000000);
+//                (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+//                                 WL_LATCH_SET | WL_TIMEOUT |
+//                                 WL_EXIT_ON_PM_DEATH,
+//                                 10L, WAIT_EVENT_RECOVERY_WAL_STREAM);
+//                ResetLatch(&XLogCtl->recoveryWakeupLatch);
+//                printf("%s %d, get out of RPC Latch waiting, pid = %d\n", __func__ , __LINE__, gettid());
+//                fflush(stdout);
                 if(RecPtr < RpcXLogFlushedLsn) {
 #ifdef ENABLE_DEBUG_INFO
                     printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
