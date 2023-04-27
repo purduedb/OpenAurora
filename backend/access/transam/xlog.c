@@ -96,7 +96,7 @@
 #endif
 
 //#define ENABLE_DEBUG_INFO4
-//#define ENABLE_DEBUG_INFO
+#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
 // #define ENABLE_STARTUP_DEBUG_INFO3
@@ -147,6 +147,9 @@ int pg_pread_rpc_local(int fd, char *p, int amount, int offset) {
 }
 
 int read_rpc_local(int fd, char *p, int amount) {
+
+    printf("%s %d, IsRpcClient = %d\n", __func__ , __LINE__, IsRpcClient);
+    fflush(stdout);
     if(IsRpcClient)
         return RpcPgPRead(fd, p, amount, -1);
     else
@@ -5052,6 +5055,8 @@ ReadControlFile(void)
 	/*
 	 * Read data...
 	 */
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	fd = BasicOpenFile(XLOG_CONTROL_FILE,
 					   O_RDWR | PG_BINARY);
 	if (fd < 0)
@@ -5063,11 +5068,19 @@ ReadControlFile(void)
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_READ);
 
 #ifdef RPC_REMOTE_DISK
+
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
     r = read_rpc_local(fd, ControlFile, sizeof(ControlFileData));
 #else
     r = read(fd, ControlFile, sizeof(ControlFileData));
 #endif
-
+//    struct ControlFileData *control_local = (struct ControlFileData*) palloc(sizeof(ControlFileData));
+//    int fd_local;
+//    read(fd_local, control_local, sizeof(ControlFileData));
+//
+    printf("%s %d, checkpoint = %lu\n", __func__ , __LINE__, ControlFile->checkPoint);
+//    printf("%s %d, local checkpoint = %lu\n", __func__ , __LINE__, control_local);
     if (r != sizeof(ControlFileData))
 	{
 		if (r < 0)
@@ -7805,6 +7818,13 @@ StartupXLOG(void)
                     printf("%s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
                 fflush(stdout);
 #endif
+                const char*id=NULL;
+                id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
+                if (id)
+                    printf("to delete %s %s %d, lsn = %lu rm = %s info = %s\n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name ,id);
+                else
+                    printf("to delete %s %s %d, lsn = %lu rm = %s \n", __func__ , __FILE__, __LINE__, xlogreader->ReadRecPtr, RmgrTable[record->xl_rmid].rm_name );
+                fflush(stdout);
 
 #ifdef ITER_TIMING
                 struct timeval end;
@@ -7867,9 +7887,9 @@ StartupXLOG(void)
                                     printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
                                            key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
 #endif
-//                                    printf("%s , spc = %lu, db = %lu, rel = %lu, fork = %u, blkNo = %u\n", __func__ , relKey.SpcId,
-//                                           relKey.DbId, relKey.RelId, relKey.forkNum, xlogreader->blocks[i].blkno);
-//                                    fflush(stdout);
+                                    printf("%s , spc = %lu, db = %lu, rel = %lu, fork = %u, blkNo = %u\n", __func__ , relKey.SpcId,
+                                           relKey.DbId, relKey.RelId, relKey.forkNum, xlogreader->blocks[i].blkno);
+                                    fflush(stdout);
 
                                     uint64_t foundLsn;
                                     int foundPageNum;
@@ -9019,6 +9039,10 @@ ReadCheckpointRecord(XLogReaderState *xlogreader, XLogRecPtr RecPtr,
 		return NULL;
 	}
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, RecPtr = %lu\n", __func__ , __LINE__, RecPtr);
+    fflush(stdout);
+#endif
 	XLogBeginRead(xlogreader, RecPtr);
 	record = ReadRecord(xlogreader, LOG, true);
 
@@ -9028,6 +9052,10 @@ ReadCheckpointRecord(XLogReaderState *xlogreader, XLogRecPtr RecPtr,
 #endif
 	if (record == NULL)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		if (!report)
 			return NULL;
 
@@ -9044,6 +9072,10 @@ ReadCheckpointRecord(XLogReaderState *xlogreader, XLogRecPtr RecPtr,
 		}
 		return NULL;
 	}
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if (record->xl_rmid != RM_XLOG_ID)
 	{
 		switch (whichChkpt)

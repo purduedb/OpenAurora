@@ -50,6 +50,7 @@
 #include "access/xlog.h"
 #include "access/xloginsert.h"
 #include "access/xlogutils.h"
+#include "access/polar_logindex.h"
 #include "catalog/catalog.h"
 #include "miscadmin.h"
 #include "pgstat.h"
@@ -1849,9 +1850,17 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	 * Find buffer to insert this tuple into.  If the page is all visible,
 	 * this will also pin the requisite visibility map page.
 	 */
-	buffer = RelationGetBufferForTuple(relation, heaptup->t_len,
+    //! Find a block number that have enough space. Do not access the real page from disk
+	BlockNumber blockNumber = RelationGetBlockNumberForTuple(relation, heaptup->t_len,
 									   InvalidBuffer, options, bistate,
 									   &vmbuffer, NULL);
+
+    bool targetBlkBufExist = false;
+    buffer = CheckBufferPoolAndPin(relation, MAIN_FORKNUM, blockNumber, &targetBlkBufExist);
+
+    printf("to delete, %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, targetBlkExist in buffer? %d\n", __func__ , __LINE__,
+           relation->rd_node.spcNode, relation->rd_node.dbNode, relation->rd_node.relNode, MAIN_FORKNUM, blockNumber, targetBlkBufExist);
+    fflush(stdout);
 
 	/*
 	 * We're about to do the actual insert -- but check for conflict first, to
@@ -1873,17 +1882,40 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	/* NO EREPORT(ERROR) from here till changes are logged */
 	START_CRIT_SECTION();
 
-	RelationPutHeapTuple(relation, buffer, heaptup,
+    // If target block exists in buffer, do normal computation
+    if(targetBlkBufExist) {
+
+        //! TODO 1, get locks, however, input tuple only has one buffer, instead of two (in heap_update),
+        //!     we can acquire lock directly. Also check how to pin vm_pages
+
+        //! TODO 2, initialize page, if page is new.
+
+        LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
+        if(PageIsNew(BufferGetPage(buffer))) {
+            PageInit(BufferGetPage(buffer), BufferGetPageSize(buffer), 0);
+            MarkBufferDirty(buffer);
+        }
+
+
+	    RelationPutHeapTuple(relation, buffer, heaptup,
 						 (options & HEAP_INSERT_SPECULATIVE) != 0);
 
-	if (PageIsAllVisible(BufferGetPage(buffer)))
-	{
-		all_visible_cleared = true;
-		PageClearAllVisible(BufferGetPage(buffer));
-		visibilitymap_clear(relation,
+	    if (PageIsAllVisible(BufferGetPage(buffer)))
+	    {
+		    all_visible_cleared = true;
+		    PageClearAllVisible(BufferGetPage(buffer));
+		    visibilitymap_clear(relation,
 							ItemPointerGetBlockNumber(&(heaptup->t_self)),
 							vmbuffer, VISIBILITYMAP_VALID_BITS);
-	}
+	    }
+    } else { // If not exists, just set invalid offset number
+        //Set the blockNumber and InvalidOffsetNumber to this tuple.
+        ItemPointerSet(&(heaptup->t_self), blockNumber, InvalidOffsetNumber);
+        all_visible_cleared = true;
+    }
+
+    //! Update the fsm page info
+    RecordFsmAvail(relation, blockNumber, heaptup->t_len);
 
 	/*
 	 * XXX Should we set PageSetPrunable on this page ?
@@ -1896,7 +1928,8 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	 * If you do add PageSetPrunable here, add it in heap_xlog_insert too.
 	 */
 
-	MarkBufferDirty(buffer);
+    if(targetBlkBufExist)
+    	MarkBufferDirty(buffer);
 
 	/* XLOG stuff */
 	if (RelationNeedsWAL(relation))
@@ -1904,14 +1937,24 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 		xl_heap_insert xlrec;
 		xl_heap_header xlhdr;
 		XLogRecPtr	recptr;
-		Page		page = BufferGetPage(buffer);
+		Page		page;
 		uint8		info = XLOG_HEAP_INSERT;
 		int			bufflags = 0;
 
+        if(targetBlkBufExist)
+		    page = BufferGetPage(buffer);
 		/*
 		 * If this is a catalog, we need to transmit combocids to properly
 		 * decode, so log that as well.
 		 */
+        /*!
+         *  Inside this function, it will create a new HEAP2 xlog, and this
+         *  xlog need blockID and offset information.
+         *
+         *  However, we don't have offset information in our compute node.
+         *  If we set the offset as InvalidOffset, don't know whether error
+         *  will occur.
+         */
 		if (RelationIsAccessibleInLogicalDecoding(relation))
 			log_heap_new_cid(relation, heaptup);
 
@@ -1920,12 +1963,21 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 		 * page instead of restoring the whole thing.  Set flag, and hide
 		 * buffer references from XLogInsert.
 		 */
-		if (ItemPointerGetOffsetNumber(&(heaptup->t_self)) == FirstOffsetNumber &&
-			PageGetMaxOffsetNumber(page) == FirstOffsetNumber)
-		{
-			info |= XLOG_HEAP_INIT_PAGE;
-			bufflags |= REGBUF_WILL_INIT;
-		}
+        if(targetBlkBufExist) {
+		    if (ItemPointerGetOffsetNumber(&(heaptup->t_self)) == FirstOffsetNumber &&
+		    	PageGetMaxOffsetNumber(page) == FirstOffsetNumber)
+	    	{
+	    	    //! The XLOG_HEAP_INIT_PAGE means this xlog contains one or more blocks info
+                //!     that need init
+                //! REGBUF_WILL_INIT donates "THIS" block in the xlog needs init before replay
+			    info |= XLOG_HEAP_INIT_PAGE;
+			    bufflags |= REGBUF_WILL_INIT;
+		    }
+        } else {
+            //! Don't access and compute the page in compute node, offload this work to server
+            info |= XLOG_HEAP_INIT_PAGE;
+            bufflags |= REGBUF_WILL_INIT;
+        }
 
 		xlrec.offnum = ItemPointerGetOffsetNumber(&heaptup->t_self);
 		xlrec.flags = 0;
@@ -1959,7 +2011,12 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 		 * write the whole page to the xlog, we don't need to store
 		 * xl_heap_header in the xlog.
 		 */
-		XLogRegisterBuffer(0, buffer, REGBUF_STANDARD | bufflags);
+        //TODO: this Register will require buffer's tag, also get page content pointer to regbuf->page
+        if(targetBlkBufExist)
+		    XLogRegisterBuffer(0, buffer, REGBUF_STANDARD | bufflags);
+        else
+            HeapXLogRegisterBufferWithoutPage(0, relation->rd_node, MAIN_FORKNUM, blockNumber, REGBUF_NO_IMAGE | bufflags);
+
 		XLogRegisterBufData(0, (char *) &xlhdr, SizeOfHeapHeader);
 		/* PG73FORMAT: write bitmap [+ padding] [+ oid] + data */
 		XLogRegisterBufData(0,
@@ -1971,12 +2028,29 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 
 		recptr = XLogInsert(RM_HEAP_ID, info);
 
-		PageSetLSN(page, recptr);
+        if(targetBlkBufExist)
+	    	PageSetLSN(page, recptr);
+        else{
+            struct buftag tag;
+            tag.rnode = relation->rd_node;
+            tag.forkNum = MAIN_FORKNUM;
+            tag.blockNum = blockNumber;
+
+            for(int kk = 0; kk < 20; kk++){
+                polar_logindex_add_lsn(&tag, 0, recptr+kk);
+                printf("%s %d, parse xlog to logindex spcNode = %lu, dbNode = %lu, relNode = %lu, blockNumber = %u, xlog lsn = %lu\n", __func__ , __LINE__,
+                       relation->rd_node.spcNode, relation->rd_node.dbNode, relation->rd_node.relNode, blockNumber, recptr+kk);
+                fflush(stdout);
+            }
+        }
+        printf("%s %d, xlog lsn = %lu\n", __func__ , __LINE__, recptr);
+        fflush(stdout);
 	}
 
 	END_CRIT_SECTION();
 
-	UnlockReleaseBuffer(buffer);
+    if(targetBlkBufExist)
+	    UnlockReleaseBuffer(buffer);
 	if (vmbuffer != InvalidBuffer)
 		ReleaseBuffer(vmbuffer);
 
@@ -2066,6 +2140,7 @@ void
 heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 				  CommandId cid, int options, BulkInsertState bistate)
 {
+    printf("%s start\n", __func__ );
 	TransactionId xid = GetCurrentTransactionId();
 	HeapTuple  *heaptuples;
 	int			i;
@@ -2139,6 +2214,9 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 		buffer = RelationGetBufferForTuple(relation, heaptuples[ndone]->t_len,
 										   InvalidBuffer, options, bistate,
 										   &vmbuffer, NULL);
+        printf("to delete, %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
+               relation->rd_node.spcNode, relation->rd_node.dbNode, relation->rd_node.relNode, MAIN_FORKNUM,
+               BufferGetBlockNumber(buffer));
 		page = BufferGetPage(buffer);
 
 		/* NO EREPORT(ERROR) from here till changes are logged */
@@ -3534,6 +3612,9 @@ l2:
 		newbuf = buffer;
 		heaptup = newtup;
 	}
+    printf("to delete, %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu\n", __func__ , __LINE__,
+           relation->rd_node.spcNode, relation->rd_node.dbNode, relation->rd_node.relNode, MAIN_FORKNUM,
+           BufferGetBlockNumber(newbuf));
 
 	/*
 	 * We're about to do the actual update -- check for conflict first, to

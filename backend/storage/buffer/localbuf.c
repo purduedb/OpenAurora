@@ -95,6 +95,63 @@ PrefetchLocalBuffer(SMgrRelation smgr, ForkNumber forkNum,
 	return result;
 }
 
+BufferDesc *
+LocalBufferPoolSearch(SMgrRelation smgr, ForkNumber forkNum, BlockNumber blockNum,
+                  bool *foundPtr) {
+    BufferTag	newTag;			/* identity of requested block */
+    LocalBufferLookupEnt *hresult;
+    BufferDesc *bufHdr;
+    int			b;
+    int			trycounter;
+    bool		found;
+    uint32		buf_state;
+
+    INIT_BUFFERTAG(newTag, smgr->smgr_rnode.node, forkNum, blockNum);
+
+    /* Initialize local buffers if first request in this session */
+    if (LocalBufHash == NULL)
+        InitLocalBuffers();
+
+    /* See if the desired buffer already exists */
+    hresult = (LocalBufferLookupEnt *)
+            hash_search(LocalBufHash, (void *) &newTag, HASH_FIND, NULL);
+
+    if (hresult)
+    {
+        b = hresult->id;
+        bufHdr = GetLocalBufferDescriptor(b);
+        Assert(BUFFERTAGS_EQUAL(bufHdr->tag, newTag));
+#ifdef LBDEBUG
+        fprintf(stderr, "LB ALLOC (%u,%d,%d) %d\n",
+				smgr->smgr_rnode.node.relNode, forkNum, blockNum, -b - 1);
+#endif
+        buf_state = pg_atomic_read_u32(&bufHdr->state);
+
+        /* this part is equivalent to PinBuffer for a shared buffer */
+        if (LocalRefCount[b] == 0)
+        {
+            if (BUF_STATE_GET_USAGECOUNT(buf_state) < BM_MAX_USAGE_COUNT)
+            {
+                buf_state += BUF_USAGECOUNT_ONE;
+                pg_atomic_unlocked_write_u32(&bufHdr->state, buf_state);
+            }
+        }
+        LocalRefCount[b]++;
+        ResourceOwnerRememberBuffer(CurrentResourceOwner,
+                                    BufferDescriptorGetBuffer(bufHdr));
+        if (buf_state & BM_VALID)
+            *foundPtr = true;
+        else
+        {
+            /* Previous read attempt must have failed; try again */
+            *foundPtr = false;
+        }
+        return bufHdr;
+    }
+
+    *foundPtr = false;
+    return NULL;
+}
 
 /*
  * LocalBufferAlloc -

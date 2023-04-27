@@ -32,6 +32,7 @@
 #include "storage/bufmgr.h"
 #include "storage/proc.h"
 #include "utils/memutils.h"
+#include "storage/buf_internals.h"
 
 /* Buffer size required to store a compressed version of backup block image */
 #define PGLZ_MAX_BLCKSZ PGLZ_MAX_OUTPUT(BLCKSZ)
@@ -206,6 +207,56 @@ XLogResetInsertion(void)
 	begininsert_called = false;
 }
 
+void
+HeapXLogRegisterBufferWithoutPage(uint8 block_id, RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, uint8 flags) {
+    registered_buffer *regbuf;
+
+    /* NO_IMAGE doesn't make sense with FORCE_IMAGE */
+    Assert(!((flags & REGBUF_FORCE_IMAGE) && (flags & (REGBUF_NO_IMAGE))));
+    Assert(begininsert_called);
+
+    if (block_id >= max_registered_block_id)
+    {
+        if (block_id >= max_registered_buffers)
+            elog(ERROR, "too many registered buffers");
+        max_registered_block_id = block_id + 1;
+    }
+
+    regbuf = &registered_buffers[block_id];
+
+    regbuf->rnode = relFileNode;
+    regbuf->forkno = forkNumber;
+    regbuf->block = blockNumber;
+
+    regbuf->page = NULL;
+    regbuf->flags = flags;
+    regbuf->rdata_tail = (XLogRecData *) &regbuf->rdata_head;
+    regbuf->rdata_len = 0;
+
+    /*
+     * Check that this page hasn't already been registered with some other
+     * block_id.
+     */
+#ifdef USE_ASSERT_CHECKING
+    {
+		int			i;
+
+		for (i = 0; i < max_registered_block_id; i++)
+		{
+			registered_buffer *regbuf_old = &registered_buffers[i];
+
+			if (i == block_id || !regbuf_old->in_use)
+				continue;
+
+			Assert(!RelFileNodeEquals(regbuf_old->rnode, regbuf->rnode) ||
+				   regbuf_old->forkno != regbuf->forkno ||
+				   regbuf_old->block != regbuf->block);
+		}
+	}
+#endif
+
+    regbuf->in_use = true;
+}
 /*
  * Register a reference to a buffer with the WAL record being constructed.
  * This must be called for every page that the WAL-logged operation modifies.

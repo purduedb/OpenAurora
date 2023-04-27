@@ -155,7 +155,7 @@ CreateSharedMemoryAndSemaphores(void)
 
         size = add_size(size, RelSizeShmemSize()); // LWLock size
         size = add_size(size, RelSizeTableShmemSize()); // Shared HashTable Size
-		size = add_size(size, polar_logindex_shmem_size(24, 0));
+		size = add_size(size, polar_logindex_shmem_size(24));
 #ifdef EXEC_BACKEND
 		size = add_size(size, ShmemBackendArraySize());
 #endif

@@ -40,10 +40,6 @@ typedef uint64  log_range_id_t;
 #define LOG_INDEX_SUPPORT_NO_PREVIOUS_LSN
 #define POLAR_MAX_SHMEM_NAME (128)
 
-//#define POLAR_DATA_DIR() (POLAR_FILE_IN_SHARED_STORAGE() ? polar_datadir : DataDir)
-
-//#define POLAR_FILE_PATH(path, orign) \
-//	snprintf((path), MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), (orign));
 
 #define POLAR_READ_BUFFER_FOR_REDO(record, block_id, buffer) \
 	XLogReadBufferForRedoExtended((record), (block_id),\
@@ -79,7 +75,7 @@ typedef enum
 	ITERATE_STATE_CORRUPTED
 } log_index_iter_state_t;
 
-extern Size polar_logindex_shmem_size(uint64 logindex_mem_tbl_size, int bloom_blocks);
+extern Size polar_logindex_shmem_size(uint64 logindex_mem_tbl_size);
 
 
 extern void polar_logindex_shmem_init(uint64 logindex_mem_tbl_size, int bloom_blocks);
@@ -100,7 +96,7 @@ extern XLogRecPtr polar_logindex_snapshot_init();
 extern void polar_logindex_add_lsn(BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn);
 extern bool polar_logindex_write_table(logindex_snapshot_t logindex_snapshot, struct log_mem_table_t *table);
 extern bool polar_logindex_bg_write(logindex_snapshot_t logindex_snapshot);
-extern XLogRecPtr polar_logindex_start_lsn(logindex_snapshot_t logindex_snapshot);
+//extern XLogRecPtr polar_logindex_start_lsn(logindex_snapshot_t logindex_snapshot);
 
 extern log_index_page_iter_t polar_logindex_create_page_iterator(logindex_snapshot_t logindex_snapshot, BufferTag *tag, XLogRecPtr min_lsn, XLogRecPtr max_lsn, bool before_promote);
 extern void polar_logindex_release_page_iterator(log_index_page_iter_t iter);
@@ -119,6 +115,8 @@ extern void polar_logindex_truncate(logindex_snapshot_t logindex_snapshot, XLogR
 extern bool polar_logindex_check_state(logindex_snapshot_t logindex_snapshot, uint32 state);
 
 extern void polar_xlog_decode_data(XLogReaderState *state);
+
+extern void polar_compute_node_replay_buffer(BufferTag *bufferTag, char* page);
 
 /*
  * POLAR: Return the newest byte position which all logindex info could be flushed before it.

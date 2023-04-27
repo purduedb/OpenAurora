@@ -186,6 +186,8 @@ extern Buffer ReadBufferExtended(Relation reln, ForkNumber forkNum,
                                  BlockNumber blockNum, ReadBufferMode mode,
                                  BufferAccessStrategy strategy);
 
+extern Buffer CheckBufferPoolAndPin(Relation rel, ForkNumber forkNumber, BlockNumber blockNumber, bool *foundPtr);
+
 extern Buffer ReadBufferWithoutRelcache(RelFileNode rnode,
                                         ForkNumber forkNum, BlockNumber blockNum,
                                         ReadBufferMode mode, BufferAccessStrategy strategy);

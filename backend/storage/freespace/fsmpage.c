@@ -70,10 +70,14 @@ fsm_set_avail(Page page, int slot, uint8 value)
 
 	oldvalue = fsmpage->fp_nodes[nodeno];
 
+    printf("to delete %s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	/* If the value hasn't changed, we don't need to do anything */
 	if (oldvalue == value && value <= fsmpage->fp_nodes[0])
 		return false;
 
+    printf("to delete %s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	fsmpage->fp_nodes[nodeno] = value;
 
 	/*

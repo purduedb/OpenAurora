@@ -108,6 +108,8 @@ static Size fsm_space_cat_to_avail(uint8 cat);
 static int	fsm_set_and_search(Relation rel, FSMAddress addr, uint16 slot,
 							   uint8 newValue, uint8 minValue);
 static BlockNumber fsm_search(Relation rel, uint8 min_cat);
+static BlockNumber fsm_search_heap(Relation rel, uint8 min_cat);
+static BlockNumber fsm_search_internal(Relation rel, uint8 min_cat, bool pessimistic);
 static uint8 fsm_vacuum_page(Relation rel, FSMAddress addr,
 							 BlockNumber start, BlockNumber end,
 							 bool *eof);
@@ -136,6 +138,48 @@ GetPageWithFreeSpace(Relation rel, Size spaceNeeded)
 	return fsm_search(rel, min_cat);
 }
 
+BlockNumber
+GetHeapPageWithFreeSpace(Relation rel, Size spaceNeeded)
+{
+    uint8		min_cat = fsm_space_needed_to_cat(spaceNeeded);
+
+    return fsm_search_heap(rel, min_cat);
+}
+
+/*!
+ *  Update value of one slot and populate up to this page's root node
+ *
+ *  Caller should already hold a exclusive lock. This function will release
+ *  the exclusive automatically.
+ */
+void RecordFsmAvail(Relation rel, BlockNumber heapBlk, uint32 spaceNeeded) {
+    Buffer buf;
+    Page		page;
+    FSMAddress  addr;
+    uint16 slot;
+
+    uint8 needed_cat = fsm_space_needed_to_cat(spaceNeeded);
+
+    addr = fsm_get_location(heapBlk, &slot);
+
+    buf = fsm_readbuf(rel, addr, true);
+    page = BufferGetPage(buf);
+
+    uint8 origSpace = fsm_get_avail(page, slot);
+
+    printf("to delete, %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, originAvail=%d, needed=%d, new_avail=%d\n", __func__ , __LINE__,
+           rel->rd_node.spcNode, rel->rd_node.dbNode, rel->rd_node.relNode, MAIN_FORKNUM, heapBlk, origSpace, needed_cat, origSpace-needed_cat);
+    fflush(stdout);
+    if (fsm_set_avail(page, slot, origSpace - needed_cat))
+        MarkBufferDirtyHint(buf, false);
+
+    printf("to delete %s %d, buff = %d\n", __func__ , __LINE__, buf);
+    fflush(stdout);
+    //! we have pin it twice, each read will pin the buffer once.
+    ReleaseBuffer(buf);
+    UnlockReleaseBuffer(buf);
+//    LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+}
 /*
  * RecordAndGetPageWithFreeSpace - update info about a page and try again.
  *
@@ -188,6 +232,95 @@ RecordPageWithFreeSpace(Relation rel, BlockNumber heapBlk, Size spaceAvail)
 	addr = fsm_get_location(heapBlk, &slot);
 
 	fsm_set_and_search(rel, addr, slot, new_cat, 0);
+}
+
+/*!
+ *  This function aims to set a new heap page's free space to the fsm page.
+ *
+ *  1. First get the fsm page, and exclusive lock it.
+ *  2. Get the fsm page's value of that heap block (should be zero)
+ *  3. if that value is 0, set value as our newPageFreeSpace.
+ *  4. if that value is larger or equal than our neededFreeSpace, return true.
+ *  5. If that value is smaller than our neededFreeSpace, return false.
+ */
+bool
+UpdateNewPageSpaceAndExclusiveLock(Relation rel, BlockNumber heapBlk, Size newPageFreeSpace, Size neededFreeSpace) {
+    uint8 newPageCat;
+    uint8 neededCat;
+    FSMAddress  addr;
+    uint16 slot;
+    Buffer fsm_buffer;
+
+    newPageCat = fsm_space_avail_to_cat(newPageFreeSpace);
+    neededCat = fsm_space_avail_to_cat(neededFreeSpace);
+
+    addr = fsm_get_location(heapBlk, &slot);
+
+    fsm_buffer = fsm_readbuf(rel, addr, true);
+
+    LockBuffer(fsm_buffer, BUFFER_LOCK_EXCLUSIVE);
+
+    uint8 avail_cat = fsm_get_max_avail(BufferGetPage(fsm_buffer));
+
+    printf("to delete %s %d, avail = %d, newPage = %d, needed = %d\n", __func__ , __LINE__,
+           avail_cat, newPageCat, neededCat);
+    fflush(stdout);
+    if(avail_cat == 0) {
+        if (fsm_set_avail(BufferGetPage(fsm_buffer), slot, newPageCat)){
+            printf("to delete %s %d\n", __func__ , __LINE__);
+            fflush(stdout);
+            MarkBufferDirtyHint(fsm_buffer, false);
+            avail_cat = newPageCat;
+        }
+    }
+
+    if(neededCat > avail_cat) {
+        UnlockReleaseBuffer(fsm_buffer);
+//        LockBuffer(fsm_buffer, BUFFER_LOCK_UNLOCK);
+        return false;
+    }
+
+    return true;
+}
+
+//! This function access fsm to check whether the heapBlk has enough space (>= spcaceNeeded)
+//! If space is enough, then acquire the exclusive lock on FSM page, and return true
+//! Otherwire, return false
+//! If caller get true result, it's responsible to release the x-lock
+bool
+CheckPageSpaceAndExclusiveLock(Relation rel, BlockNumber heapBlk, Size spaceNeeded) {
+    printf("to delete %s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+    int cat_needed = fsm_space_avail_to_cat(spaceNeeded);
+    FSMAddress  addr;
+    uint16 slot;
+    Buffer fsm_buffer;
+
+    addr = fsm_get_location(heapBlk, &slot);
+
+    //
+    fsm_buffer = fsm_readbuf(rel, addr, true);
+
+
+    printf("to delete %s %d, buffer = %d\n", __func__ , __LINE__, fsm_buffer);
+    fflush(stdout);
+    LockBuffer(fsm_buffer, BUFFER_LOCK_EXCLUSIVE);
+
+    int avail_cat = fsm_get_max_avail(BufferGetPage(fsm_buffer));
+
+    if(cat_needed <= avail_cat){
+        printf("to delete %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, space is enough, needed=%d, avail=%d\n", __func__ , __LINE__,
+               rel->rd_node.spcNode, rel->rd_node.dbNode, rel->rd_node.relNode, MAIN_FORKNUM, heapBlk, cat_needed, avail_cat);
+        fflush(stdout);
+        return true;
+    }
+    else {
+        printf("to delete %s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+        UnlockReleaseBuffer(fsm_buffer);
+//        LockBuffer(fsm_buffer, BUFFER_LOCK_UNLOCK);
+        return false;
+    }
 }
 
 /*
@@ -683,11 +816,42 @@ fsm_set_and_search(Relation rel, FSMAddress addr, uint16 slot,
 }
 
 /*
- * Search the tree for a heap page with at least min_cat of free space
+ * Add a new function fsm_search_heap(). For the heap related fsm approach,
+ * we change fsm's optimistic approach to pessimistic approach.
+ *
+ * For the kinds other from heap, we will still maintain optimistic approach,
+ * since the pessimistic approach needs callers to release fsm page lock after
+ * their works. And we don't want to update all the callers. We only update the
+ * heap caller functions.
  */
 static BlockNumber
-fsm_search(Relation rel, uint8 min_cat)
+fsm_search_heap(Relation rel, uint8 min_cat) {
+    return fsm_search_internal(rel, min_cat, true);
+}
+
+static BlockNumber
+fsm_search(Relation rel, uint8 min_cat) {
+    return fsm_search_internal(rel, min_cat, false);
+}
+
+/*
+ * Search the tree for a heap page with at least min_cat of free space
+ */
+/*!
+ *  Pessimistic means we should get and update fsm page in pessimistic way.
+ *  For pessimistic way, before we search/update the page, we should firstly
+ *  grab read/write locks.
+ *  And for the pessimistic approach, we will avoid reading disks. Only use
+ *  the fsm to get a page with enough free spaces.
+ *
+ *  For now, only the heap related parts will use pessimistic way, and other
+ *  part (like index) will keep using optimistic fsm approach.
+ */
+static BlockNumber
+fsm_search_internal(Relation rel, uint8 min_cat, bool pessimistic)
 {
+    printf("to delete %s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 	int			restarts = 0;
 	FSMAddress	addr = FSM_ROOT_ADDRESS;
 
@@ -714,19 +878,55 @@ fsm_search(Relation rel, uint8 min_cat)
 		else
 			slot = -1;
 
+        //! Got a slot with enough space using fsm
 		if (slot != -1)
 		{
+            printf("to delete %s %d\n", __func__ , __LINE__);
+            fflush(stdout);
 			/*
 			 * Descend the tree, or return the found block if we're at the
 			 * bottom.
 			 */
-			if (addr.level == FSM_BOTTOM_LEVEL)
-				return fsm_get_heap_blk(addr, slot);
+			if (addr.level == FSM_BOTTOM_LEVEL){
+                //! If the caller is not heap, then just return this "unsure" block number
+                //!     and the caller will validate whether this return has enough space.
+                if(!pessimistic)
+                    return fsm_get_heap_blk(addr, slot);
+
+                /*! For the heap caller, we should use x-lock this page and check it again.
+                 *  After locked, if this page still has enough space, then we return this
+                 *  block number to caller, and let caller to release fsm's x-lock after
+                 *  caller's work.
+                 */
+                buf = fsm_readbuf(rel, addr, false);
+                LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+                uint8 avail_cats = fsm_get_avail(BufferGetPage(buf), slot);
+                // This slot still have enough space after we got the exclusive locks
+                if(avail_cats >= min_cat) {
+                    printf("to delete %s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, space is enough, needed=%d, avail=%d\n", __func__ , __LINE__,
+                           rel->rd_node.spcNode, rel->rd_node.dbNode, rel->rd_node.relNode, MAIN_FORKNUM,
+                           fsm_get_heap_blk(addr, slot), min_cat, avail_cats);
+                    fflush(stdout);
+                    return fsm_get_heap_blk(addr, slot);
+                }
+
+                //! Now, we found this heap block don't have enough space. We will release
+                //! this fsm bottom page and re-search a heap page that have enough space.
+                printf("to delete %s %d\n", __func__ , __LINE__);
+                fflush(stdout);
+//                LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+                UnlockReleaseBuffer(buf);
+                //! Re-search from the root.
+                addr = FSM_ROOT_ADDRESS;
+                continue;
+            }
 
 			addr = fsm_get_child(addr, slot);
 		}
 		else if (addr.level == FSM_ROOT_LEVEL)
 		{
+            printf("to delete %s %d\n", __func__ , __LINE__);
+            fflush(stdout);
 			/*
 			 * At the root, failure means there's no page with enough free
 			 * space in the FSM. Give up.
@@ -737,7 +937,19 @@ fsm_search(Relation rel, uint8 min_cat)
 		{
 			uint16		parentslot;
 			FSMAddress	parent;
-
+            /*!
+             *  FOR PESSIMISTIC APPROACH:
+             *
+             *  Now we are in the middle level or bottom level. Our parent node
+             *  said this node should have enough space. However, when we reached
+             *  this node, it doesn't have enough space. There are two reasons,
+             *  1. the parent node is correct but another backend reached here before
+             *  us and occupies the free space. (This way won't update parent's info)
+             *  2. no other competing backends, and the parent node stores the stale
+             *  info, and wait for lazy-vacuum.
+             *  Both of the above two reason are belong to lazy vacuum. They are waiting
+             *  us to update middle-level or root-level nodes.
+             */
 			/*
 			 * At lower level, failure can happen if the value in the upper-
 			 * level node didn't reflect the value on the lower page. Update

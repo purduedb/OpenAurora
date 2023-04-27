@@ -43,6 +43,18 @@
  * When we insert 1st item on new page in INSERT, UPDATE, HOT_UPDATE,
  * or MULTI_INSERT, we can (and we do) restore entire page in redo
  */
+/*!
+ *  In our cloud native db structure, we try to avoid fetch heap page data
+ *  in compute node while we trying to insert or update a page. So, while we
+ *  set this XLOG_HEAP_INIT_PAGE flag, when replaying, server node should
+ *  check whether the page is a "NEW_PAGE", if it is a new page, do the
+ *  initialization work, else just ignore this flag.
+ *
+ *  This is a speculative flag. If we set this flag, it is possible that we
+ *  need to initialize some pages inside this xlog in server. However, if
+ *  we don't set this flag, we can make sure we don't need to do initialization
+ *  in the server.
+ */
 #define XLOG_HEAP_INIT_PAGE		0x80
 /*
  * We ran out of opcodes, so heapam.c now has a second RmgrId.  These opcodes

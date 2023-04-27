@@ -49,7 +49,7 @@ extern uint64_t RpcXLogFlushedLsn;
 
 //#define DEBUG_TIMING 1
 //#define INFO_FUNC_START
-//#define INFO_FUNC_START2
+#define INFO_FUNC_START3
 //#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 
@@ -290,6 +290,9 @@ public:
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn);
         fflush(stdout);
 #endif
+        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blkNum = %d, lsn = %ld\n", __func__ , __FILE__, __LINE__,
+               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn);
+        fflush(stdout);
 
 #ifdef DEBUG_TIMING
         struct timeval start, end;
@@ -674,7 +677,13 @@ public:
 #ifdef ENABLE_FUNCTION_TIMING
         functionTiming.RecordTime(__LINE__);
 #endif
-
+        printf("%s %d, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, replayListSize=%d, basePageLsn=%lu\n",
+               __func__ ,__LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, _forknum, _blknum, listSize, PageGetLSN(page1));
+        for(int i = 0; i < listSize; i++) {
+            printf("%lu, ", toReplayList[i]);
+        }
+        printf("\n");
+        fflush(stdout);
         ApplyLsnList(rnode, (ForkNumber)_forknum, (BlockNumber)_blknum, reinterpret_cast<XLogRecPtr *>(toReplayList), listSize, page1, page2);
 #ifdef ENABLE_FUNCTION_TIMING
         functionTiming.RecordTime(__LINE__);
@@ -684,6 +693,9 @@ public:
         __func__, __LINE__, rnode.relNode, listSize, toReplayList[listSize-1], PageGetLSN(page2));
         fflush(stdout);
 #endif
+        printf("%s %d, rel = %lu, replayLsnSize = %d targetLsn = %lu, page real lsn = %lu\n",
+               __func__, __LINE__, rnode.relNode, listSize, toReplayList[listSize-1], PageGetLSN(page2));
+        fflush(stdout);
 
 #ifdef DEBUG_TIMING
         RECORD_TIMING(&start, &end, &readBufferCommon[12], &readBufferCount[12])
@@ -1387,8 +1399,8 @@ public:
 #ifdef ENABLE_FUNCTION_TIMING
         FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
-#ifdef INFO_FUNC_START
-        printf("%s start\n", __func__ );
+#ifdef INFO_FUNC_START3
+        printf("%s start, fd = %d\n", __func__, _fd );
 #endif
         char *p = (char*)malloc(_seg_bytes+64);
          if(_start_off == -1) {
@@ -1433,7 +1445,7 @@ public:
         FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
         int32_t result = BasicOpenFile(_path.c_str(), _flags);
-#ifdef INFO_FUNC_START
+#ifdef INFO_FUNC_START3
         printf("%s start, fileName = %s, result = %d\n", __func__ , _path.c_str(), result);
         fflush(stdout);
 #endif

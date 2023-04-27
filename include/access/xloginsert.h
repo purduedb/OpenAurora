@@ -44,6 +44,7 @@ extern void XLogSetRecordFlags(uint8 flags);
 extern XLogRecPtr XLogInsert(RmgrId rmid, uint8 info);
 extern void XLogEnsureRecordSpace(int max_block_id, int ndatas);
 extern void XLogRegisterData(char *data, int len);
+extern void HeapXLogRegisterBufferWithoutPage(uint8 block_id, RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, uint8 flags);
 extern void XLogRegisterBuffer(uint8 block_id, Buffer buffer, uint8 flags);
 extern void XLogRegisterBlock(uint8 block_id, RelFileNode *rnode,
 							  ForkNumber forknum, BlockNumber blknum, char *page,

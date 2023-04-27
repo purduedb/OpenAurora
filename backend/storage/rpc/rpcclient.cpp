@@ -283,6 +283,9 @@ public:
 
 void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, ForkNumber forkNum,
                           BlockNumber blockNum, ReadBufferMode mode) {
+    printf("to delete %s start, spc = %ld, db = %ld, rel = %ld, fork = %d, blk = %ld, pid = %d\n", __func__ ,
+           reln->smgr_rnode.node.spcNode, reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, getpid());
+    ::fflush(stdout);
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 //    printf("%s start, pid = %d, spc = %ld, db = %ld, rel = %ld, fork = %d, blk = %ld, pid = %d\n", __func__ , getpid(),
@@ -988,6 +991,8 @@ int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
 }
 
 int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif

@@ -20,6 +20,8 @@
 
 /* prototypes for public functions in freespace.c */
 extern Size GetRecordedFreeSpace(Relation rel, BlockNumber heapBlk);
+extern BlockNumber GetHeapPageWithFreeSpace(Relation rel, Size spaceNeeded);
+extern void RecordFsmAvail(Relation rel, BlockNumber heapBlk, uint32 spaceNeeded);
 extern BlockNumber GetPageWithFreeSpace(Relation rel, Size spaceNeeded);
 extern BlockNumber RecordAndGetPageWithFreeSpace(Relation rel,
 												 BlockNumber oldPage,
@@ -35,5 +37,7 @@ extern BlockNumber FreeSpaceMapPrepareTruncateRel(Relation rel,
 extern void FreeSpaceMapVacuum(Relation rel);
 extern void FreeSpaceMapVacuumRange(Relation rel, BlockNumber start,
 									BlockNumber end);
+extern bool CheckPageSpaceAndExclusiveLock(Relation rel, BlockNumber heapBlk, Size spaceNeeded);
 
+extern bool UpdateNewPageSpaceAndExclusiveLock(Relation rel, BlockNumber heapBlk, Size newPageFreeSpace, Size neededFreeSpace);
 #endif							/* FREESPACE_H_ */

@@ -27,6 +27,7 @@ OBJS = \
 	logindex_hashmap.o \
 	logindex_func.o \
 	background_hashmap_vacuumer.o \
-	wakeup_latch.o
+	wakeup_latch.o \
+	polar_logindex_iterator.o
 
 include $(top_srcdir)/src/backend/common.mk

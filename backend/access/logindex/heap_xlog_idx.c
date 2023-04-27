@@ -285,7 +285,11 @@ polar_heap_xlog_insert(XLogReaderState *record, BufferTag *tag, Buffer *buffer)
             POLAR_INIT_BUFFER_FOR_REDO(record, 0, buffer);
 
             page = BufferGetPage(*buffer);
-            PageInit(page, BufferGetPageSize(*buffer), 0);
+            //! Cloud Native Storage Engine can't make sure whether this page is a NewPage
+            //! So, we should first check whether this page is a new page,
+            //!     then determine whether to initialize it or not.
+            if(PageIsNew(page))
+                PageInit(page, BufferGetPageSize(*buffer), 0);
             action = BLK_NEEDS_REDO;
         }
         else

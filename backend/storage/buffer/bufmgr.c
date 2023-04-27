@@ -35,6 +35,7 @@
 
 #include "access/tableam.h"
 #include "access/xlog.h"
+#include "access/polar_logindex.h"
 #include "catalog/catalog.h"
 #include "catalog/storage.h"
 #include "executor/instrument.h"
@@ -199,6 +200,7 @@ static PrivateRefCountEntry *NewPrivateRefCountEntry(Buffer buffer);
 static PrivateRefCountEntry *GetPrivateRefCountEntry(Buffer buffer, bool do_move);
 static inline int32 GetPrivateRefCount(Buffer buffer);
 static void ForgetPrivateRefCountEntry(PrivateRefCountEntry *ref);
+static BufferDesc *BufferPoolSearch(SMgrRelation smgr, ForkNumber forkNumber, BlockNumber blockNumber, bool *foundPtr);
 
 /*
  * Ensure that the PrivateRefCountArray has sufficient space to store one more
@@ -679,6 +681,38 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	return buf;
 }
 
+/*!
+ *  Check whether target block is in buffer pool now.
+ *  If exists, pin this page and return true; otherwise, return false;
+ */
+Buffer CheckBufferPoolAndPin(Relation rel, ForkNumber forkNumber, BlockNumber blockNumber, bool *foundPtr) {
+
+    BufferDesc *bufHdr;
+    BackendId backendID = rel->rd_backend;
+    RelFileNode relFileNode;
+    SMgrRelation smgr;
+
+    relFileNode.spcNode = rel->rd_node.spcNode;
+    relFileNode.dbNode = rel->rd_node.dbNode;
+    relFileNode.relNode = rel->rd_node.relNode;
+
+    smgr = smgropen(relFileNode, backendID);
+
+    ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
+
+    // If this is a local relation
+    if(backendID != InvalidBackendId) {
+        bufHdr = LocalBufferPoolSearch(smgr, forkNumber, blockNumber, foundPtr);
+    } else {
+        bufHdr = BufferPoolSearch(smgr, forkNumber, blockNumber, foundPtr);
+    }
+
+    if(*foundPtr == false)
+        return InvalidBuffer;
+
+    return BufferDescriptorGetBuffer(bufHdr);
+}
+
 
 /*
  * ReadBufferWithoutRelcache -- like ReadBufferExtended, but doesn't require
@@ -904,8 +938,11 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			if (track_io_timing)
 				INSTR_TIME_SET_CURRENT(io_start);
 
-			if(IsRpcClient)
+			if(IsRpcClient) {
                 RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+                BufferTag bufferTag = {smgr->smgr_rnode.node, forkNum, blockNum};
+                polar_compute_node_replay_buffer(&bufferTag, bufBlock);
+            }
 			else
 			    smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
 
@@ -1075,6 +1112,79 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
 
     LWLockRelease(newPartitionLock);
     return InvalidBuffer;
+}
+
+static BufferDesc *
+BufferPoolSearch(SMgrRelation smgr, ForkNumber forkNumber, BlockNumber blockNumber, bool *foundPtr) {
+    BufferTag	newTag;			/* identity of requested block */
+    uint32		newHash;		/* hash value for newTag */
+    LWLock	   *newPartitionLock;	/* buffer partition lock for it */
+    BufferTag	oldTag;			/* previous identity of selected buffer */
+    uint32		oldHash;		/* hash value for oldTag */
+    LWLock	   *oldPartitionLock;	/* buffer partition lock for it */
+    uint32		oldFlags;
+    int			buf_id;
+    BufferDesc *buf;
+    bool		valid;
+    uint32		buf_state;
+
+    /* create a tag so we can lookup the buffer */
+    INIT_BUFFERTAG(newTag, smgr->smgr_rnode.node, forkNumber, blockNumber);
+
+    /* determine its hash code and partition lock ID */
+    newHash = BufTableHashCode(&newTag);
+    newPartitionLock = BufMappingPartitionLock(newHash);
+
+    /* see if the block is in the buffer pool already */
+    LWLockAcquire(newPartitionLock, LW_SHARED);
+    buf_id = BufTableLookup(&newTag, newHash);
+    if (buf_id >= 0)
+    {
+        /*
+         * Found it.  Now, pin the buffer so no one can steal it from the
+         * buffer pool, and check to see if the correct data has been loaded
+         * into the buffer.
+         */
+        buf = GetBufferDescriptor(buf_id);
+
+        valid = PinBuffer(buf, NULL);
+
+        /* Can release the mapping lock as soon as we've pinned it */
+        LWLockRelease(newPartitionLock);
+
+        *foundPtr = true;
+
+        if (!valid)
+        {
+            /*
+             * We can only get here if (a) someone else is still reading in
+             * the page, or (b) a previous read attempt failed.  We have to
+             * wait for any active read attempt to finish, and then set up our
+             * own read attempt if the page is still not BM_VALID.
+             * StartBufferIO does it all.
+             */
+            if (StartBufferIO(buf, true))
+            {
+                /*
+                 * If we get here, previous attempts to read the buffer must
+                 * have failed ... but we shall bravely try again.
+                 */
+                *foundPtr = false;
+            }
+        }
+
+        return buf;
+    }
+
+    /*
+     * Didn't find it in the buffer pool.  We'll have to initialize a new
+     * buffer.  Remember to unlock the mapping lock while doing the work.
+     */
+    LWLockRelease(newPartitionLock);
+
+    *foundPtr = false;
+
+    return NULL;
 }
 
 /*

@@ -39,6 +39,7 @@
 #include "port/pg_crc32c.h"
 #include "postmaster/startup.h"
 #include "storage/ipc.h"
+#include "access/xlog.h"
 #include "utils/memutils.h"
 
 static log_index_io_err_t       logindex_io_err = 0;
@@ -123,7 +124,10 @@ log_index_item_max_lsn(log_idx_table_data_t *table, log_item_head_t *item)
 static Size
 log_index_mem_tbl_shmem_size(uint64 logindex_mem_tbl_size)
 {
+    // XI: log_index_snapshot_t is the header of logindexMemTables
+    //     initialize size as the log_index_snapshot_t size (without mem_table[])
 	Size size = offsetof(log_index_snapshot_t, mem_table);
+    // XI: add the size of logindexMemTables
 	size = add_size(size, mul_size(sizeof(log_mem_table_t), logindex_mem_tbl_size));
 
 	size = MAXALIGN(size);
@@ -140,25 +144,31 @@ log_index_mem_tbl_shmem_size(uint64 logindex_mem_tbl_size)
 static Size
 log_index_lwlock_shmem_size(uint64 logindex_mem_tbl_size)
 {
+    // For each logindex memory table, we need a LWLock to protect it
+    // also include LOG_INDEX_MEM_TBL_LWLOCK_NUM locks, one bloom filter lock and one logindex I/O lock
+    // LwLocks order is as follows:
+    // 1. mem_table[] lock
+    // 2. bloom filter lock
+    // 3. logindex hash table lock
+    // 4. logindex I/O lock
 	Size size = mul_size(sizeof(LWLockMinimallyPadded), LOG_INDEX_LWLOCK_NUM(logindex_mem_tbl_size));
 
 	return MAXALIGN(size);
 }
 
 Size
-polar_logindex_shmem_size(uint64 logindex_mem_tbl_size, int bloom_blocks)
+polar_logindex_shmem_size(uint64 logindex_mem_tbl_size)
 {
 	Size size = 0;
 
 	size = add_size(size, log_index_mem_tbl_shmem_size(logindex_mem_tbl_size));
-
-//	size = add_size(size, log_index_bloom_shmem_size(bloom_blocks));
 
 	size = add_size(size, log_index_lwlock_shmem_size(logindex_mem_tbl_size));
 
 	return CACHELINEALIGN(size);
 }
 
+void
 log_index_init_lwlock(log_index_snapshot_t *logindex_snapshot, int offset, int size, int tranche_id, const char *name)
 {
 	int i, j;
@@ -238,15 +248,6 @@ polar_logindex_snapshot_init()
 {
 	XLogRecPtr start_lsn = InvalidXLogRecPtr;
 
-//	if (!read_only)
-//	{
-//		char dir[MAXPGPATH];
-//		snprintf(dir, MAXPGPATH, "%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir);
-//		polar_validate_dir(dir);
-//
-//		pg_atomic_fetch_or_u32(&logindex_snapshot->state, POLAR_LOGINDEX_STATE_WRITABLE);
-//	}
-
 	start_lsn = polar_logindex_snapshot_base_init(logindexSnapShot, start_lsn);
 
 	ereport(LOG, (errmsg("Init %s succeed", logindexSnapShot->dir)));
@@ -306,6 +307,8 @@ polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_siz
 	Size        size;
 	char        item_name[POLAR_MAX_SHMEM_NAME];
 
+    // Calculate the size of the shared memory segment
+    //  only include the logindex_snapshot_t, mem_tables
 	size = log_index_mem_tbl_shmem_size(logindex_mem_tbl_size);
 
 	StaticAssertStmt(sizeof(log_item_head_t) == LOG_INDEX_TBL_SEG_SIZE,
@@ -316,12 +319,15 @@ polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_siz
 	StaticAssertStmt(LOG_INDEX_FILE_TBL_BLOOM_SIZE > sizeof(log_file_table_bloom_t),
 					 "LOG_INDEX_FILE_TBL_BLOOM_SIZE is not enough for log_file_table_bloom_t");
 
+    // item_name is "pg_logindex_snapshot"
 	snprintf(item_name, POLAR_MAX_SHMEM_NAME, "%s%s", name, LOGINDEX_SNAPSHOT_SUFFIX);
 
+    // Find or create a logindex_snapshot_t (and several mem_tables) in shared memory
 	logindex_snapshot = (logindex_snapshot_t)
 						ShmemInitStruct(item_name, size, &found_snapshot);
 	Assert(logindex_snapshot != NULL);
 
+    // item_name is "pg_logindex_lock"
 	snprintf(item_name, POLAR_MAX_SHMEM_NAME, "%s%s", name, LOGINDEX_LOCK_SUFFIX);
 
 	/* Align lwlocks to cacheline boundary */
@@ -339,28 +345,13 @@ polar_logindex_snapshot_shmem_init(const char *name, uint64 logindex_mem_tbl_siz
 		log_index_init_lwlock_array(logindex_snapshot, name, tranche_id_begin, tranche_id_end);
 
 		logindex_snapshot->max_allocated_seg_no = 0;
-		logindex_snapshot->table_flushable = table_flushable;
-		logindex_snapshot->extra_data = extra_data;
 
 		SpinLockInit(LOG_INDEX_SNAPSHOT_LOCK);
 
-		StrNCpy(logindex_snapshot->dir, name, NAMEDATALEN);
-//		logindex_snapshot->segment_cache = NULL;
 	}
 	else
 		Assert(found_snapshot && found_locks);
 
-	logindex_snapshot->bloom_ctl.PagePrecedes = log_index_page_precedes;
-	snprintf(item_name, POLAR_MAX_SHMEM_NAME, " %s%s", name, LOGINDEX_BLOOM_SUFFIX);
-
-	/*
-	 * Notice: When define tranche id for logindex, the last one is used for logindex bloom.
-	 * See the definition between LWTRANCE_WAL_LOGINDEX_BEGIN and LWTRANCE_WAL_LOGINDEX_END
-	 */
-//	SimpleLruInit(&logindex_snapshot->bloom_ctl, item_name,
-//				  bloom_blocks, 0,
-//				  LOG_INDEX_BLOOM_LRU_LOCK, name,
-//				  tranche_id_end, true);
 	return logindex_snapshot;
 }
 
@@ -371,101 +362,21 @@ polar_logindex_shmem_init(uint64 logindex_mem_tbl_size, int bloom_blocks) {
                                                           NULL, NULL);
 }
 
-static bool
-log_index_handle_update_v1_to_v2(log_index_meta_t *meta)
-{
-	if (polar_is_standby())
-		return false;
-
-	return true;
-}
-
-
-//XI: Read meta file("log_index_meta") from disk and validate data
-bool
-log_index_get_meta(log_index_snapshot_t *logindex_snapshot, log_index_meta_t *meta)
-{
-//	int         r;
-//	char        meta_path[MAXPGPATH];
-//	pg_crc32    crc;
-//	int fd;
-//
-//	MemSet(meta, 0, sizeof(log_index_meta_t));
-//
-//	snprintf(meta_path, MAXPGPATH, "%s/%s/%s", POLAR_DATA_DIR(), logindex_snapshot->dir, LOG_INDEX_META_FILE);
-//
-//	if ((fd = PathNameOpenFile(meta_path, O_RDONLY | PG_BINARY, true)) < 0)
-//		return false;
-//
-//
-//	r = polar_file_pread(fd, (char *)meta, sizeof(log_index_meta_t), 0, WAIT_EVENT_LOGINDEX_META_READ);
-//	logindex_errno = errno;
-//
-//	FileClose(fd);
-//
-//	if (r != sizeof(log_index_meta_t))
-//	{
-//		ereport(WARNING,
-//				(errmsg("could not read file \"%s\": read %d of %d and errno=%d",
-//						meta_path, r, (int) sizeof(log_index_meta_t), logindex_errno)));
-//
-//		return false;
-//	}
-//
-//	crc = meta->crc;
-//
-//	if (meta->magic != LOG_INDEX_MAGIC)
-//	{
-//		POLAR_LOG_LOGINDEX_META_INFO(meta);
-//		ereport(WARNING,
-//				(errmsg("The magic number of meta file is incorrect, got %d, expect %d",
-//						meta->magic, LOG_INDEX_MAGIC)));
-//
-//		return false;
-//	}
-//
-//	meta->crc = 0;
-//	meta->crc = log_index_calc_crc((unsigned char *)meta, sizeof(log_index_meta_t));
-//
-//	if (crc != meta->crc)
-//	{
-//		POLAR_LOG_LOGINDEX_META_INFO(meta);
-//		ereport(WARNING,
-//				(errmsg("The crc of file %s is incorrect, got %d but expect %d", meta_path,
-//						crc, meta->crc)));
-//
-//		return false;
-//	}
-//
-//	if (meta->version != LOG_INDEX_VERSION
-//			&& !log_index_data_compatible(meta))
-//	{
-//		POLAR_LOG_LOGINDEX_META_INFO(meta);
-//		ereport(WARNING,
-//				(errmsg("The version is incorrect and incompatible, got %d, expect %d",
-//						meta->version, LOG_INDEX_VERSION)));
-//
-//		return false;
-//	}
-
-	return true;
-}
-
 //XI: Return meta.start_lsn
-XLogRecPtr
-polar_logindex_start_lsn(logindex_snapshot_t logindex_snapshot)
-{
-	XLogRecPtr start_lsn = InvalidXLogRecPtr;
-
-	if (logindex_snapshot != NULL)
-	{
-		LWLockAcquire(LOG_INDEX_IO_LOCK, LW_SHARED);
-		start_lsn = logindex_snapshot->meta.start_lsn;
-		LWLockRelease(LOG_INDEX_IO_LOCK);
-	}
-
-	return start_lsn;
-}
+//XLogRecPtr
+//polar_logindex_start_lsn(logindex_snapshot_t logindex_snapshot)
+//{
+//	XLogRecPtr start_lsn = InvalidXLogRecPtr;
+//
+//	if (logindex_snapshot != NULL)
+//	{
+//		LWLockAcquire(LOG_INDEX_IO_LOCK, LW_SHARED);
+//		start_lsn = logindex_snapshot->meta.start_lsn;
+//		LWLockRelease(LOG_INDEX_IO_LOCK);
+//	}
+//
+//	return start_lsn;
+//}
 
 // XI: iterate all the head with "key", (hash conflict)
 // XI: if this page doesn't exist in this table, return value is NULL
@@ -473,7 +384,8 @@ static log_seg_id_t
 log_index_mem_tbl_exists_page(BufferTag *tag,
 							  log_idx_table_data_t *table, uint32 key)
 {
-    //XI: if the key doesn't exist in this table, then $exists is NULL
+    //XI: if the key doesn't exist in this table, then $exists is 0
+    //  Get the slot's first segment id, if there are no segments in this slot, then $exists is 0
 	log_seg_id_t    exists = LOG_INDEX_TBL_SLOT_VALUE(table, key);
 	log_item_head_t *item;
 
@@ -646,6 +558,8 @@ log_index_append_lsn(log_mem_table_t *table, log_seg_id_t head, log_index_lsn_t 
 //      if table is full or old(lsn doesn't match), loop to next mem_table and
 //          set it as inactive talbe, also update global variable(active_table id)
 //      otherwise, adopt the current active table, return (active_table->free_head++)
+//TODO: XI: Since we are checking the available table in a loop mode, when the next table is an
+//      old and inactive table, we will clean this table and set it as new and active table
 static log_seg_id_t
 log_index_next_free_seg(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn, log_mem_table_t **active_table)
 {
@@ -687,7 +601,14 @@ log_index_next_free_seg(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn,
 			}
 			else //XI: table's free head++
 				dst = LOG_INDEX_MEM_TBL_UPDATE_FREE_HEAD(active);
-		}
+		} else { // If this table is not active, we will set it as new active table
+            //XI: set table's state as ACTIVE and NEW
+            LOG_INDEX_MEM_TBL_NEW_ACTIVE(active, lsn);
+            //XI: set table's prefix_lsn with the current parameter lsn
+            LOG_INDEX_MEM_TBL_SET_PREFIX_LSN(active, lsn);
+            //XI: return table's free_head++
+            dst = LOG_INDEX_MEM_TBL_UPDATE_FREE_HEAD(active);
+        }
 
 		if (dst != LOG_INDEX_TBL_INVALID_SEG)
 			return dst;
@@ -695,10 +616,12 @@ log_index_next_free_seg(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn,
 		if (next_mem_id != -1)
 		{
             // XI: change to new active table
+            // XI: set local pointer active to the new active table
 			active = LOG_INDEX_MEM_TBL(next_mem_id);
+            // XI: set return value active_table to the new active table
 			*active_table = active;
 
-			NOTIFY_LOGINDEX_BG_WORKER(logindex_snapshot->bg_worker_latch);
+//			NOTIFY_LOGINDEX_BG_WORKER(logindex_snapshot->bg_worker_latch);
 		}
 
 //		pgstat_report_wait_start(WAIT_EVENT_LOGINDEX_WAIT_ACTIVE);
@@ -707,6 +630,7 @@ log_index_next_free_seg(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn,
 
 		if (next_mem_id != -1)
 		{
+            // XI: Update snapshot variable ACTIVE_ID
 			SpinLockAcquire(LOG_INDEX_SNAPSHOT_LOCK);
 			LOG_INDEX_MEM_TBL_ACTIVE_ID = next_mem_id;
 			SpinLockRelease(LOG_INDEX_SNAPSHOT_LOCK);
@@ -799,7 +723,7 @@ log_index_truncate(log_index_snapshot_t *logindex_snapshot, XLogRecPtr lsn)
 	bloom_page = LOG_INDEX_TBL_BLOOM_PAGE_NO(max_unused_tid);
 	elog(LOG, "logindex truncate bloom id=%ld page=%ld", max_unused_tid, bloom_page);
 
-	SimpleLruTruncate(&logindex_snapshot->bloom_ctl, bloom_page);
+//	SimpleLruTruncate(&logindex_snapshot->bloom_ctl, bloom_page);
 
 //	if (max_segment_no - min_segment_no < polar_max_logindex_files)
 //	{
@@ -866,6 +790,8 @@ log_index_insert_lsn(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *l
 	Assert(lsn_info->prev_lsn < lsn_info->lsn);
 
 	active = LOG_INDEX_MEM_TBL_ACTIVE();
+    printf("%s %d: current active table is %d\n", __FILE__, __LINE__, LOG_INDEX_MEM_TBL_ACTIVE_ID);
+    fflush(stdout);
 
 	/*
 	 * 1. Logindex table state is atomic uint32, it's safe to change state without table lock
@@ -878,9 +804,17 @@ log_index_insert_lsn(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *l
 
 	new_item = (head == LOG_INDEX_TBL_INVALID_SEG);
 
+    if(new_item)
+        printf("%s %d: new_item\n", __FILE__, __LINE__);
+    else
+        printf("%s %d: old item\n", __FILE__, __LINE__);
+    fflush(stdout);
+
     // XI: if the page exists in the list and list isn't full
 	if (!new_item && !log_index_mem_seg_full(active, head))
 	{
+        printf("%s %d: append lsn to the tail node\n", __FILE__, __LINE__);
+        fflush(stdout);
 		uint8 idx;
 		log_item_head_t *item;
 
@@ -901,6 +835,8 @@ log_index_insert_lsn(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *l
         //XI: dst is the free_head value in the current active_table
         //XI: in this function, the active table may change, which means old_active!=active
 		dst = log_index_next_free_seg(logindex_snapshot, lsn_info->lsn, &active);
+        printf("%s %d, assign it to active table %d, segment %d\n", __FILE__, __LINE__, LOG_INDEX_MEM_TBL_ACTIVE_ID, dst);
+        fflush(stdout);
 
 		Assert(dst != LOG_INDEX_TBL_INVALID_SEG);
 
@@ -929,6 +865,7 @@ log_index_insert_lsn(log_index_snapshot_t *logindex_snapshot, log_index_lsn_t *l
 void
 polar_logindex_add_lsn(BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn)
 {
+    // Calculate the slot number in hash table
 	uint32      key = LOG_INDEX_MEM_TBL_HASH_PAGE(tag);
 	log_index_lsn_t lsn_info;
 
@@ -940,38 +877,6 @@ polar_logindex_add_lsn(BufferTag *tag, XLogRecPtr prev, XLogRecPtr lsn)
 	lsn_info.lsn = lsn;
 	lsn_info.prev_lsn = prev;
 
-    //XI: if the state is not ADDING, maybe INITIALIZED??
-	if (unlikely(!polar_logindex_check_state(logindexSnapShot, POLAR_LOGINDEX_STATE_ADDING)))
-	{
-		/* Insert logindex from meta->start_lsn, so We don't save logindex which lsn is less then meta->start_lsn */
-//		if (lsn < meta->start_lsn)
-//			return;
-
-		/*
-		 * If log index initialization is not finished
-		 * we don't save lsn if it's less than max saved lsn,
-		 * which means it's already in saved table
-		 */
-//		if (lsn < meta->max_lsn)
-//			return;
-
-		/*
-		 * If lsn is equal to max saved lsn then
-		 * we check whether the tag is in saved table
-		 */
-        //XI: this function check whether previous table (active_id-1)'s the last record
-        //      if what we want (LSN matches and page_tag matches).
-//		if (meta->max_lsn == lsn
-//				&& log_index_exists_in_saved_table(logindex_snapshot, &lsn_info))
-//			return;
-
-		/*
-		 * If we come here which means complete to check lsn overlap
-		 * then we can save lsn to logindex memory table
-		 */
-		pg_atomic_fetch_or_u32(&logindexSnapShot->state, POLAR_LOGINDEX_STATE_ADDING);
-		elog(LOG, "%s log index is insert from %lx", logindexSnapShot->dir, lsn);
-	}
 
     //XI: Insert a new segment to active table (or append lsn to not full node),
     //      this process may include changing active table.
@@ -1262,4 +1167,39 @@ polar_xlog_decode_data(XLogReaderState *state)
         default:
             break;
     }
+}
+
+/*
+ * This function will check whether there are some xlogs for this page that not flushed to storage node.
+ * If there are, replay the page with the xlog from WAL_CACHE.
+ *
+ * Scenario: We want to eliminate read page when we update/write pages. For these write ( for example heap_insert),
+ * we will only write xlogs.
+ * However, there is a problem:
+ *  1. Transaction Begin;
+ *  2. Insert a tuple to page A; (A cache miss, only write xlog to WAL_CACHE)
+ *  3. Read page A; (A cache miss, read from storage node, but it is old version without the tuple inserted in step 2)
+ *
+ * To solve this problem, we will check whether there are some xlogs for this page that not flushed to storage node.
+ * If there is, replay the page with the xlog from WAL_CACHE.
+ */
+
+void
+polar_compute_node_replay_buffer(BufferTag *bufferTag, char* page) {
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+    log_index_lsn_t *lsn_info;
+    XLogRecPtr pageLsn = PageGetLSN(page);
+    log_index_page_iter_t iter = polar_logindex_create_page_iterator(logindexSnapShot, bufferTag, pageLsn, GetLogWrtResultLsn()+20*8*1024, false);
+
+    printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
+    while ((lsn_info = polar_logindex_page_iterator_next(iter)) != NULL)
+    {
+        printf("%s %d, spcNode = %lu dbNode = %lu relNode = %lu forkNum = %d blockNum = %lu lsn = %lu\n", __func__ , __LINE__, bufferTag->rnode.spcNode, bufferTag->rnode.dbNode, bufferTag->rnode.relNode, bufferTag->forkNum, bufferTag->blockNum, lsn_info->lsn);
+        fflush(stdout);
+    }
+    printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
+    polar_logindex_release_page_iterator(iter);
 }

@@ -140,9 +140,10 @@
 
 #define LOG_INDEX_MEM_TBL_NEW_ACTIVE(active, lsn) \
 	{ \
-		SpinLockAcquire(LOG_INDEX_SNAPSHOT_LOCK); \
+		SpinLockAcquire(LOG_INDEX_SNAPSHOT_LOCK);       \
+        MemSet(active, 0, sizeof(log_mem_table_t));               \
 		(active)->data.idx_table_id = (++logindex_snapshot->max_idx_table_id); \
-		SpinLockRelease(LOG_INDEX_SNAPSHOT_LOCK); \
+		SpinLockRelease(LOG_INDEX_SNAPSHOT_LOCK);       \
 		(active)->data.max_lsn = InvalidXLogRecPtr; \
 		(active)->data.min_lsn = UINT64_MAX; \
 		(active)->data.prefix_lsn = ((lsn) >> 32) ; \
@@ -358,19 +359,14 @@ typedef struct log_index_snapshot_t
 {
 	LWLockMinimallyPadded      *lwlock_array;
 	int                         mem_tbl_size;
-	logindex_table_flushable    table_flushable;
-	void						*extra_data; /* Extra data for table_flushable to use. */
-	SlruCtlData                 bloom_ctl;
 	slock_t                     lock;
 	char                        dir[NAMEDATALEN];
 	XLogRecPtr                  max_lsn;
 	pg_atomic_uint32            state;
 	uint32                      active_table;
 	log_idx_table_id_t          max_idx_table_id;
-	log_index_promoted_info_t   promoted_info;
 	log_index_meta_t            meta;
 	uint64                      max_allocated_seg_no;
-//	polar_local_cache           segment_cache;
 	struct Latch                *bg_worker_latch;
 	char                        trache_name[LOG_INDEX_MAX_TRACHE][NAMEDATALEN];
 	log_mem_table_t             mem_table[FLEXIBLE_ARRAY_MEMBER];
@@ -462,17 +458,6 @@ extern log_item_head_t *log_index_tbl_find(BufferTag *tag, log_idx_table_data_t 
 extern void log_index_insert_lsn(logindex_snapshot_t logindex_snapshot, log_index_lsn_t *lsn_info, uint32 key);
 extern XLogRecPtr log_index_item_max_lsn(log_idx_table_data_t *table, log_item_head_t *item);
 extern pg_crc32 log_index_calc_crc(unsigned char *data, size_t size);
-
-extern void polar_log_index_write_meta(log_index_snapshot_t *logindex_snapshot, log_index_meta_t *meta, bool update);
-extern bool log_index_write_table(logindex_snapshot_t logindex_snapshot, log_mem_table_t *table);
-extern log_idx_table_data_t *log_index_read_table(logindex_snapshot_t logindex_snapshot, log_idx_table_id_t tid, log_mem_table_t **mem_table);
-extern log_file_table_bloom_t *log_index_get_tbl_bloom(logindex_snapshot_t logindex_snapshot, log_idx_table_id_t tid);
-extern bool log_index_get_meta(logindex_snapshot_t logindex_snapshot, log_index_meta_t *meta);
-extern void log_index_force_save_table(logindex_snapshot_t logindex_snapshot, log_mem_table_t *table);
-extern bool log_index_read_table_data(logindex_snapshot_t logindex_snapshot, log_idx_table_data_t *table, log_idx_table_id_t tid, int elevel);
-
-extern XLogRecPtr log_index_get_order_lsn(log_idx_table_data_t *table, uint32 order, log_index_lsn_t *lsn_info);
-extern void log_index_master_bg_write(logindex_snapshot_t logindex_snapshot);
 
 static inline log_item_head_t *
 log_index_item_head(log_idx_table_data_t *table, log_seg_id_t head)
