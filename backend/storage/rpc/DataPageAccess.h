@@ -10,7 +10,7 @@
 #include <thrift/TDispatchProcessor.h>
 #include <thrift/async/TConcurrentClientSyncInfo.h>
 #include <memory>
-#include "tutorial_types.h"
+#include "remote_disk_tutorial_types.h"
 
 namespace tutorial {
 
@@ -61,6 +61,7 @@ class DataPageAccessIf {
   virtual int32_t RpcPgFsyncNoWritethrough(const _File _fd) = 0;
   virtual int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) = 0;
   virtual void RpcStat(_Stat_Resp& _return, const _Path& _path) = 0;
+  virtual void RpcLStat(_Stat_Resp& _return, const _Path& _path) = 0;
   virtual int32_t RpcDirectoryIsEmpty(const _Path& _path) = 0;
   virtual int32_t RpcCopyDir(const _Path& _src, const _Path& _dst) = 0;
   virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum) = 0;
@@ -198,6 +199,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     return _return;
   }
   void RpcStat(_Stat_Resp& /* _return */, const _Path& /* _path */) {
+    return;
+  }
+  void RpcLStat(_Stat_Resp& /* _return */, const _Path& /* _path */) {
     return;
   }
   int32_t RpcDirectoryIsEmpty(const _Path& /* _path */) {
@@ -3103,6 +3107,110 @@ class DataPageAccess_RpcStat_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcLStat_args__isset {
+  _DataPageAccess_RpcLStat_args__isset() : _path(false) {}
+  bool _path :1;
+} _DataPageAccess_RpcLStat_args__isset;
+
+class DataPageAccess_RpcLStat_args {
+ public:
+
+  DataPageAccess_RpcLStat_args(const DataPageAccess_RpcLStat_args&);
+  DataPageAccess_RpcLStat_args& operator=(const DataPageAccess_RpcLStat_args&);
+  DataPageAccess_RpcLStat_args() : _path() {
+  }
+
+  virtual ~DataPageAccess_RpcLStat_args() noexcept;
+  _Path _path;
+
+  _DataPageAccess_RpcLStat_args__isset __isset;
+
+  void __set__path(const _Path& val);
+
+  bool operator == (const DataPageAccess_RpcLStat_args & rhs) const
+  {
+    if (!(_path == rhs._path))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcLStat_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcLStat_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcLStat_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcLStat_pargs() noexcept;
+  const _Path* _path;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcLStat_result__isset {
+  _DataPageAccess_RpcLStat_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcLStat_result__isset;
+
+class DataPageAccess_RpcLStat_result {
+ public:
+
+  DataPageAccess_RpcLStat_result(const DataPageAccess_RpcLStat_result&);
+  DataPageAccess_RpcLStat_result& operator=(const DataPageAccess_RpcLStat_result&);
+  DataPageAccess_RpcLStat_result() {
+  }
+
+  virtual ~DataPageAccess_RpcLStat_result() noexcept;
+  _Stat_Resp success;
+
+  _DataPageAccess_RpcLStat_result__isset __isset;
+
+  void __set_success(const _Stat_Resp& val);
+
+  bool operator == (const DataPageAccess_RpcLStat_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcLStat_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcLStat_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcLStat_presult__isset {
+  _DataPageAccess_RpcLStat_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcLStat_presult__isset;
+
+class DataPageAccess_RpcLStat_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcLStat_presult() noexcept;
+  _Stat_Resp* success;
+
+  _DataPageAccess_RpcLStat_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 typedef struct _DataPageAccess_RpcDirectoryIsEmpty_args__isset {
   _DataPageAccess_RpcDirectoryIsEmpty_args__isset() : _path(false) {}
   bool _path :1;
@@ -4139,6 +4247,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void RpcStat(_Stat_Resp& _return, const _Path& _path);
   void send_RpcStat(const _Path& _path);
   void recv_RpcStat(_Stat_Resp& _return);
+  void RpcLStat(_Stat_Resp& _return, const _Path& _path);
+  void send_RpcLStat(const _Path& _path);
+  void recv_RpcLStat(_Stat_Resp& _return);
   int32_t RpcDirectoryIsEmpty(const _Path& _path);
   void send_RpcDirectoryIsEmpty(const _Path& _path);
   int32_t recv_RpcDirectoryIsEmpty();
@@ -4211,6 +4322,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcPgFsyncNoWritethrough(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcLseek(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcStat(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcLStat(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcDirectoryIsEmpty(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcCopyDir(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -4249,6 +4361,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcPgFsyncNoWritethrough"] = &DataPageAccessProcessor::process_RpcPgFsyncNoWritethrough;
     processMap_["RpcLseek"] = &DataPageAccessProcessor::process_RpcLseek;
     processMap_["RpcStat"] = &DataPageAccessProcessor::process_RpcStat;
+    processMap_["RpcLStat"] = &DataPageAccessProcessor::process_RpcLStat;
     processMap_["RpcDirectoryIsEmpty"] = &DataPageAccessProcessor::process_RpcDirectoryIsEmpty;
     processMap_["RpcCopyDir"] = &DataPageAccessProcessor::process_RpcCopyDir;
     processMap_["RpcMdRead"] = &DataPageAccessProcessor::process_RpcMdRead;
@@ -4534,6 +4647,16 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return;
   }
 
+  void RpcLStat(_Stat_Resp& _return, const _Path& _path) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcLStat(_return, _path);
+    }
+    ifaces_[i]->RpcLStat(_return, _path);
+    return;
+  }
+
   int32_t RpcDirectoryIsEmpty(const _Path& _path) {
     size_t sz = ifaces_.size();
     size_t i = 0;
@@ -4739,6 +4862,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void RpcStat(_Stat_Resp& _return, const _Path& _path);
   int32_t send_RpcStat(const _Path& _path);
   void recv_RpcStat(_Stat_Resp& _return, const int32_t seqid);
+  void RpcLStat(_Stat_Resp& _return, const _Path& _path);
+  int32_t send_RpcLStat(const _Path& _path);
+  void recv_RpcLStat(_Stat_Resp& _return, const int32_t seqid);
   int32_t RpcDirectoryIsEmpty(const _Path& _path);
   int32_t send_RpcDirectoryIsEmpty(const _Path& _path);
   int32_t recv_RpcDirectoryIsEmpty(const int32_t seqid);

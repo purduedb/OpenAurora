@@ -573,13 +573,22 @@ int			postmaster_alive_fds[2] = {-1, -1};
 HANDLE		PostmasterHandle;
 #endif
 
+extern int IsRpcClient;
+
 /*
  * Postmaster main entry point
  */
 void
 PostmasterMain(int argc, char *argv[])
 {
-	int			opt;
+
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+
+    int			opt;
 	int			status;
 	char	   *userDoption = NULL;
 	bool		listen_addr_saved = false;

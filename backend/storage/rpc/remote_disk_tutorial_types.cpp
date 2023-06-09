@@ -4,7 +4,7 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated
  */
-#include "tutorial_types.h"
+#include "remote_disk_tutorial_types.h"
 
 #include <algorithm>
 #include <ostream>
@@ -122,118 +122,6 @@ void _Stat_Resp::printTo(std::ostream& out) const {
   out << "_Stat_Resp(";
   out << "_result=" << to_string(_result);
   out << ", " << "_stat_mode=" << to_string(_stat_mode);
-  out << ")";
-}
-
-
-_XLog_Init_File_Resp::~_XLog_Init_File_Resp() noexcept {
-}
-
-
-void _XLog_Init_File_Resp::__set__fd(const int32_t val) {
-  this->_fd = val;
-}
-
-void _XLog_Init_File_Resp::__set__use_existent(const int32_t val) {
-  this->_use_existent = val;
-}
-std::ostream& operator<<(std::ostream& out, const _XLog_Init_File_Resp& obj)
-{
-  obj.printTo(out);
-  return out;
-}
-
-
-uint32_t _XLog_Init_File_Resp::read(::apache::thrift::protocol::TProtocol* iprot) {
-
-  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
-  uint32_t xfer = 0;
-  std::string fname;
-  ::apache::thrift::protocol::TType ftype;
-  int16_t fid;
-
-  xfer += iprot->readStructBegin(fname);
-
-  using ::apache::thrift::protocol::TProtocolException;
-
-
-  while (true)
-  {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::apache::thrift::protocol::T_STOP) {
-      break;
-    }
-    switch (fid)
-    {
-      case 1:
-        if (ftype == ::apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32(this->_fd);
-          this->__isset._fd = true;
-        } else {
-          xfer += iprot->skip(ftype);
-        }
-        break;
-      case 2:
-        if (ftype == ::apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32(this->_use_existent);
-          this->__isset._use_existent = true;
-        } else {
-          xfer += iprot->skip(ftype);
-        }
-        break;
-      default:
-        xfer += iprot->skip(ftype);
-        break;
-    }
-    xfer += iprot->readFieldEnd();
-  }
-
-  xfer += iprot->readStructEnd();
-
-  return xfer;
-}
-
-uint32_t _XLog_Init_File_Resp::write(::apache::thrift::protocol::TProtocol* oprot) const {
-  uint32_t xfer = 0;
-  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
-  xfer += oprot->writeStructBegin("_XLog_Init_File_Resp");
-
-  xfer += oprot->writeFieldBegin("_fd", ::apache::thrift::protocol::T_I32, 1);
-  xfer += oprot->writeI32(this->_fd);
-  xfer += oprot->writeFieldEnd();
-
-  xfer += oprot->writeFieldBegin("_use_existent", ::apache::thrift::protocol::T_I32, 2);
-  xfer += oprot->writeI32(this->_use_existent);
-  xfer += oprot->writeFieldEnd();
-
-  xfer += oprot->writeFieldStop();
-  xfer += oprot->writeStructEnd();
-  return xfer;
-}
-
-void swap(_XLog_Init_File_Resp &a, _XLog_Init_File_Resp &b) {
-  using ::std::swap;
-  swap(a._fd, b._fd);
-  swap(a._use_existent, b._use_existent);
-  swap(a.__isset, b.__isset);
-}
-
-_XLog_Init_File_Resp::_XLog_Init_File_Resp(const _XLog_Init_File_Resp& other2) {
-  _fd = other2._fd;
-  _use_existent = other2._use_existent;
-  __isset = other2.__isset;
-}
-_XLog_Init_File_Resp& _XLog_Init_File_Resp::operator=(const _XLog_Init_File_Resp& other3) {
-  _fd = other3._fd;
-  _use_existent = other3._use_existent;
-  __isset = other3.__isset;
-  return *this;
-}
-void _XLog_Init_File_Resp::printTo(std::ostream& out) const {
-  using ::apache::thrift::to_string;
-  out << "_XLog_Init_File_Resp(";
-  out << "_fd=" << to_string(_fd);
-  out << ", " << "_use_existent=" << to_string(_use_existent);
   out << ")";
 }
 
@@ -364,19 +252,19 @@ void swap(_Smgr_Relation &a, _Smgr_Relation &b) {
   swap(a.__isset, b.__isset);
 }
 
-_Smgr_Relation::_Smgr_Relation(const _Smgr_Relation& other4) {
-  _spc_node = other4._spc_node;
-  _db_node = other4._db_node;
-  _rel_node = other4._rel_node;
-  _backend_id = other4._backend_id;
-  __isset = other4.__isset;
+_Smgr_Relation::_Smgr_Relation(const _Smgr_Relation& other2) {
+  _spc_node = other2._spc_node;
+  _db_node = other2._db_node;
+  _rel_node = other2._rel_node;
+  _backend_id = other2._backend_id;
+  __isset = other2.__isset;
 }
-_Smgr_Relation& _Smgr_Relation::operator=(const _Smgr_Relation& other5) {
-  _spc_node = other5._spc_node;
-  _db_node = other5._db_node;
-  _rel_node = other5._rel_node;
-  _backend_id = other5._backend_id;
-  __isset = other5.__isset;
+_Smgr_Relation& _Smgr_Relation::operator=(const _Smgr_Relation& other3) {
+  _spc_node = other3._spc_node;
+  _db_node = other3._db_node;
+  _rel_node = other3._rel_node;
+  _backend_id = other3._backend_id;
+  __isset = other3.__isset;
   return *this;
 }
 void _Smgr_Relation::printTo(std::ostream& out) const {

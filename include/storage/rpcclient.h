@@ -36,6 +36,7 @@ extern "C" {
     int32_t RpcPgFsyncNoWritethrough(const int32_t _fd);
     int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag);
     int RpcStat(const char* path,struct stat* _stat);
+    int RpcLStat(const char* path,struct stat* _stat);
     int32_t RpcDirectoryIsEmpty(const char* path);
     int32_t RpcCopyDir(const char* _src, const char* _dst);
     int32_t RpcPgFsync(const int32_t _fd);

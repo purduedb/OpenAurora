@@ -158,6 +158,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcStat\n");
   }
 
+  void RpcLStat(_Stat_Resp& _return, const _Path& _path) {
+    // Your implementation goes here
+    printf("RpcLStat\n");
+  }
+
   int32_t RpcDirectoryIsEmpty(const _Path& _path) {
     // Your implementation goes here
     printf("RpcDirectoryIsEmpty\n");

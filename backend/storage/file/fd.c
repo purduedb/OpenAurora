@@ -352,6 +352,13 @@ int stat_rpc_local(const char* path,struct stat* _stat) {
         return stat(path, _stat);
 }
 
+int lstat_rpc_local(const char* path,struct stat* _stat) {
+    if(IsRpcClient)
+        return RpcLStat(path, _stat);
+    else
+        return stat(path, _stat);
+}
+
 int pg_fsync_rpc_local(int fd) {
 #ifdef START_FUNC_INFO
     printf("%s fd = %d, isRpc= %d\n",__func__, fd, IsRpcClient);
@@ -373,8 +380,9 @@ durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elev
 
 int
 durable_unlink_rpc_local(const char *fname, int elevel) {
-    if (IsRpcClient)
+    if (IsRpcClient) {
         return RpcDurableUnlink(fname, elevel);
+    }
     else
         return durable_unlink(fname, elevel);
 }

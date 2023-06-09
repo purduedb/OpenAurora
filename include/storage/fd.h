@@ -254,6 +254,8 @@ extern int pg_fsync_rpc_local(int fd);
 
 extern int stat_rpc_local(const char* path,struct stat* _stat);
 
+extern int lstat_rpc_local(const char* path,struct stat* _stat);
+
 #ifdef __cplusplus
 }
 #endif
