@@ -82,10 +82,17 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
+//        printf("%s start, fd = %d, content length = %lu\n", __func__ , _fd, _page.length());
+//        fflush(stdout);
         // Your implementation goes here
         char buff[BLCKSZ+8];
         _page.copy(buff, BLCKSZ);
-        return FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+        int write_len = FileWrite(_fd, buff, _amount, _seekpos, _wait_event_info);
+        if(write_len != BLCKSZ) {
+            printf("%s %d, fd = %d, expected write len = %d, result write len = %d\n", __func__ , __LINE__, _fd, _amount, write_len);
+        }
+
+        return write_len;
 
 //        int writeLen = 0;
 //        char * page = (char *) malloc(BLCKSZ);
@@ -203,6 +210,7 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
+//        printf("%s start, fd = %d\n", __func__ , _fd);
         return CloseTransientFile(_fd);
     }
 
@@ -227,12 +235,18 @@ public:
 
     void RpcPgPRead(_Page& _return, const _File _fd, const int32_t _seg_bytes, const _Off_t _start_off) {
 #ifdef INFO_FUNC_START
-        printf("%s start\n", __func__ );
+        printf("%s start, fd = %d, seg_bytes = %d\n", __func__, _fd , _seg_bytes);
 #endif
+        size_t len;
         char *p = (char*)malloc(_seg_bytes+64);
-        pg_pread(_fd, p, _seg_bytes, _start_off);
+        if(_start_off == -1) {
+            len = read(_fd, p, _seg_bytes);
+        } else {
+            len = pg_pread(_fd, p, _seg_bytes, _start_off);
+        }
         _return.assign(p, _seg_bytes);
         free(p);
+//        printf("%s %d, read len = %lu\n", __func__ , __LINE__, len);
         return;
     }
 
@@ -240,7 +254,12 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
-        int32_t result =  pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+        int32_t result;
+        if(_offset == -1) {
+            result = write(_fd, _page.c_str(), _amount);
+        } else {
+            result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
+        }
 //        printf("RpcPgPWrite, result = %d\n", result);
         return result;
     }
@@ -249,14 +268,17 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
+        printf("%s start, fd = %d\n", __func__ , _fd);
         return close(_fd);
     }
 
     int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
+        int fd = BasicOpenFile(_path.c_str(), _flags);
 #ifdef INFO_FUNC_START
-        printf("%s start\n", __func__ );
+        printf("%s start, path = %s, return fd = %d\n", __func__ , _path.c_str(), fd);
 #endif
-        return BasicOpenFile(_path.c_str(), _flags);
+
+        return fd;
     }
 
     int32_t RpcPgFdatasync(const _File _fd) {
@@ -286,6 +308,13 @@ public:
 #endif
         struct stat result;
         _return._result = stat(_path.c_str(), &result);
+        _return._stat_mode = result.st_mode;
+        return;
+    }
+
+    void RpcLStat(_Stat_Resp& _return, const _Path& _path) {
+        struct stat result;
+        _return._result = lstat(_path.c_str(), &result);
         _return._stat_mode = result.st_mode;
         return;
     }
@@ -354,6 +383,8 @@ public:
 #ifdef INFO_FUNC_START
         printf("%s start\n", __func__ );
 #endif
+//        printf("%s start, oldFile = %s, newFile = %s\n", __func__ , _oldFname.c_str(), _newFname.c_str());
+//        fflush(stdout);
         return durable_rename_excl(_oldFname.c_str(), _newFname.c_str(), _elevel);
     }
     /**

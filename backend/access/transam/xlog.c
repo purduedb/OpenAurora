@@ -113,7 +113,7 @@
 
 #define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
 //#define stat(_path, _stat) stat_rpc_local(_path, _stat)
-#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag)
+#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag, __func__, __LINE__)
 #define durable_rename_excl(_old, _new, _elevel) durable_rename_excl_rpc_local(_old, _new, _elevel)
 #endif
 
@@ -131,6 +131,21 @@ int pg_pwrite_rpc_local(int fd, char *p, int amount, int offset) {
         return RpcPgPWrite(fd, p, amount, offset);
     else
         return pg_pwrite(fd, p, amount, offset);
+}
+
+
+int write_rpc_local(int fd, char *p, int amount) {
+    if(IsRpcClient)
+        return RpcPgPWrite(fd, p, amount, -1);
+    else
+        return write(fd, p, amount);
+}
+
+int read_rpc_local(int fd, char *p, int amount) {
+    if(IsRpcClient)
+        return RpcPgPRead(fd, p, amount, -1);
+    else
+        return read(fd, p, amount);
 }
 
 extern uint32 bootstrap_data_checksum_version;
@@ -3377,7 +3392,7 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 		{
 			errno = 0;
 #ifdef RPC_REMOTE_DISK
-			if (pg_pwrite_rpc_local(fd, zbuffer.data, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+            if (write_rpc_local(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 #else
             if (write(fd, zbuffer.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 #endif
@@ -3461,7 +3476,7 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 	 * CheckPointSegments.
 	 */
 	max_segno = logsegno + CheckPointSegments;
-	if (!InstallXLogFileSegment(&installed_segno, tmppath,
+    if (!InstallXLogFileSegment(&installed_segno, tmppath,
 								*use_existent, max_segno,
 								use_lock))
 	{
@@ -3564,7 +3579,7 @@ XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 			pgstat_report_wait_start(WAIT_EVENT_WAL_COPY_READ);
 
 #ifdef RPC_REMOTE_DISK
-            r = pg_pread_rpc_local(srcfd, buffer.data, nread, 0);
+            r = read_rpc_local(srcfd, buffer.data, nread);
 #elif
             r = read(srcfd, buffer.data, nread);
 #endif
@@ -3586,7 +3601,7 @@ XLogFileCopy(XLogSegNo destsegno, TimeLineID srcTLI, XLogSegNo srcsegno,
 		errno = 0;
 		pgstat_report_wait_start(WAIT_EVENT_WAL_COPY_WRITE);
 #ifdef RPC_REMOTE_DISK
-		if ((int) pg_pwrite_rpc_local(fd, buffer.data, sizeof(buffer), 0) != (int) sizeof(buffer))
+        if ((int) write_rpc_local(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
 #else
         if ((int) write(fd, buffer.data, sizeof(buffer)) != (int) sizeof(buffer))
 #endif
@@ -3683,7 +3698,11 @@ InstallXLogFileSegment(XLogSegNo *segno, char *tmppath,
 	else
 	{
 		/* Find a free slot to put it in */
-		while (stat(path, &stat_buf) == 0)
+#ifdef RPC_REMOTE_DISK
+		while (stat_rpc_local(path, &stat_buf) == 0)
+#else
+        while (stat(path, &stat_buf) == 0)
+#endif
 		{
 			if ((*segno) >= max_segno)
 			{
@@ -4255,11 +4274,19 @@ RemoveXlogFile(const char *segname, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 	 * segment. Only recycle normal files, pg_standby for example can create
 	 * symbolic links pointing to a separate archive directory.
 	 */
-	if (wal_recycle &&
+#ifdef RPC_REMOTE_DISK
+    if (wal_recycle &&
+		endlogSegNo <= recycleSegNo &&
+		lstat_rpc_local(path, &statbuf) == 0 && S_ISREG(statbuf.st_mode) &&
+		InstallXLogFileSegment(&endlogSegNo, path,
+							   true, recycleSegNo, true))
+#else
+        if (wal_recycle &&
 		endlogSegNo <= recycleSegNo &&
 		lstat(path, &statbuf) == 0 && S_ISREG(statbuf.st_mode) &&
 		InstallXLogFileSegment(&endlogSegNo, path,
 							   true, recycleSegNo, true))
+#endif
 	{
 		ereport(DEBUG2,
 				(errmsg("recycled write-ahead log file \"%s\"",
@@ -4752,7 +4779,7 @@ WriteControlFile(void)
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_WRITE);
 #ifdef RPC_REMOTE_DISK
-	if (pg_pwrite_rpc_local(fd, buffer, PG_CONTROL_FILE_SIZE, 0) != PG_CONTROL_FILE_SIZE)
+    if (write_rpc_local(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
 #else
     if (write(fd, buffer, PG_CONTROL_FILE_SIZE) != PG_CONTROL_FILE_SIZE)
 #endif
@@ -4804,7 +4831,7 @@ ReadControlFile(void)
 	pgstat_report_wait_start(WAIT_EVENT_CONTROL_FILE_READ);
 
 #ifdef RPC_REMOTE_DISK
-    r = pg_pread_rpc_local(fd, ControlFile, sizeof(ControlFileData), 0);
+    r = read_rpc_local(fd, ControlFile, sizeof(ControlFileData));
 #elif
 	r = read(fd, ControlFile, sizeof(ControlFileData));
 #endif
@@ -5398,7 +5425,7 @@ BootStrapXLOG(void)
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_WAL_BOOTSTRAP_WRITE);
 #ifdef RPC_REMOTE_DISK
-	if (pg_pwrite_rpc_local(openLogFile, page, XLOG_BLCKSZ, 0) != XLOG_BLCKSZ)
+    if (write_rpc_local(openLogFile, page, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 #else
 	if (write(openLogFile, page, XLOG_BLCKSZ) != XLOG_BLCKSZ)
 #endif
