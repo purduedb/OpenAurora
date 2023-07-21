@@ -121,6 +121,31 @@ public:
 };
 #endif
 
+#define DEBUG_TIMING
+
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <stdlib.h>
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, function_name) \
+do { \
+    gettimeofday(end_p, NULL); \
+    long long diff = ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec)); \
+    printf("DEBUG_TIMING %s spent %lld us\n", function_name, diff);                                         \
+    fflush(stdout);                                                \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+
+#endif
+
 void RpcInit()
 {
     int myPid = getpid();
@@ -153,11 +178,18 @@ void RpcFileClose(const int fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
     //rpctransport->open();
     client->RpcFileClose((_File)fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return;
 }
 
@@ -165,18 +197,29 @@ void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, c
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
 //    printf("[%s] spcNode = %ld, dbNode = %ld, isRedo = %d\n", __func__ , _spcnode, _dbnode, isRedo);
     //rpctransport->open();
     client->RpcTablespaceCreateDbspace(_spcnode, _dbnode, isRedo);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return;
 }
 
 int RpcPathNameOpenFile(const char* path, const int32_t _flag) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -187,12 +230,19 @@ int RpcPathNameOpenFile(const char* path, const int32_t _flag) {
     //rpctransport->open();
     result = client->RpcPathNameOpenFile(_path, _flag);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, const int64_t _seekpos, const int32_t _wait_event_info) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
 //    printf("%s start, fd = %d\n", __func__ , _fd);
 //    fflush(stdout);
@@ -205,12 +255,19 @@ int32_t RpcFileWrite(const int _fd, const char* page, const int32_t _amount, con
     result = client->RpcFileWrite(_fd, _page, _amount, _seekpos, _wait_event_info);
     //rpctransport->close();
 //    printf("%s %d, _fd = %d, written result = %d, caller function = %s, %d\n", __func__ , __LINE__, _fd, result, funcName, line);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 char* RpcFilePathName(const int _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -222,12 +279,19 @@ char* RpcFilePathName(const int _fd) {
     client->RpcFilePathName(_return, _fd);
     _return.copy(filename, _return.length());
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return filename;
 }
 
 int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t _seekpos, const int32_t _wait_event_info) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 
@@ -236,12 +300,19 @@ int RpcFileRead(char *buff, const int _fd, const int32_t _amount,  const int64_t
     client->RpcFileRead(_return, _fd, _amount, _seekpos, _wait_event_info);
     //rpctransport->close();
     _return.copy(buff, BLCKSZ);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return _return.length();
 }
 
 int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -250,12 +321,19 @@ int32_t RpcFileTruncate(const int _fd, const int64_t _offset) {
     //rpctransport->open();
     result = client->RpcFileTruncate(_fd, _offset);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int64_t RpcFileSize(const int _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start %d , fd = %d\n", __func__ , getpid(), _fd);
@@ -265,6 +343,9 @@ int64_t RpcFileSize(const int _fd) {
     result = client->RpcFileSize(_fd);
     //rpctransport->close();
 //    printf("[%s] function end %d , result = %d , fd = %d\n", __func__ , getpid(), result, _fd);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -272,12 +353,19 @@ int32_t RpcFilePrefetch(const int _fd, const int64_t _offset, const int32_t _amo
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
     int32_t result;
     //rpctransport->open();
     result = client->RpcFilePrefetch(_fd, _offset, _amount, wait_event_info);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -285,17 +373,28 @@ void RpcFileWriteback(const int _fd, const int64_t _offset, const int64_t nbytes
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
     //rpctransport->open();
     client->RpcFileWriteback(_fd, _offset, nbytes, wait_event_info);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return;
 }
 
 int32_t RpcUnlink(const char* filepath) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -307,12 +406,19 @@ int32_t RpcUnlink(const char* filepath) {
     //rpctransport->open();
     result = client->RpcUnlink(_path);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcFtruncate(const int _fd, const int64_t _offset) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -321,6 +427,9 @@ int32_t RpcFtruncate(const int _fd, const int64_t _offset) {
     //rpctransport->open();
     result = client->RpcFtruncate(_fd, _offset);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -332,6 +441,10 @@ int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
     _File result = 0;
@@ -342,12 +455,19 @@ int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
     //rpctransport->open();
     result = client->RpcOpenTransientFile(_filename, _fileflags);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcCloseTransientFile(const int _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
 
     RpcInit();
@@ -357,12 +477,19 @@ int32_t RpcCloseTransientFile(const int _fd) {
     //rpctransport->open();
     result = client->RpcCloseTransientFile(_fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -371,12 +498,19 @@ int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info) {
     //rpctransport->open();
     result = client->RpcFileSync(_fd, _wait_event_info);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
 //    printf("%s %d start\n", __func__ , __LINE__);
 //    fflush(stdout);
@@ -389,12 +523,19 @@ int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t 
     //rpctransport->close();
     _return.copy(p, _return.length());
 //    printf("[%s] return value = %d\n", __func__ , (int32_t)_return.length());
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return (int32_t)_return.length();
 }
 
 int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -406,12 +547,19 @@ int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t
     result = client->RpcPgPWrite(_fd, _page, _amount, _offset);
     //rpctransport->close();
 //    printf("[%s] result = %d \n", __func__ , result);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcClose(const int _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -420,12 +568,19 @@ int32_t RpcClose(const int _fd) {
     //rpctransport->open();
     result = client->RpcClose(_fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start , path = %s\n", __func__ , path);
@@ -437,12 +592,19 @@ int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
     result = client->RpcBasicOpenFile(_path, _flags);
     //rpctransport->close();
 //    printf("[%s] result = %d\n", __func__ , result);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcPgFdatasync(const int32_t _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
@@ -451,6 +613,9 @@ int32_t RpcPgFdatasync(const int32_t _fd) {
     //rpctransport->open();
     result = client->RpcPgFdatasync(_fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -459,6 +624,10 @@ int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
 //    printf("[%s] function start \n", __func__ );
 
@@ -466,6 +635,9 @@ int32_t RpcPgFsyncNoWritethrough(const int32_t _fd) {
     //rpctransport->open();
     result = client->RpcPgFsyncNoWritethrough(_fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -473,18 +645,29 @@ int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag) 
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     int32_t result;
     //rpctransport->open();
     result = client->RpcLseek(_fd, _offset, _flag);
     //rpctransport->close();
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int RpcStat(const char* path, struct stat* _stat) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
     _Path _path;
@@ -496,12 +679,19 @@ int RpcStat(const char* path, struct stat* _stat) {
     client->RpcStat(response, _path);
     //rpctransport->close();
     _stat->st_mode = response._stat_mode;
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return response._result;
 }
 
 int RpcLStat(const char* path, struct stat* _stat) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
     _Path _path;
@@ -513,12 +703,19 @@ int RpcLStat(const char* path, struct stat* _stat) {
     client->RpcLStat(response, _path);
     //rpctransport->close();
     _stat->st_mode = response._stat_mode;
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return response._result;
 }
 
 int32_t RpcDirectoryIsEmpty(const char* path) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
     _Path _path;
@@ -527,12 +724,19 @@ int32_t RpcDirectoryIsEmpty(const char* path) {
     //rpctransport->open();
     result = client->RpcDirectoryIsEmpty(_path);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
 int32_t RpcCopyDir(const char* _src, const char* _dst) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
     // create another copy of initialized-db in compute node
@@ -550,6 +754,9 @@ int32_t RpcCopyDir(const char* _src, const char* _dst) {
     //rpctransport->open();
     result = client->RpcCopyDir(_path_src, _path_dst);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -557,11 +764,18 @@ int32_t RpcPgFsync(const int32_t _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
     RpcInit();
     int32_t result;
     //rpctransport->open();
     result = client->RpcPgFsync(_fd);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
@@ -569,6 +783,10 @@ int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
 //    printf("%s %d, try to remove file %s\n", __func__ , __LINE__, filename);
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
     _Path _fname;
@@ -578,6 +796,9 @@ int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
     //rpctransport->open();
     result = client->RpcDurableUnlink(_fname, _flag);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 
 }
@@ -585,6 +806,10 @@ int32_t RpcDurableUnlink(const char * filename, const int32_t _flag) {
 int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const int32_t _elevel) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
 #endif
     RpcInit();
 
@@ -596,6 +821,9 @@ int32_t RpcDurableRenameExcl(const char* oldFname, const char* newFname, const i
     //rpctransport->open();
     result = client->RpcDurableRenameExcl(_oldFname, _newFname, _elevel);
     //rpctransport->close();
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
     return result;
 }
 
