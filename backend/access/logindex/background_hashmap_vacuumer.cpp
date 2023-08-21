@@ -19,14 +19,14 @@
 #define ITER_BATCH_SIZE 10
 #define MAX_REPLAY_VERSION_SIZE 20
 
-#define ITER_BUCKET_INTERVAL 500
-#define ITER_HEAD_INTERVAL 1000
+#define ITER_BUCKET_INTERVAL 300
+#define ITER_HEAD_INTERVAL 300
 
 void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag);
 void BackgroundReplayHeadNode(HashNodeHead * head);
 
 //#define ENABLE_DEBUG_INFO2
-
+//
 //#define ENABLE_DEBUG_INFO
 // Use try_rdlock to get a bucketLock, if failed, iterate to next bucket immediately
 // Then iterate head list, when try_wrlock head lock successfully, vacuum that head node list
@@ -38,7 +38,9 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
     struct timeval now;
 
     while(1) { // Iterate all buckets
-        usleep(3000);
+        usleep(300);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
         // Iterate every bucket one by one
         currentBucketID = (currentBucketID+1) % hashMap->bucketNum;
         // How many heads we have processed
@@ -55,7 +57,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         }
         // Now get the replay lock, check whether it has enough interval before last vacuum
         gettimeofday(&now, NULL);
-        if (now.tv_sec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec < ITER_BUCKET_INTERVAL) {
+        if (now.tv_usec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_usec < ITER_BUCKET_INTERVAL) {
             pthread_mutex_unlock(&(hashMap->bucketList[currentBucketID].replayLock));
             continue;
         }
@@ -145,8 +147,8 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         // now other replay process can hold the lock again.
         pthread_mutex_unlock(&(hashMap->bucketList[currentBucketID].replayLock));
         if(statisticFinishVacuum != 0) {
-            printf("%s %d, successfully cleaned %d bucket %d heads\n", __func__ , __LINE__, currentBucketID, statisticFinishVacuum);
-            fflush(stdout);
+//            printf("%s %d, successfully cleaned %d bucket %d heads\n", __func__ , __LINE__, currentBucketID, statisticFinishVacuum);
+//            fflush(stdout);
         }
 
     }
@@ -164,7 +166,6 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
     uint64_t replayedLsn = head->replayedLsn;
     uint64_t lsnList[MAX_REPLAY_VERSION_SIZE];
     int listSize = 0;
-    char* basePage = NULL;
     BufferTag bufferTag;
     RelFileNode rnode;
 
@@ -173,30 +174,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
     rnode.relNode = head->key.RelID;
 
     INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum);
-    int foundBasePage = 1;
-    bool gotBasePageFromRocksDb = false;
 
-    if(replayedLsn == 0) { // Don't have basePage in RocksDB
-        if(GetPageFromRocksdb(bufferTag, 1, &basePage) == 0) {
-            if(SyncGetRelSize(bufferTag.rnode, bufferTag.forkNum, 0) == -1) {
-                foundBasePage = 0;
-            } else {
-                // If not created by RpcMdExtend, get page from StandAlone process
-                basePage = (char*) malloc(BLCKSZ);
-                GetBasePage(rnode, (ForkNumber)head->key.ForkNum, (BlockNumber)head->key.BlkNum, basePage);
-            }
-        } else {
-            gotBasePageFromRocksDb = true;
-        }
-    } else {
-        GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
-        gotBasePageFromRocksDb = true;
-    }
-
-#ifdef ENABLE_DEBUG_INFO
-    printf("%s %d\n", __func__ , __LINE__);
-    fflush(stdout);
-#endif
     // If all LSNs in head have been replayed, skip it
     if(replayedLsn < head->lsnEntry[head->entryNum-1].lsn) {
         for(int i = 0; i < head->entryNum; i++) {
@@ -255,60 +233,25 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
     // For now, we have collect 0~MAX_REPLAY_VERSION_SIZE versions from this element node
 
     if(listSize > 0) {
-        char * replayedPage = NULL;
-        if(!foundBasePage) {
-            basePage = (char*) malloc(BLCKSZ);
-            ApplyOneLsnWithoutBasePage(bufferTag.rnode, bufferTag.forkNum, bufferTag.blockNum, lsnList[0], basePage);
-        }
-
-        // For now, we should have base pages
-        if (!foundBasePage) {
-            if(listSize-1 <= 0) { // only has one version and already been replayed
-                PutPage2Rocksdb(bufferTag, lsnList[0], basePage);
-                free(basePage);
-                head->replayedLsn = lsnList[0];
-#ifdef ENABLE_DEBUG_INFO
-                printf("%s %d\n", __func__ , __LINE__);
-                fflush(stdout);
-#endif
-                return;
-            }
-        }
-
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
-#endif
         // we have other following version to be replayed
-        replayedPage = (char*) malloc(BLCKSZ);
-        if (!foundBasePage) {
-#ifdef ENABLE_DEBUG_INFO
-            printf("%s %d\n", __func__ , __LINE__);
-            fflush(stdout);
-#endif
-            ApplyLsnList(bufferTag.rnode, bufferTag.forkNum, bufferTag.blockNum, lsnList + 1, listSize - 1, basePage, replayedPage);
-        }else {
-#ifdef ENABLE_DEBUG_INFO
-            printf("%s %d, basePageLsn = %d, listSize=%d\n", __func__ , __LINE__, PageGetLSN(basePage), listSize);
-            for(int i = 0; i< listSize; i++)
-                printf("%lu, ", lsnList[i]);
-            printf("\n");
-            fflush(stdout);
-#endif
-            ApplyLsnList(bufferTag.rnode, bufferTag.forkNum, bufferTag.blockNum, lsnList, listSize, basePage, replayedPage);
-        }
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
-#endif
-        PutPage2Rocksdb(bufferTag, lsnList[listSize-1], replayedPage);
-        DeletePageFromRocksdb(bufferTag, replayedLsn);
-        head->replayedLsn = lsnList[listSize-1];
-        if(!gotBasePageFromRocksDb)
+        char* replayedPage = (char*) malloc(BLCKSZ);
+        if(head->replayedLsn>0) {
+            char* basePage = NULL;
+            GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+            ApplyLsnList(rnode, (ForkNumber) head->key.ForkNum, (BlockNumber) head->key.BlkNum, lsnList,
+                         listSize, basePage, replayedPage);
             free(basePage);
-        if(gotBasePageFromRocksDb)
-            DeletePageFromRocksdb(bufferTag, replayedLsn==0?1:replayedLsn);
+        } else {
+            ApplyLsnListAndGetUpdatedPage(rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum, lsnList, listSize, replayedPage);
+        }
+
+        PutPage2Rocksdb(bufferTag, lsnList[listSize-1], replayedPage);
+        if(replayedLsn > 0)
+            DeletePageFromRocksdb(bufferTag, replayedLsn);
+        head->replayedLsn = lsnList[listSize-1];
         free(replayedPage);
+//        printf("%s %d, applyed %d xlogs for page\n", __func__ , __LINE__, listSize);
+//        fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
@@ -320,17 +263,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
 #endif
-    if(replayedLsn == 0 && !gotBasePageFromRocksDb) {
-        PutPage2Rocksdb(bufferTag, 1, basePage);
-        head->replayedLsn = 1;
-    }
 
-    if(!gotBasePageFromRocksDb)
-        free(basePage);
-#ifdef ENABLE_DEBUG_INFO
-    printf("%s %d\n", __func__ , __LINE__);
-    fflush(stdout);
-#endif
     return;
 }
 

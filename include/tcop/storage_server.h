@@ -26,6 +26,12 @@ extern void
 ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* targetPage);
 extern void
 ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize, char* origPage, char* targetPage);
+extern void
+ApplyLsnListAndGetUpdatedPage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize,  char* targetPage);
+extern void
+WalRedoExtendRel(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, char * content);
+extern void
+WalRedoCreateRel(RelFileNode relFileNode, ForkNumber forkNumber);
 
 
 

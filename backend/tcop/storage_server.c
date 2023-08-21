@@ -302,12 +302,20 @@ StartWalRedoProcess(int argc, char *argv[],
             close(computePipe[i][1]); // Close comp's write pipe
             close(serverPipe[i][0]); //Close server's read pipe
 
+            // Set the comp's read pipe to non-block
+            int flags = 0|O_NONBLOCK;
+            fcntl(computePipe[i][0], F_SETFL, flags);
+
             //todo: should close at the end
         } else if (pid == 0) { // Child Process
             ReplayProcessNum = i;
 
             close(computePipe[i][0]); //Close comp's read pipe
             close(serverPipe[i][1]); //Close server's write pipe
+
+            // Set the server's read pipe to non-block
+            int flags = 0|O_NONBLOCK;
+            fcntl(serverPipe[i][0], F_SETFL, flags);
 
             // Close pipes that master connects to other processes.
             for(int j = 0; j < ReplayProcessNum; j++) {
@@ -435,6 +443,15 @@ int SyncGetRelSize(RelFileNode relFileNode, ForkNumber forkNumber, XLogRecPtr ls
     while (recvLen < sizeof(int)) {
         char* tempP = &nblocks;
         int readLen = read(computePipe[replayPid][0], &(tempP[recvLen]), sizeof(int) - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -564,6 +581,15 @@ void ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, 
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
         int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -681,6 +707,15 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
         int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -713,6 +748,437 @@ void ApplyOneLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     }
 #endif
 }
+
+
+
+// targetPage should be allocated by caller function
+// This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
+void ApplyLsnListAndGetUpdatedPage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize,  char* targetPage) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
+
+//    pthread_mutex_lock(&replayProcessMutex);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %s %d , spcID = %lu, dbID = %lu, tabID = %lu, fornum = %d, blkNum = %lu, listSize = %d\n", __func__ , __FILE__, __LINE__,
+           relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, listSize);
+    fflush(stdout);
+#endif
+
+#ifdef XLOG_IN_ROCKSDB
+    // Read XlogRecord from RocksDB
+    XLogRecord *record;
+    size_t record_size;
+    GetXlogWithLsn(lsn, &record, &record_size);
+#endif
+
+    // ------ Send "ApplyOneLsn" request to replay process ------
+#ifdef XLOG_IN_ROCKSDB
+    char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
+#else
+    char *requestBuffer = (char*) malloc(1024+listSize*sizeof(uint64_t));
+#endif
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'o';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen += 4; // $blknum
+    msgLen += 4; // $listSize
+    msgLen += 8*listSize; // $lsnList
+#ifdef XLOG_IN_ROCKSDB
+    msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
+#endif
+    int origMsgLen = msgLen;
+    msgLen = pg_hton32(msgLen);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+    blockNumber = pg_hton32(blockNumber);
+
+    // Important
+    int origListSize = listSize;
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, listsize = %d\n", __func__ , __LINE__, listSize);
+    for(int i = 0; i < origListSize; i++) {
+        printf("lsn %d = %lu\n", i, lsnList[i]);
+    }
+    fflush(stdout);
+#endif
+
+    // h: 1 -> n:16777216
+    listSize = pg_hton32(listSize);
+
+//    for(int i = 0; i < origListSize; i++) {
+//        lsnList[i] = pg_hton64(lsnList[i]);
+//    }
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
+
+    int currLen = 1;
+    memcpy(&requestBuffer[currLen], &msgLen, sizeof(msgLen));
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &forkNumber, sizeof(unsigned char));
+    currLen+=1;
+    memcpy(&requestBuffer[currLen], &relFileNode.spcNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.dbNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.relNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &blockNumber, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &listSize, 4);
+    currLen+=4;
+    for(int i = 0; i < origListSize; i++) {
+        uint64_t netLsn = pg_hton64(lsnList[i]);
+        memcpy(&requestBuffer[currLen], &(netLsn), 8);
+        currLen+=8;
+    }
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d origin page lsn = %lu\n", __func__ , __LINE__, PageGetLSN(origPage));
+    fflush(stdout);
+#endif
+#ifdef XLOG_IN_ROCKSDB
+    memcpy(&requestBuffer[1+4+1+4+4+4+4+8+BLCKSZ], record, record->xl_tot_len);
+#endif
+
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d ready to send %d lsns\n", __func__ , __LINE__, origListSize);
+    fflush(stdout);
+#endif
+
+
+#ifdef XLOG_IN_ROCKSDB
+    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ+record->xl_tot_len;
+#else
+    int targetMsgLen = 1+origMsgLen;
+#endif
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+#ifdef XLOG_IN_ROCKSDB
+    free(record);
+#endif
+    free(requestBuffer);
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    while (recvLen < BLCKSZ) {
+        int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s read %d from standalone \n", __func__ , recvLen);
+    fflush(stdout);
+#endif
+
+    Assert(recvLen == BLCKSZ);
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
+}
+
+
+void WalRedoExtendRel(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, char * content) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
+
+//    pthread_mutex_lock(&replayProcessMutex);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %s %d , spcID = %lu, dbID = %lu, tabID = %lu, fornum = %d, blkNum = %lu, listSize = %d\n", __func__ , __FILE__, __LINE__,
+           relFileNode.spcNode, relFileNode.dbNode, relFileNode.relNode, forkNumber, blockNumber, listSize);
+    fflush(stdout);
+#endif
+
+#ifdef XLOG_IN_ROCKSDB
+    // Read XlogRecord from RocksDB
+    XLogRecord *record;
+    size_t record_size;
+    GetXlogWithLsn(lsn, &record, &record_size);
+#endif
+
+    // ------ Send "ApplyOneLsn" request to replay process ------
+#ifdef XLOG_IN_ROCKSDB
+    char *requestBuffer = (char*) malloc(8192+1024+record->xl_tot_len);
+#else
+    char *requestBuffer = (char*) malloc(8192+1024);
+#endif
+    int32 msgLen = 0;
+
+    requestBuffer[0] = 'F';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen += 4; // $blknum
+    msgLen += BLCKSZ; // $pageContent
+#ifdef XLOG_IN_ROCKSDB
+    msgLen += record->xl_tot_len; // record, wal_redo will get its length by its header
+#endif
+    int origMsgLen = msgLen;
+    msgLen = pg_hton32(msgLen);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+    blockNumber = pg_hton32(blockNumber);
+
+
+    int currLen = 1;
+    memcpy(&requestBuffer[currLen], &msgLen, sizeof(msgLen));
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &forkNumber, sizeof(unsigned char));
+    currLen+=1;
+    memcpy(&requestBuffer[currLen], &relFileNode.spcNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.dbNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &relFileNode.relNode, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], &blockNumber, 4);
+    currLen+=4;
+    memcpy(&requestBuffer[currLen], content, BLCKSZ);
+
+#ifdef XLOG_IN_ROCKSDB
+    int targetMsgLen = 1+4+1+4+4+4+4+8+BLCKSZ+record->xl_tot_len;
+#else
+    int targetMsgLen = 1+origMsgLen;
+#endif
+    int sendLen = 0;
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+#ifdef XLOG_IN_ROCKSDB
+    free(record);
+#endif
+    free(requestBuffer);
+
+    // ------- Read target page from replay process ------
+    int recvLen = 0;
+    while (recvLen < sizeof(int)) {
+        int readLen = read(computePipe[replayPid][0], &content[recvLen], sizeof(int) - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s read %d from standalone \n", __func__ , recvLen);
+    fflush(stdout);
+#endif
+
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
+
+}
+
+
+void WalRedoCreateRel(RelFileNode relFileNode, ForkNumber forkNumber) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s start \n", __func__ );
+    fflush(stdout);
+#endif
+
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    int tid = gettid();
+    int replayPid = tid%REPLAY_PROCESS_NUM;
+    int gotLock = 0;
+    for(int i = 0; i < REPLAY_PROCESS_NUM; i++) {
+        if(pthread_mutex_trylock( &(replayProcessMutex[ (replayPid+i)%REPLAY_PROCESS_NUM ]) ) == 0) { // Lock successfully
+            gotLock = 1;
+            replayPid = (replayPid+i) % REPLAY_PROCESS_NUM;
+            break;
+        }
+    }
+
+    // if we didn't get lock with trylock(), then use block wait lock
+    if(gotLock == 0) {
+        pthread_mutex_lock(&(replayProcessMutex[replayPid]));
+    }
+
+    // ------- Send "ApplyRecordUntil" request to replay process ------
+    char requestBuffer[1024];
+    int32 msgLen = 0;
+
+
+    // -------- Send "CreateRel" request to replay process -------
+    int targetMsgLen = 0;
+    int sendLen = 0;
+
+    requestBuffer[0] = 'C';
+
+    msgLen = 4; // $msgLen itself
+    msgLen += sizeof(unsigned char); //forknum
+    msgLen += 4; // $spc
+    msgLen += 4; // $db
+    msgLen += 4; // $rel
+    msgLen = pg_hton32(msgLen);
+
+    // prepare parameters to network encoding
+    relFileNode.spcNode = pg_hton32(relFileNode.spcNode);
+    relFileNode.dbNode = pg_hton32(relFileNode.dbNode);
+    relFileNode.relNode = pg_hton32(relFileNode.relNode);
+
+    memcpy(&requestBuffer[1], &msgLen, sizeof(msgLen));
+    memcpy(&requestBuffer[1+4], &forkNumber, sizeof(unsigned char));
+    memcpy(&requestBuffer[1+4+1], &relFileNode.spcNode, 4);
+    memcpy(&requestBuffer[1+4+1+4], &relFileNode.dbNode, 4);
+    memcpy(&requestBuffer[1+4+1+4+4], &relFileNode.relNode, 4);
+
+    targetMsgLen = 1+4+1+4+4+4;
+    sendLen = 0;
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s send M request to standalone PG process\n", __func__ );
+    fflush(stdout);
+#endif
+    while(sendLen < targetMsgLen) {
+        int writeLen = write(serverPipe[replayPid][1], &requestBuffer[sendLen], targetMsgLen-sendLen);
+        sendLen+=writeLen;
+    }
+
+    // ------- Read target response from replay process ------
+    int recvLen = 0;
+    int nblocks = 0;
+    while (recvLen < sizeof(int)) {
+        char* tempP = &nblocks;
+        int readLen = read(computePipe[replayPid][0], &(tempP[recvLen]), sizeof(int) - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
+        Assert(readLen >= 0);
+        recvLen += readLen;
+    }
+
+    Assert(recvLen == sizeof(int));
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s, get page number = %d\n", __func__ , nblocks);
+    fflush(stdout);
+#endif
+    pthread_mutex_unlock(&(replayProcessMutex[replayPid]));
+
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    SyncGetRelSizeTime += ((end.tv_sec*1000000+end.tv_usec) - (start.tv_sec*1000000+start.tv_usec));
+    SyncGetRelSizeCount++;
+
+    struct timeval now;
+
+    if(!initialized3){
+        gettimeofday(&output_timing3, NULL);
+        initialized3 = 1;
+    }
+    gettimeofday(&now, NULL);
+    if(now.tv_sec-output_timing3.tv_sec >= 5) {
+
+        printf("walredo_SyncGetRelSize = %ld, count = %d\n",SyncGetRelSizeTime, SyncGetRelSizeCount);
+        fflush(stdout);
+        output_timing3 = now;
+    }
+#endif
+    return;
+}
+
+
+
 
 // targetPage should be allocated by caller function
 // This function can be optimized by passing []lsn to PgStandalone and get several pages from PgStandalone
@@ -871,6 +1337,15 @@ void ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
         int readLen = read(computePipe[replayPid][0], &targetPage[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -946,6 +1421,15 @@ void GetBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blo
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
         int readLen = read(computePipe[replayPid][0], &buffer[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -1070,6 +1554,15 @@ void GetPageByLsn(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber bl
     int recvLen = 0;
     while (recvLen < BLCKSZ) {
         int readLen = read(computePipe[replayPid][0], &buffer[recvLen], BLCKSZ - recvLen);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
+        }
         Assert(readLen >= 0);
         recvLen += readLen;
     }
@@ -1177,9 +1670,14 @@ void SyncReplayProcess() {
         fflush(stdout);
 #endif
         int readLen = read(computePipe[0], &buffer[recvLen], 2 - recvLen);
-        if(readLen <= 0) {
-            printf("%s read pipe line error, readLen = %d\n", __func__ , readLen);
-            exit(0);
+        if (readLen < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            }
+            else {
+                printf("Error on read\n");
+                exit(1);
+            }
         }
         Assert(readLen >= 0);
         recvLen += readLen;
@@ -1198,6 +1696,19 @@ pthread_t XlogStartupTid2 = 0;
 void BackgroundHashMapCleanPageVersion() {
     BackgroundHashMapCleanRocksdb(pageVersionHashMap);
 }
+#include <sys/time.h>
+extern XLogRecPtr XLogParseUpto;
+void* RecordReplayProgress() {
+    struct timeval now;
+    while(1) {
+        usleep(100*1000);
+        gettimeofday(&now, NULL);
+        printf("RecordReplayProgress, parsed=%ld, sec=%lu, us=%lu\n", XLogParseUpto, now.tv_sec, now.tv_usec);
+        fflush(stdout);
+    }
+}
+
+
 void
 RpcServerMain(int argc, char *argv[],
               const char *dbname,
@@ -1210,7 +1721,7 @@ RpcServerMain(int argc, char *argv[],
     HashMapInit(&pageVersionHashMap, 1023);
     RelSizePthreadLockInit();
 
-    for(int i = 0; i < 0; i++) {
+    for(int i = 0; i < 5; i++) {
         printf("%s start background replayer %d\n", __func__ , i);
         pthread_t tempTid;
         pthread_create(&tempTid, NULL, (void*) BackgroundHashMapCleanPageVersion, NULL);
@@ -1284,6 +1795,8 @@ RpcServerMain(int argc, char *argv[],
 
 //    StartupPid = StartChildProcess(StartupProcess);
     pthread_create(&XlogStartupTid2, NULL, (void*)StartupXLOG, NULL);
+//    pthread_t tempTid;
+//    pthread_create(&tempTid, NULL, (void*)RecordReplayProgress, NULL);
 //    pthread_create(&XlogStartupTid2, NULL, (void*)StartupProcessMain, NULL);
 
     StartWalRedoProcess(argc, argv, dbname, username);

@@ -64,6 +64,7 @@ do { \
 #endif
 
 //#define ENABLE_DEBUG_INFO3
+//#define ENABLE_DEBUG_INFO2
 //#define ENABLE_DEBUG_INFO
 
 //typedef boost::shared_mutex Lock;

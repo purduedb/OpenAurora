@@ -95,6 +95,7 @@ static char *hdr_scratch = NULL;
 	 MaxSizeOfXLogRecordBlockHeader * (XLR_MAX_BLOCK_ID + 1) + \
 	 SizeOfXLogRecordDataHeaderLong + SizeOfXlogOrigin)
 
+#define DISABLE_TORN_PAGE_WRITE_PROTECT
 /*
  * An array of XLogRecData structs, to hold registered data.
  */
@@ -554,6 +555,10 @@ XLogRecordAssemble(RmgrId rmid, uint8 info,
 			needs_backup = false;
 		else if (!doPageWrites)
 			needs_backup = false;
+#ifdef DISABLE_TORN_PAGE_WRITE_PROTECT
+        else if (1)
+            needs_backup = false;
+#endif
 		else
 		{
 			/*

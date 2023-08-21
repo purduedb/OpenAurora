@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(db2_pg)
+project(src)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -79,7 +79,7 @@ include_directories(test/modules/test_shm_mq)
 include_directories(test/regress)
 include_directories(timezone)
 
-add_executable(db2_pg
+add_executable(src
         backend/access/brin/brin.c
         backend/access/brin/brin_inclusion.c
         backend/access/brin/brin_minmax.c
@@ -152,6 +152,7 @@ add_executable(db2_pg
         backend/access/index/amvalidate.c
         backend/access/index/genam.c
         backend/access/index/indexam.c
+        backend/access/logindex/background_hashmap_vacuumer.cpp
         backend/access/logindex/brin_xlog_idx.c
         backend/access/logindex/generic_xlog_idx.c
         backend/access/logindex/gin_xlog_idx.c
@@ -165,6 +166,7 @@ add_executable(db2_pg
         backend/access/logindex/polar_sequence_xlog_idx.c
         backend/access/logindex/polar_xlog_idx.c
         backend/access/logindex/spgxlog_idx.c
+        backend/access/logindex/wakeup_latch.c
         backend/access/nbtree/nbtcompare.c
         backend/access/nbtree/nbtdedup.c
         backend/access/nbtree/nbtinsert.c
@@ -567,8 +569,6 @@ add_executable(db2_pg
         backend/port/win32/socket.c
         backend/port/win32/timer.c
         backend/port/atomics.c
-        backend/port/pg_sema.c
-        backend/port/pg_shmem.c
         backend/port/posix_sema.c
         backend/port/sysv_sema.c
         backend/port/sysv_shmem.c
@@ -724,6 +724,9 @@ add_executable(db2_pg
         backend/storage/page/bufpage.c
         backend/storage/page/checksum.c
         backend/storage/page/itemptr.c
+        backend/storage/rel_cache/boost_shmht.cpp
+        backend/storage/rel_cache/builtin_shmht.cpp
+        backend/storage/rel_cache/rel_cache.c
         backend/storage/rpc/DataPageAccess.cpp
         backend/storage/rpc/DataPageAccess.h
         backend/storage/rpc/DataPageAccess_server.skeleton.cpp
@@ -952,6 +955,7 @@ add_executable(db2_pg
         backend/utils/fmgroids.h
         backend/utils/fmgrprotos.h
         backend/utils/fmgrtab.c
+        backend/utils/probes.h
         bin/initdb/findtimezone.c
         bin/initdb/initdb.c
         bin/pg_archivecleanup/pg_archivecleanup.c
@@ -1139,6 +1143,7 @@ add_executable(db2_pg
         include/access/amvalidate.h
         include/access/attmap.h
         include/access/attnum.h
+        include/access/background_hashmap_vacuumer.h
         include/access/brin.h
         include/access/brin_internal.h
         include/access/brin_page.h
@@ -1169,6 +1174,7 @@ add_executable(db2_pg
         include/access/htup.h
         include/access/htup_details.h
         include/access/itup.h
+        include/access/logindex_func.h
         include/access/logindex_hashmap.h
         include/access/multixact.h
         include/access/nbtree.h
@@ -1209,6 +1215,7 @@ add_executable(db2_pg
         include/access/twophase_rmgr.h
         include/access/valid.h
         include/access/visibilitymap.h
+        include/access/wakeup_latch.h
         include/access/xact.h
         include/access/xlog.h
         include/access/xlog_internal.h
@@ -1776,11 +1783,13 @@ add_executable(db2_pg
         include/storage/backendid.h
         include/storage/barrier.h
         include/storage/block.h
+        include/storage/boost_shmht.h
         include/storage/buf.h
         include/storage/buf_internals.h
         include/storage/buffile.h
         include/storage/bufmgr.h
         include/storage/bufpage.h
+        include/storage/builtin_shmht.h
         include/storage/checksum.h
         include/storage/checksum_impl.h
         include/storage/condition_variable.h
@@ -1815,6 +1824,7 @@ add_executable(db2_pg
         include/storage/proclist_types.h
         include/storage/procsignal.h
         include/storage/reinit.h
+        include/storage/rel_cache.h
         include/storage/relfilenode.h
         include/storage/rpcclient.h
         include/storage/rpcmd.h
@@ -1941,7 +1951,6 @@ add_executable(db2_pg
         include/pg_config.h
         include/pg_config_ext.h
         include/pg_config_manual.h
-        include/pg_config_os.h
         include/pg_getopt.h
         include/pg_trace.h
         include/pgstat.h
@@ -2174,6 +2183,7 @@ add_executable(db2_pg
         port/open.c
         port/path.c
         port/pg_bitutils.c
+        port/pg_config_paths.h
         port/pg_crc32c_armv8.c
         port/pg_crc32c_armv8_choose.c
         port/pg_crc32c_sb8.c

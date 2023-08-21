@@ -61,8 +61,8 @@ endif
 endif
 else # not PGXS
 vpath_build = no
-abs_top_builddir = /home/xi/PgDir/postgresql-13.0
-abs_top_srcdir = /home/xi/PgDir/postgresql-13.0
+abs_top_builddir = /home/pang65/stor_openAurora/postgresql-13.0
+abs_top_srcdir = /home/pang65/stor_openAurora/postgresql-13.0
 
 ifneq ($(vpath_build),yes)
 top_srcdir = $(top_builddir)
@@ -94,7 +94,7 @@ ifndef PGXS
 # Note that prefix, exec_prefix, and datarootdir aren't defined in a PGXS build;
 # makefiles may only use the derived variables such as bindir.
 
-prefix := /home/xi/PgDir/built_project
+prefix := /home/pang65/stor_openAurora/built_project
 exec_prefix := ${prefix}
 datarootdir := ${prefix}/share
 
@@ -198,7 +198,7 @@ with_uuid	= no
 with_zlib	= yes
 enable_rpath	= yes
 enable_nls	= no
-enable_debug	= no
+enable_debug	= yes
 enable_dtrace	= no
 enable_coverage	= no
 enable_tap_tests	= no
@@ -257,13 +257,13 @@ CC = gcc
 GCC = yes
 SUN_STUDIO_CC = no
 CXX = g++
-CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2
+CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -O2
 CFLAGS_SL = -fPIC
 CFLAGS_VECTOR =  -funroll-loops -ftree-vectorize
 CFLAGS_SSE42 = -msse4.2
 CFLAGS_ARMV8_CRC32C = 
 PERMIT_DECLARATION_AFTER_STATEMENT = -Wno-declaration-after-statement
-CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -O2
+CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -g -O2
 
 LLVM_CPPFLAGS = 
 LLVM_CFLAGS = 
@@ -284,7 +284,7 @@ ZIC =
 AR = ar
 DLLTOOL = 
 DLLWRAP = 
-LIBS = -lz -lreadline -lm 
+LIBS = -lpthread -lz -lreadline -lrt -ldl -lm 
 LDAP_LIBS_FE = 
 LDAP_LIBS_BE = 
 UUID_LIBS = 
@@ -312,7 +312,7 @@ ifdef PGXS
 else
   LDFLAGS_INTERNAL = -L$(top_builddir)/src/port -L$(top_builddir)/src/common
 endif
-LDFLAGS = $(LDFLAGS_INTERNAL) -std=c++17 -lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lrocksdb  -lpthread -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin  -Wl,--as-needed
+LDFLAGS = $(LDFLAGS_INTERNAL)  -g -std=c++17 -lstdc++ -lthrift -lrocksdb  -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd  -ldl -lpthread -I. -I/usr/local/include -I/usr/include -L/usr/local/lib  -Wl,--as-needed
 
 LDFLAGS_EX = 
 # LDFLAGS_SL might have already been assigned by calling makefile
@@ -339,7 +339,7 @@ perl_embed_ldflags	=
 
 # Miscellaneous
 
-AWK	= gawk
+AWK	= mawk
 LN_S	= ln -s
 MSGFMT  = 
 MSGFMT_FLAGS = 

@@ -188,9 +188,17 @@ static void TransRelNode2RelKey(RelFileNode node, RelKey *relKey, ForkNumber for
     relKey->forkNum = forkNumber;
     return;
 }
+#include <sys/time.h>
 
 pthread_mutex_t wakeupMutex;
 void WaitParse(int64_t _lsn) {
+
+//    struct timeval now;
+//    gettimeofday(&now, NULL);
+//    printf("parameter_lsn = %lu, second = %lu, us = %lu\n",
+//           _lsn, now.tv_sec, now.tv_usec);
+//    fflush(stdout);
+
 //    if(WalRcvRunning() == false)
 //        return;
 //    XLogRecPtr flushUpto = WalRcv->flushedUpto;
@@ -209,7 +217,7 @@ void WaitParse(int64_t _lsn) {
 
         int count = 0;
         XLogRecPtr tempRecord = 0;
-        while(XLogParseUpto < targetLsn-8192 && !reachXlogTempEnd ) {
+        while(XLogParseUpto < targetLsn-64 && !reachXlogTempEnd ) {
             if (XLogParseUpto != tempRecord) {
 //                if(count >= 50) {
 //                    printf("%s %d, clog lsn = %lu, target lsn = %lu, count = %d\n", __func__ ,
@@ -281,7 +289,140 @@ public:
      *
      * @param _fd
      */
-     void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
+
+    void
+    ReadBufferCommon(_Page &_return, const _Smgr_Relation &_reln, const int32_t _relpersistence, const int32_t _forknum,
+                     const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
+
+//        printf("%s %d start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d\n", __func__ , __LINE__,
+//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
+//        fflush(stdout);
+
+        WaitParse(_lsn);
+
+        RelFileNode rnode;
+        rnode.spcNode = _reln._spc_node;
+        rnode.dbNode = _reln._db_node;
+        rnode.relNode = _reln._rel_node;
+
+        KeyType key;
+        key.SpcID = _reln._spc_node;
+        key.DbID = _reln._db_node;
+        key.RelID = _reln._rel_node;
+        key.ForkNum = _forknum;
+        key.BlkNum = _blknum;
+
+        uint64_t replayedLsn;
+        uint64_t *toReplayList;
+        int listSize = 0;
+        int found = HashMapGetBlockReplayList(pageVersionHashMap, key, _lsn, &replayedLsn, &toReplayList, &listSize);
+
+
+        if (!found) {
+
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber) _forknum, (BlockNumber) _blknum);
+            char *buff = (char *) malloc(BLCKSZ);
+            GetBasePage(rnode, (ForkNumber) _forknum, (BlockNumber) _blknum, buff);
+
+            _return.assign(buff, BLCKSZ);
+
+//            HashMapInsertKey(pageVersionHashMap, key, 1, -1, true);
+//            HashMapUpdateReplayedLsn(pageVersionHashMap, key, 1, false);
+//            PutPage2Rocksdb(bufferTag, 1, buff);
+            free(buff);
+
+//            printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d\n", __func__ , __LINE__,
+//                   _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
+//            fflush(stdout);
+
+            return;
+        }
+
+        // Then replayLSN is what we needed from RocksDB
+        if (listSize == 0) {
+            char* targetPage = NULL;
+
+            BufferTag bufferTag;
+            INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber) _forknum, (BlockNumber) _blknum);
+            GetPageFromRocksdb(bufferTag, replayedLsn, &targetPage);
+
+            _return.assign(targetPage, BLCKSZ);
+            free(targetPage);
+//            printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d\n", __func__ , __LINE__,
+//                   _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
+//            fflush(stdout);
+            return;
+        }
+
+
+
+        // For now, we need to replay several xlogs until we get the expected version
+        // The xlog sublist we need to replay is [ uintList[1]+2 , foundPos ]
+
+        char *page2 = (char *) malloc(BLCKSZ);
+
+        //! Print all the lsn in the list
+//        printf("%s %d, tid = %d, listsize = %d, replayedLSN = %lu\n", __func__ , __LINE__, gettid(), listSize, replayedLsn);
+//        fflush(stdout);
+//        for(int i = 0; i < listSize; i++) {
+//            printf("%lu , tid = %d\n", toReplayList[i], gettid());
+//            fflush(stdout);
+//        }
+
+        BufferTag bufferTag;
+        INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber) _forknum, (BlockNumber) _blknum);
+
+        if(replayedLsn > 0) {
+            char* basePage = NULL;
+            GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+            ApplyLsnList(rnode, (ForkNumber) _forknum, (BlockNumber) _blknum, reinterpret_cast<XLogRecPtr *>(toReplayList),
+                         listSize, basePage, page2);
+            free(basePage);
+        } else {
+            ApplyLsnListAndGetUpdatedPage(rnode, (ForkNumber) _forknum, (BlockNumber) _blknum, reinterpret_cast<XLogRecPtr *>(toReplayList),
+                                          listSize, page2);
+        }
+
+
+        PutPage2Rocksdb(bufferTag, toReplayList[listSize - 1], page2);
+
+
+        if (listSize > 0) {
+            HashMapUpdateReplayedLsn(pageVersionHashMap, key, toReplayList[listSize - 1], true);
+
+            free(toReplayList);
+#ifdef ENABLE_FUNCTION_TIMING
+            functionTiming.RecordTime(__LINE__);
+#endif
+        }
+
+        if(replayedLsn && listSize>0) {
+            DeletePageFromRocksdb(bufferTag, replayedLsn);
+        }
+
+//        printf("%s %d end, targetPageLsn = %lu, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d\n", __func__ , __LINE__,
+//               PageGetLSN(page2), _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
+//        fflush(stdout);
+
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &readBufferCommon[14], &readBufferCount[14])
+#endif
+
+        //TODO: Return page2
+        // Set the desired page version as return value
+        _return.assign(page2, BLCKSZ);
+
+        free(page2);
+
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, &readBufferCommon[15], &readBufferCount[15])
+#endif
+
+    }
+
+
+    void ReadBufferCommon_ignore(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) {
 #ifdef ENABLE_FUNCTION_TIMING
         FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
@@ -898,13 +1039,6 @@ public:
         RelSizePthreadUnlock(relKey);
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
-#ifdef ENABLE_DEBUG_INFO
-        if(insertSucc) {
-            printf("%s insert key successfully\n", __func__ );
-        } else {
-            printf("%s insert key failed\n", __func__ );
-        }
-#endif
 
 //        BlockNumber result = mdnblocks(smgrReln, (ForkNumber)_forknum);
 #ifdef ENABLE_DEBUG_INFO
@@ -978,13 +1112,6 @@ public:
         RelSizePthreadUnlock(relKey);
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
-#ifdef ENABLE_DEBUG_INFO
-        if(insertSucc) {
-            printf("%s insert key successfully\n", __func__ );
-        } else {
-            printf("%s insert key failed\n", __func__ );
-        }
-#endif
 
 #ifdef ENABLE_DEBUG_INFO
         printf("%s result = %d end\n", __func__, relSize);
@@ -1033,8 +1160,8 @@ public:
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
 
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-        mdcreate(smgrReln, (ForkNumber)_forknum, _isRedo);
+        WalRedoCreateRel(rnode, (ForkNumber)_forknum);
+
 
 #ifdef ENABLE_DEBUG_INFO
         printf("%s end\n", __func__);
@@ -1046,6 +1173,9 @@ public:
 #ifdef ENABLE_FUNCTION_TIMING
         FunctionTiming functionTiming(const_cast<char *>(__func__));
 #endif
+//        printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
+//               _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
+//        fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %s %d , spcID = %ld, dbID = %ld, tabID = %ld, fornum = %d, blknum = %d lsn = %ld tid=%d\n", __func__ , __FILE__, __LINE__,
                _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
@@ -1092,6 +1222,10 @@ public:
         char *extendPage = (char*) malloc(BLCKSZ);
 
         _buff.copy(extendPage, BLCKSZ);
+
+//        if(_blknum == 10 && rnode.relNode == 2659)
+//            PageSetLSN(extendPage, 2);
+
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d, parameter lsn = %lu\n", __func__ , __LINE__, PageGetLSN(extendPage));
         fflush(stdout);
@@ -1102,11 +1236,8 @@ public:
          *  Important: Before we put this extended page to
          */
         // Put version:-1 to RocksDB
-        PutPage2Rocksdb(tag, 1, extendPage);
-
-        SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
-        mdextend(smgrReln, (ForkNumber)_forknum, (BlockNumber)_blknum, extendPage, skipFsync);
-
+//        PutPage2Rocksdb(tag, 1, extendPage);
+        WalRedoExtendRel(rnode, (ForkNumber) _forknum, (BlockNumber) _blknum, extendPage);
         free(extendPage);
 //        char extendPage[BLCKSZ+16];
 //        _buff.copy(extendPage, BLCKSZ);
@@ -1561,7 +1692,7 @@ public:
         printf("%s start\n", __func__ );
 #endif
         // Your implementation goes here
-#ifdef INFO_FUNC_START2
+#ifdef INFO_FUNC_START
         printf("%s %d, blockNum = %d, start_idx = %d, lsn = %ld\n", __func__ , __LINE__, _blknum, _idx, _lsn);
         for(int i = 0; i < _blknum; i++){
             printf("_xlblocks[%d] = %ld\n", i, _xlblocks[i]);
@@ -1574,11 +1705,25 @@ public:
 
         int32_t result = pg_pwrite(_fd, _page.c_str(), _amount, _offset);
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
+
         // Need some lock
         for(int i = 0; i < _blknum; i++) {
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d, try to get %d locks\n", __func__ , __LINE__, _idx+i);
+            fflush(stdout);
+#endif
             pthread_rwlock_wrlock(&(RpcXLogPagesLocks[(_idx+i)]));
             RpcXlblocks[(_idx+i)%XLOGbuffers] = _xlblocks[i];
         }
+
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 
         // Based on XLogWrite code, startIdx+_blknum <= XLogBuffers-1
         // So, RpcXLogPages + (_idx*BLCKSZ) + (_blknum*BLCKSZ) will smaller than or equal with end of RpcXLogPages
@@ -1586,15 +1731,31 @@ public:
 
         for(int i = 0; i < _blknum; i++) {
             pthread_rwlock_unlock(&(RpcXLogPagesLocks[(_idx+i)]));
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d, released %d locks\n", __func__ , __LINE__, _idx+i);
+            fflush(stdout);
+#endif
         }
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
         if(RpcXLogFlushedLsn < _lsn) {
             RpcXLogFlushedLsn = (uint64_t) _lsn;
         }
         pthread_mutex_lock(&wakeupMutex);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 //        WakeupRecovery();
         WakeupStartupRecovery();
         pthread_mutex_unlock(&wakeupMutex);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 
         // sigusr1_handler(SIGNAL_ARGS) -> should send signal to RpcServer
         // how to set flushUpto? set it with _blknum-1 pages? Or XLogWrite also send XLogWriteResult.lsn to this function.

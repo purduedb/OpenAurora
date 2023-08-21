@@ -6701,8 +6701,8 @@ ReadControlFileTimeLine(void) {
 void
 StartupXLOG(void)
 {
-    if(IsRpcServer)
-        sleep(5);
+//    if(IsRpcServer)
+//        sleep(5);
     printf("%s %d, XLOGbuffers = %d\n", __func__ , __LINE__, XLOGbuffers);
     fflush(stdout);
 //    RpcXlblocks = (XLogRecPtr*) malloc(sizeof(XLogRecPtr)*XLOGbuffers);
@@ -8073,7 +8073,7 @@ StartupXLOG(void)
                             free(bufferTagList);
                     }
                 }
-
+// Debug Info
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
 				// Debug Info
@@ -12786,6 +12786,11 @@ retry:
     printf("%s %d, targetPagePtr = %lu\n", __func__ , __LINE__, targetPagePtr);
 #endif
     if(IsRpcServer) {
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, try to get %d locks\n", __func__ , __LINE__, bufferIdx);
+        fflush(stdout);
+#endif
+
         pthread_rwlock_rdlock(&(RpcXLogPagesLocks[bufferIdx]));
     }
     if(IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
@@ -12830,6 +12835,10 @@ retry:
     }
     if(IsRpcServer) {
         pthread_rwlock_unlock(&(RpcXLogPagesLocks[bufferIdx]));
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, released %d locks\n", __func__ , __LINE__, bufferIdx);
+        fflush(stdout);
+#endif
     }
 
 	if (r != XLOG_BLCKSZ)
@@ -13827,7 +13836,7 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
         fflush(stdout);
     }
 #endif
-    HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, false);
+    HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
 
 #ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {

@@ -123,6 +123,7 @@
 #include "storage/pg_shmem.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
+#include "storage/rpcclient.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/datetime.h"
@@ -572,12 +573,19 @@ int			postmaster_alive_fds[2] = {-1, -1};
 HANDLE		PostmasterHandle;
 #endif
 
+extern int IsRpcClient;
 /*
  * Postmaster main entry point
  */
 void
 PostmasterMain(int argc, char *argv[])
 {
+    char *pgRpcClient = getenv("RPC_CLIENT");
+
+    if(pgRpcClient != NULL) {
+        IsRpcClient = 1;
+    }
+
 	int			opt;
 	int			status;
 	char	   *userDoption = NULL;
