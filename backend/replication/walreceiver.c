@@ -986,7 +986,10 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 		/* OK to write the logs */
 		errno = 0;
 #ifdef RPC_REMOTE_DISK
-        byteswritten = segbytes;
+        if (IsRpcServer)
+            byteswritten = segbytes;
+        else
+            byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
 #else
         byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
 #endif

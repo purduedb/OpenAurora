@@ -140,37 +140,38 @@
 #endif
 
 extern int IsRpcClient;
+extern int IsStandbyClient;
 
 int pg_pread_rpc_local(int fd, char *p, int amount, int offset) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPRead(fd, p, amount, offset);
     else
         return pg_pread(fd, p, amount, offset);
 }
 
 int read_rpc_local(int fd, char *p, int amount) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPRead(fd, p, amount, -1);
     else
         return read(fd, p, amount);
 }
 
 int pg_pwrite_rpc_local(int fd, char *p, int amount, int offset) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPWrite(fd, p, amount, offset);
     else
         return pg_pwrite(fd, p, amount, offset);
 }
 
 int xlog_write_rpc_local(int fd, char *p, Size amount, uint32 offset, int startIdx, int blkNum, uint64_t* xlblocks, int xlblocksBufferNum, uint64_t lsn) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcXLogWriteWithPosition(fd, p, amount, offset, startIdx, blkNum, xlblocks, xlblocksBufferNum, lsn);
     else
         return pg_pwrite(fd, p, amount, offset);
 }
 
 int write_rpc_local(int fd, char *p, int amount) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPWrite(fd, p, amount, -1);
     else
         return write(fd, p, amount);
@@ -3460,7 +3461,7 @@ int
 XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 {
 #ifdef RPC_REMOTE_DISK
-    if(IsRpcClient)
+    if(IsRpcClient && IsStandbyClient)
         return RpcXLogFileInit(logsegno, use_existent, use_lock);
 #endif
 
@@ -4321,7 +4322,7 @@ static void
 RemoveOldXlogFiles(XLogSegNo segno, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 {
 #ifdef RPC_REMOTE_DISK
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return;
 #endif
     DIR		   *xldir;
@@ -4392,7 +4393,7 @@ static void
 RemoveNonParentXlogFiles(XLogRecPtr switchpoint, TimeLineID newTLI)
 {
 #ifdef RPC_REMOTE_DISK
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return;
 #endif
 	DIR		   *xldir;

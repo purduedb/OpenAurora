@@ -44,6 +44,7 @@
 #include "storage/rpcclient.h"
 
 extern int IsRpcClient;
+extern int IsStandbyClient;
 
 #define RPC_REMOTE_DISK
 #ifdef RPC_REMOTE_DISK
@@ -69,14 +70,14 @@ extern int IsRpcClient;
 #define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
 
 int read_rpc_local4(int fd, char *p, int amount) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPRead(fd, p, amount, -1);
     else
         return read(fd, p, amount);
 }
 
 int write_rpc_local4(int fd, char *p, int amount) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPWrite(fd, p, amount, -1);
     else
         return write(fd, p, amount);

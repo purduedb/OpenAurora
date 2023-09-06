@@ -30,6 +30,7 @@
 
 
 extern int IsRpcClient;
+extern int IsStandbyClient;
 /*
  * This struct of function pointers defines the API between smgr.c and
  * any individual storage manager module.  Note that smgr subfunctions are
@@ -134,6 +135,12 @@ smgrinit(void)
 
     if(pgRpcClient != NULL) {
         IsRpcClient = 1;
+    }
+
+    char *pgRpcStandby = getenv("STANDBY_CLIENT");
+
+    if(pgRpcStandby != NULL) {
+        IsStandbyClient = 1;
     }
 
 	int			i;
@@ -533,7 +540,7 @@ void
 smgrread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer)
 {
-	smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
+    smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
 }
 
 /*

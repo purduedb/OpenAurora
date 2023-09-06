@@ -66,6 +66,7 @@ std::shared_ptr<TProtocol> rpcprotocol;
 DataPageAccessClient *client=NULL;
 
 int IsRpcClient = 0;
+int IsStandbyClient = 0;
 pid_t MyPid = 0;
 
 //#define DEBUG_TIMING
