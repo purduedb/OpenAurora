@@ -15,15 +15,17 @@
 #include <pthread.h>
 #include <cstdlib>
 #include <access/background_hashmap_vacuumer.h>
+#include "tcop/storage_server.h"
 
 #define ITER_BATCH_SIZE 10
 #define MAX_REPLAY_VERSION_SIZE 20
 
-#define ITER_BUCKET_INTERVAL 500
+#define ITER_BUCKET_INTERVAL 5
 #define ITER_HEAD_INTERVAL 1000
 
 void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag);
 void BackgroundReplayHeadNode(HashNodeHead * head);
+void BackgroundVacuumUnusedVersions(HashNodeHead* head);
 
 //#define ENABLE_DEBUG_INFO2
 
@@ -41,6 +43,8 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
         usleep(3000);
         // Iterate every bucket one by one
         currentBucketID = (currentBucketID+1) % hashMap->bucketNum;
+//        printf("%s %s %d, currentBucketID %d\n", __FILE__, __func__ , __LINE__, currentBucketID);
+//        fflush(stdout);
         // How many heads we have processed
         int currentFinishHeadNum = 0;
         // flag: finish iterate all the nodes in this bucket
@@ -48,24 +52,34 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 
         int statisticFinishVacuum = 0;
 
+//        printf("%s %s %d\n", __FILE__, __func__ , __LINE__);
+//        fflush(stdout);
         // Set the initial iter to bucket's first
         HashNodeHead *iter = hashMap->bucketList[currentBucketID].nodeList;
         if (pthread_mutex_trylock(&(hashMap->bucketList[currentBucketID].replayLock)) != 0) { // Other replay process is processing this bucket
             continue;
         }
+
+//        printf("%s %s %d\n", __FILE__, __func__ , __LINE__);
+//        fflush(stdout);
+
         // Now get the replay lock, check whether it has enough interval before last vacuum
         gettimeofday(&now, NULL);
-        if (now.tv_sec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec < ITER_BUCKET_INTERVAL) {
+        if (now.tv_sec > hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec && now.tv_sec - hashMap->bucketList[currentBucketID].lastReplayTime.tv_sec < ITER_BUCKET_INTERVAL) {
             pthread_mutex_unlock(&(hashMap->bucketList[currentBucketID].replayLock));
             continue;
         }
 
+//        printf("%s %s %d\n", __FILE__, __func__ , __LINE__);
+//        fflush(stdout);
 
         while(1) { // Iterate all the head nodes in this bucket
 #ifdef ENABLE_DEBUG_INFO2
             printf("%s %d, background_vacuumer %d, start vacuum bucket %d\n", __func__ , __LINE__, gettid(), currentBucketID);
             fflush(stdout);
 #endif
+//            printf("%s %s %d\n", __FILE__, __func__ , __LINE__);
+//            fflush(stdout);
             recordNumber = 0;
 
             // Add a lock to this bucket
@@ -112,7 +126,9 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
                 struct timeval now;
                 gettimeofday(&now, NULL);
                 if(now.tv_sec - headNodes[i]->finishVacuumTime.tv_sec >= ITER_HEAD_INTERVAL) {
-                    BackgroundReplayHeadNode(headNodes[i]);
+//                    printf("%s %s %d\n", __FILE__, __func__ , __LINE__);
+//                    fflush(stdout);
+                    BackgroundVacuumUnusedVersions(headNodes[i]);
                     headNodes[i]->finishVacuumTime = now;
                 }
 
@@ -153,6 +169,72 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 
 
 }
+
+#define VIRTUAL_NETWORK_LATENCY 8192
+extern uint64_t RpcXLogFlushedLsn;
+
+void BackgroundVacuumUnusedVersions(HashNodeHead* head) {
+    uint64_t replayedLsn = head->replayedLsn;
+
+    BufferTag bufferTag;
+    RelFileNode rnode;
+
+    rnode.spcNode = head->key.SpcID;
+    rnode.dbNode = head->key.DbID;
+    rnode.relNode = head->key.RelID;
+
+    INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum);
+
+    if (replayedLsn == 0) {
+        // This head node doesn't have any replayed version, just skip it
+        return;
+    }
+
+    // Vacuum the head node
+    // If the last version is 0, then this head has already been vacuumed to empty
+    if(head->lsnEntry[head->entryNum-1].lsn != 0) {
+        for (int i = 0; i < head->entryNum; i++) {
+            if(head->lsnEntry[i].lsn != 0 && head->lsnEntry[i].lsn < replayedLsn-VIRTUAL_NETWORK_LATENCY) {
+                // This version is no longer needed, we can vacuum it
+                DeletePageFromRocksdb(bufferTag, head->lsnEntry[i].lsn);
+                printf("%s %s %d, vacuumed spc = %u, db = %u, rel = %u, fork = %d, blk = %ld, lsn = %lu\n", __FILE__, __func__, __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, head->key.ForkNum, head->key.BlkNum, head->lsnEntry[i].lsn);
+                fflush(stdout);
+                head->lsnEntry[i].lsn = 0;
+            } else if (head->lsnEntry[i].lsn >= replayedLsn-VIRTUAL_NETWORK_LATENCY) {
+                // This version is still needed, we can't vacuum it
+                break;
+            }
+        }
+    }
+
+    HashNodeEle* ele = head->nextEle;
+    while(ele != NULL) {
+        for(int i = 0; i < ele->entryNum; i++) {
+            if(ele->lsnEntry[i].lsn != 0 && ele->lsnEntry[i].lsn < replayedLsn-VIRTUAL_NETWORK_LATENCY) {
+                printf("%s %s %d, vacuumed spc = %u, db = %u, rel = %u, fork = %d, blk = %ld, lsn = %lu\n", __FILE__, __func__, __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode, head->key.ForkNum, head->key.BlkNum, ele->lsnEntry[i].lsn);
+                fflush(stdout);
+                // This version is no longer needed, we can vacuum it
+                DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
+                ele->lsnEntry[i].lsn = 0;
+            } else if (ele->lsnEntry[i].lsn >= replayedLsn-VIRTUAL_NETWORK_LATENCY) {
+                // This version is still needed, we can't vacuum it
+                break;
+            }
+        }
+        // This node is empty, we can march to the next node, and delete this one
+        if(ele->lsnEntry[ele->entryNum-1].lsn == 0){
+            HashNodeEle* nextEle = ele->nextEle;
+            VacuumHashNode(head, ele, bufferTag);
+            ele = nextEle;
+        } else {
+            // This node still has many useful versions, we can't vacuum it
+            // By now, the vacuuming of this head is finished
+            break;
+        }
+    }
+}
+
+
 
 // Before
 void BackgroundReplayHeadNode(HashNodeHead * head) {

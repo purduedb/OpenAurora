@@ -9,6 +9,8 @@ extern "C" {
 #include "storage/block.h"
 #include "storage/relfilenode.h"
 #include "access/xlogdefs.h"
+#include "storage/buf_internals.h"
+#include "access/xlogrecord.h"
 
 extern void
 SyncReplayProcess();
@@ -26,6 +28,14 @@ extern void
 ApplyOneLsnWithoutBasePage(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr lsn, char* targetPage);
 extern void
 ApplyLsnList(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, XLogRecPtr* lsnList, int listSize, char* origPage, char* targetPage);
+extern void
+WalRedoExtendRel(RelFileNode relFileNode, ForkNumber forkNumber, BlockNumber blockNumber, char * content);
+extern void
+WalRedoCreateRel(RelFileNode relFileNode, ForkNumber forkNumber);
+extern void
+ApplyOneLsnOnSeveralPages(int pageCount, int basePageCount, int basePageExist, char* basePageList, XLogRecord* xlogRecord, char* targetPageList);
+extern void
+ApplyOneXLogGetAllRelatedPagesBack(uint64_t lsn, int pageCount, BufferTag* bufferTagList, XLogRecord* xlogRecord, char* targetPageList);
 
 
 
