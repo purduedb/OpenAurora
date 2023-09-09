@@ -23,6 +23,7 @@
 #include "utils/memutils.h"
 
 
+//#define ENABLE_DEBUG_INFO
 /* GUC variable */
 bool		ignore_checksum_failure = false;
 
@@ -81,6 +82,10 @@ PageInit(Page page, Size pageSize, Size specialSize)
 bool
 PageIsVerified(Page page, BlockNumber blkno)
 {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
+            fflush(stdout);
+#endif
 	PageHeader	p = (PageHeader) page;
 	size_t	   *pagebytes;
 	int			i;

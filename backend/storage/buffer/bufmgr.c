@@ -715,6 +715,8 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				  BlockNumber blockNum, ReadBufferMode mode,
 				  BufferAccessStrategy strategy, bool *hit)
 {
+//    printf("%s start, spc=%lu, db=%u, rel=%u, fork=%d, block=%u\n", __func__, smgr->smgr_rnode.node.spcNode, smgr->smgr_rnode.node.dbNode, smgr->smgr_rnode.node.relNode, forkNum, blockNum);
+//    fflush(stdout);
 	BufferDesc *bufHdr;
 	Block		bufBlock;
 	bool		found;
@@ -936,6 +938,8 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 									blockNum,
 									relpath(smgr->smgr_rnode, forkNum))));
 			}
+//            printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
+//            fflush(stdout);
 		}
 	}
 

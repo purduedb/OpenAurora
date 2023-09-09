@@ -102,6 +102,8 @@
 //#define ENABLE_STARTUP_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO
 // #define ENABLE_STARTUP_DEBUG_INFO3
+//#define ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
+
 
 #ifndef FRONTEND
 #define RPC_REMOTE_DISK
@@ -3461,7 +3463,7 @@ int
 XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
 {
 #ifdef RPC_REMOTE_DISK
-    if(IsRpcClient && IsStandbyClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcXLogFileInit(logsegno, use_existent, use_lock);
 #endif
 
@@ -7794,7 +7796,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-#ifdef ENABLE_STARTUP_DEBUG_INFO3
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -8106,8 +8108,12 @@ StartupXLOG(void)
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
 #endif
-                } else {
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+                }
+                else if(1) {
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                }
+                else {
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                     printf("%s %d Start process xlog\n", __func__ , __LINE__);
                     fflush(stdout);
 #endif
@@ -8118,35 +8124,35 @@ StartupXLOG(void)
                     int tagNum;
                     int parsed = GetXlogBuffTagList(xlogreader, &bufferTagList, &tagNum);
                     if(!parsed) { // If not related with buffer pool
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                         printf("%s %d, immediately reply the xlog\n", __func__ , __LINE__);
                         fflush(stdout);
 #endif
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
                     } else {
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                         printf("%s %d, need single redo for pages\n", __func__ , __LINE__);
                         fflush(stdout);
 #endif
                         // Iterate all blocks in bufferTag
                         for(int i = 0; i < tagNum; i++) {
                             BufferTag tempTag = bufferTagList[i];
-#ifdef ENABLE_STARTUP_DEBUG_INFO
-                            printf("%s %d, find page in buffer, spc=%u, db=%u, rel=%u, fork=%d, blk=%u\n", __func__ , __LINE__,
-                                   tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum);
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
+                            printf("%s %d, find page in buffer, spc=%u, db=%u, rel=%u, fork=%d, blk=%u, xlog_lsn=%lu, tagNum=%d\n", __func__ , __LINE__,
+                                   tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->ReadRecPtr, i);
                             fflush(stdout);
 #endif
                             // Find and lock the buffer content
                             // TODO, xlogRedoSinglePage will lock again
                             Buffer buff = FindPageInBuffer(tempTag.rnode, tempTag.forkNum, tempTag.blockNum);
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                             printf("%s %d\n", __func__ , __LINE__);
                             fflush(stdout);
 #endif
 
                             // If buffer pool doesn't contain this page, just ignore (no redo)
                             if(buff == InvalidBuffer) {
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                                 printf("%s %d drop this xlog block\n", __func__ , __LINE__);
                                 fflush(stdout);
 #endif
@@ -8154,13 +8160,13 @@ StartupXLOG(void)
                             } else { //
 //                                UnlockReleaseBuffer(buff);
                                 buff = InvalidBuffer;
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                                 printf("%s %d, Start single page redo, spc=%u, db=%u, rel=%u, fork=%d, blk=%u, redo_record_lsn=%lu\n", __func__ , __LINE__,
                                        tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->EndRecPtr);
                                 fflush(stdout);
 #endif
                                 XlogRedoSinglePage(xlogreader, &tempTag, &buff);
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO_SEC_COMP
                                 printf("%s %d, after redo, buffer lsn = %lu\n", __func__, __LINE__, PageGetLSN((Page) BufferGetPage(buff)));
                                 fflush(stdout);
 #endif
