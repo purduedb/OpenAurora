@@ -178,11 +178,11 @@ export RPC_CLIENT=1
 
 **Performance on bulk Insertion and Index creation workload**
 
- <img src="pictures/A6_PERF_3.png" width="500">
+ <img src="pictures/A6_PERF_3.png" width="400">
 
 **Performance on TPC-C**
 
- <img src="pictures/A6_PERF_4.png" width="600">
+ <img src="pictures/A6_PERF_4.png" width="500">
 
 
 
