@@ -49,7 +49,7 @@
 #define PathNameOpenFile(_Path, _Flag) RpcPathNameOpenFile(_Path, _Flag)
 #define OpenTransientFile(_Path, _Flag) RpcOpenTransientFile(_Path, _Flag)
 #define CloseTransientFile(_Fd) RpcCloseTransientFile(_Fd)
-#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info, __func__, __LINE__)
+#define FileWrite(_File, _buffer, _amount, _offset, _wait_event_info) RpcFileWrite(_File, _buffer, _amount, _offset, _wait_event_info)
 #define FilePrefetch(_File, _offset, _amount, _flag) RpcFilePrefetch(_File, _offset, _amount, _flag)
 #define FileWriteback(_File, _offset, _nbytes, _flag) RpcFileWriteback(_File, _offset, _nbytes, _flag)
 #define FileClose(_File) RpcFileClose(_File)

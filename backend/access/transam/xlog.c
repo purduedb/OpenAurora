@@ -113,7 +113,7 @@
 
 #define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
 //#define stat(_path, _stat) stat_rpc_local(_path, _stat)
-#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag, __func__, __LINE__)
+#define durable_unlink(_fname, _flag) durable_unlink_rpc_local(_fname, _flag)
 #define durable_rename_excl(_old, _new, _elevel) durable_rename_excl_rpc_local(_old, _new, _elevel)
 #endif
 
