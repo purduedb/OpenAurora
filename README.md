@@ -143,25 +143,25 @@ export RPC_CLIENT=1
 **Performance Comparison with Monolithic on 100GB SysBench data set**
 
 
- <img src="pictures/A2_PERF_1" width="600">
+ <img src="pictures/A2_PERF_1.png" width="600">
 
 
 **Performance Comparison with Monolithic on 100GB SysBench data set**
 
 
- <img src="pictures/A2_PERF_2" width="600">
+ <img src="pictures/A2_PERF_2.png" width="600">
 
 
 **Networking Data Size with Light Workload**
 
 
- <img src="pictures/A2_PERF_3" width="500">
+ <img src="pictures/A2_PERF_3.png" width="500">
 
 
 **Networking Data Size with Heavy Workload**
 
 
- <img src="pictures/A2_PERF_4" width="500">
+ <img src="pictures/A2_PERF_4.png" width="500">
 
 
 
