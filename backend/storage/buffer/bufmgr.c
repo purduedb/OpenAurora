@@ -1010,7 +1010,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
 
     if (buf_id >= 0) {
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
         /*
@@ -1020,13 +1020,13 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
 		 */
         buf = GetBufferDescriptor(buf_id);
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
 
         bool valid = PinBuffer(buf, NULL);
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
 
@@ -1034,7 +1034,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
         LWLockRelease(newPartitionLock);
 
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
 
@@ -1042,7 +1042,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
         {
 
 #ifdef ENABLE_DEBUG_INFO
-            printf("%s %d\n", __func__ , __LINE__);
+            printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
             fflush(stdout);
 #endif
             /*
@@ -1067,7 +1067,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
 //                      LW_EXCLUSIVE);
 
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d\n", __func__ , __LINE__);
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
         return BufferDescriptorGetBuffer(buf);
@@ -3148,7 +3148,7 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 			nodes[n++] = rnodes[i].node;
 	}
 
-	printf("%s %d\n", __func__ , __LINE__);
+	printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 	fflush(stdout);
 	/*
 	 * If there are no non-local relations, then we're done. Release the
@@ -3176,7 +3176,7 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 	fflush(stdout);
 	for (i = 0; i < NBuffers; i++)
 	{
-		printf("%s %d\n", __func__ , __LINE__);
+		printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 		fflush(stdout);
 		RelFileNode *rnode = NULL;
 		BufferDesc *bufHdr = GetBufferDescriptor(i);
@@ -3207,24 +3207,24 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 							rnode_comparator);
 		}
 
-		printf("%s %d\n", __func__ , __LINE__);
+		printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 		fflush(stdout);
 		/* buffer doesn't belong to any of the given relfilenodes; skip it */
 		if (rnode == NULL)
 			continue;
 
 		buf_state = LockBufHdr(bufHdr);
-		printf("%s %d\n", __func__ , __LINE__);
+		printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 		fflush(stdout);
 		if (RelFileNodeEquals(bufHdr->tag.rnode, (*rnode)))
 			InvalidateBuffer(bufHdr);	/* releases spinlock */
 		else
 			UnlockBufHdr(bufHdr, buf_state);
-		printf("%s %d\n", __func__ , __LINE__);
+		printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 		fflush(stdout);
 	}
 
-	printf("%s %d\n", __func__ , __LINE__);
+	printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
 	fflush(stdout);
 	pfree(nodes);
 }

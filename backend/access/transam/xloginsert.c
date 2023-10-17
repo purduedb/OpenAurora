@@ -36,6 +36,7 @@
 /* Buffer size required to store a compressed version of backup block image */
 #define PGLZ_MAX_BLCKSZ PGLZ_MAX_OUTPUT(BLCKSZ)
 
+#define DISABLE_TORN_PAGE_WRITE_PROTECT
 /*
  * For each block reference registered with XLogRegisterBuffer, we fill in
  * a registered_buffer struct.
@@ -554,6 +555,10 @@ XLogRecordAssemble(RmgrId rmid, uint8 info,
 			needs_backup = false;
 		else if (!doPageWrites)
 			needs_backup = false;
+#ifdef DISABLE_TORN_PAGE_WRITE_PROTECT
+        else if (1)
+            needs_backup = false;
+#endif
 		else
 		{
 			/*

@@ -65,6 +65,7 @@
 #include "replication/walreceiver.h"
 #include "replication/walsender.h"
 #include "storage/bufmgr.h"
+#include "storage/bufpage.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
 #include "storage/large_object.h"
@@ -90,6 +91,7 @@
 #include "storage/rpcclient.h"
 #include "storage/rel_cache.h"
 
+//#define DEBUG_PAGE_GRANULARITY
 //#define ITER_TIMING
 #ifdef ITER_TIMING
 #include <sys/time.h>
@@ -99,6 +101,7 @@
 //#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
+//#define ENABLE_STARTUP_DEBUG_INFO
 // #define ENABLE_STARTUP_DEBUG_INFO3
 
 #ifndef FRONTEND
@@ -269,66 +272,31 @@ const struct config_enum_entry sync_method_options[] = {
 //#define DEBUG_TIMING 1
 
 #ifdef DEBUG_TIMING
-
 #include <sys/time.h>
 #include <pthread.h>
 #include <stdlib.h>
-
-int initialized2 = 0;
-struct timeval output_timing2;
-
-pthread_mutex_t timing_mutex2 = PTHREAD_MUTEX_INITIALIZER;
-
-long startupTime[20];
-long startupCount[20];
-
-void PrintTimingResult() {
-    struct timeval now;
-
-    if(!initialized2){
-        gettimeofday(&output_timing2, NULL);
-        memset(startupCount, 0, 20*sizeof(startupCount[0]));
-        memset(startupTime, 0, 20*sizeof(startupTime[0]));
-        initialized2 = 1;
-
-    }
-
-
-    gettimeofday(&now, NULL);
-
-    if(now.tv_sec-output_timing2.tv_sec >= 5) {
-        for(int i = 0 ; i < 20; i++) {
-            if(startupCount[i] == 0)
-                continue;
-            printf("startup_%d = %ld\n",i,  startupTime[i]/startupCount[i]);
-            printf("total_startup_%d = %ld, count = %ld\n",i,  startupTime[i], startupCount[i]);
-            fflush(stdout);
-        }
-        output_timing2 = now;
-    }
-}
 
 #define START_TIMING(start_p)  \
 do {                         \
     gettimeofday(start_p, NULL); \
 } while(0);
 
-#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+#define RECORD_TIMING(start_p, end_p, info_string) \
 do { \
-    gettimeofday(end_p, NULL); \
-    pthread_mutex_lock(&timing_mutex2); \
-    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec))/1000; \
-    (*global_count)++;                                                               \
-    pthread_mutex_unlock(&timing_mutex2); \
-    PrintTimingResult(); \
+    gettimeofday(end_p, NULL);                     \
+    uint64 diff = (*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec); \
+    printf("%s, timing = %lu us\n", info_string, diff);                                                \
+    fflush(stdout);                                               \
     gettimeofday(start_p, NULL); \
 } while (0);
+
 
 
 #endif
 
 
 XLogRecPtr XLogParseUpto = 0;
+XLogRecPtr XLogReplayUpto = 0;
 
 // Now, we have no available xlog in this wal standby machine
 int reachXlogTempEnd = 0;
@@ -387,6 +355,107 @@ bool		InRecovery = false;
 
 /* Are we in Hot Standby mode? Only valid in startup process, see xlog.h */
 HotStandbyState standbyState = STANDBY_DISABLED;
+
+struct KeyTypeList {
+	KeyType tag;
+	struct KeyTypeList *next;
+};
+
+typedef struct KeyTypeList KeyTypeList;
+
+KeyTypeList * ToReplayKeyTypeList = NULL;
+
+void KeyTypeListPush(KeyType *tag) {
+    KeyTypeList *newTag = (KeyTypeList *)malloc(sizeof(KeyTypeList));
+    memcpy(&newTag->tag, tag, sizeof(KeyType));
+    newTag->next = ToReplayKeyTypeList;
+    ToReplayKeyTypeList = newTag;
+}
+
+// return false if no more tag to replay
+bool KeyTypeListPop(KeyType *tag) {
+    KeyTypeList *oldTag = ToReplayKeyTypeList;
+    if(oldTag == NULL) {
+        return false;
+    }
+    memcpy(tag, &oldTag->tag, sizeof(KeyType));
+    ToReplayKeyTypeList = oldTag->next;
+    free(oldTag);
+    return true;
+}
+
+struct BufferTagListNode {
+    uint64_t   start_lsn;
+    uint64_t   end_lsn;
+    int       size;
+    BufferTag* tags;
+    struct BufferTagListNode *next;
+};
+
+pthread_mutex_t BufferTagListMutex = PTHREAD_MUTEX_INITIALIZER;
+struct BufferTagList {
+    struct BufferTagListNode *head;
+    struct BufferTagListNode *tail;
+};
+
+typedef struct BufferTagList BufferTagList;
+typedef struct BufferTagListNode BufferTagListNode;
+
+BufferTagList ReplayBufferTagList;
+
+void BufferTagListPush(BufferTagList *list, uint64_t start_lsn, int end_lsn, int size, BufferTag* tags) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
+#endif
+    BufferTagListNode *newNode = (BufferTagListNode *)malloc(sizeof(BufferTagListNode));
+    newNode->start_lsn = start_lsn;
+    newNode->end_lsn = end_lsn;
+    newNode->size = size;
+    newNode->tags = (BufferTag *)malloc(sizeof(BufferTag)*size);
+    memcpy(newNode->tags, tags, sizeof(BufferTag)*size);
+    newNode->next = NULL;
+    pthread_mutex_lock(&BufferTagListMutex);
+    if(list->head == NULL) {
+        list->head = newNode;
+        list->tail = newNode;
+    } else {
+        list->tail->next = newNode;
+        list->tail = newNode;
+    }
+    pthread_mutex_unlock(&BufferTagListMutex);
+}
+
+BufferTag* GetBufferTagListHead(BufferTagList *list, int* size, uint64_t * start_lsn, uint64_t * end_lsn) {
+    BufferTagListNode *head = list->head;
+    if (head == NULL) {
+        return NULL;
+    }
+    *size = head->size;
+    *start_lsn = head->start_lsn;
+    *end_lsn = head->end_lsn;
+    return head->tags;
+}
+
+void BufferTagListPop(BufferTagList *list) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
+#endif
+    BufferTagListNode *head = list->head;
+    if (head == NULL) {
+        return;
+    }
+    pthread_mutex_lock(&BufferTagListMutex);
+    list->head = head->next;
+    if(list->head == NULL) {
+        list->tail = NULL;
+    }
+    pthread_mutex_unlock(&BufferTagListMutex);
+    free(head->tags);
+    free(head);
+}
+
 
 static XLogRecPtr LastRec;
 
@@ -4637,6 +4706,7 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+//    printf("%s %d\n", __func__ , __LINE__);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
@@ -7615,10 +7685,15 @@ StartupXLOG(void)
         printf("%s  %d \n", __func__ , __LINE__);
         fflush(stdout);
 #endif
-		/*
-		 * Find the first record that logically follows the checkpoint --- it
-		 * might physically precede it, though.
-		 */
+
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
+        /*
+         * Find the first record that logically follows the checkpoint --- it
+         * might physically precede it, though.
+         */
 		if (checkPoint.redo < RecPtr)
 		{
 			/* back up to find the record */
@@ -7646,17 +7721,13 @@ StartupXLOG(void)
 			ereport(LOG,
 					(errmsg("redo starts at %X/%X",
 							(uint32) (ReadRecPtr >> 32), (uint32) ReadRecPtr)));
-#ifdef DEBUG_TIMING
-            struct timeval start, end;
-            START_TIMING(&start);
-#endif
 			/*
 			 * main redo apply loop
 			 */
 			do
 			{
 #ifdef DEBUG_TIMING
-                RECORD_TIMING(&start, &end, &(startupTime[0]), &(startupCount[0]))
+                RECORD_TIMING(&start, &end, "ReadRecord");
 #endif
 				bool		switchedTLI = false;
 
@@ -7815,9 +7886,6 @@ StartupXLOG(void)
 
                 gettimeofday(&start, NULL);
 #endif
-#ifdef DEBUG_TIMING
-                RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
-#endif
 
                 if(IsRpcServer) {
                     //For the page related xlog, replay process will deal with them
@@ -7857,13 +7925,13 @@ StartupXLOG(void)
 //                                    fflush(stdout);
                                     RelKey relKey;
                                     TransRelNode2RelKey(xlogreader->blocks[i].rnode, &relKey, xlogreader->blocks[i].forknum);
-//                                    KeyType key;
-//                                    key.SpcID = xlogreader->blocks[i].rnode.spcNode;
-//                                    key.DbID = xlogreader->blocks[i].rnode.dbNode;
-//                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
-//                                    key.ForkNum = xlogreader->blocks[i].forknum;
-//                                    key.BlkNum = -1;
-#ifdef ENABLE_STARTUP_DEBUG_INFO
+#ifdef ENABLE_STARTUP_DEBUG_INFO3
+                                    KeyType key;
+                                    key.SpcID = xlogreader->blocks[i].rnode.spcNode;
+                                    key.DbID = xlogreader->blocks[i].rnode.dbNode;
+                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
+                                    key.ForkNum = xlogreader->blocks[i].forknum;
+                                    key.BlkNum = -1;
                                     printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
                                            key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
 #endif
@@ -7909,9 +7977,6 @@ StartupXLOG(void)
                             break;
                     }
 
-#ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[2]), &(startupCount[2]))
-#endif
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s %d, start to prase xlog\n", __func__, __LINE__);
@@ -7974,13 +8039,94 @@ StartupXLOG(void)
                     }
 #endif
 
+#ifdef DEBUG_INFO
+                    printf("%s %d\n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
 #ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[3]), &(startupCount[3]))
+                    RECORD_TIMING(&start, &end, "XLog Parsing");
 #endif
                     if(!parsed) {
                         RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+#ifdef DEBUG_TIMING
+                        RECORD_TIMING(&start, &end, "NoPage Redo");
+#endif
+                    } else {
+#ifdef DEBUG_INFO
+                        printf("%s %d, start to replay the xlog, max_block_id is %d\n", __func__, __LINE__, xlogreader->max_block_id);
+                        fflush(stdout);
+#endif
+                        KeyType key;
+                        int count = 0;
+                        BufferTag* bufferTagList = (BufferTag *) malloc(sizeof(BufferTag)*(xlogreader->max_block_id+8));
+                        KeyType* keyList = (KeyType *) malloc(sizeof(KeyType)*(xlogreader->max_block_id+8));
+                        while(KeyTypeListPop(&key)) {
+                            bufferTagList[count].rnode.spcNode = key.SpcID;
+                            bufferTagList[count].rnode.dbNode = key.DbID;
+                            bufferTagList[count].rnode.relNode = key.RelID;
+                            bufferTagList[count].forkNum = key.ForkNum;
+                            bufferTagList[count].blockNum = key.BlkNum;
+                            keyList[count] = key;
+#ifdef DEBUG_INFO
+                            printf("%s %d, count = %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, lsn = %lu\n", __func__, __LINE__, count, key.SpcID, key.DbID, key.RelID, key.ForkNum, key.BlkNum, xlogreader->ReadRecPtr);
+                            fflush(stdout);
+#endif
+                            count++;
+                        }
 
+                        BufferTagListPush(&ReplayBufferTagList, xlogreader->ReadRecPtr, xlogreader->EndRecPtr, count, bufferTagList);
+
+
+                        free(bufferTagList);
+                        free(keyList);
+
+
+//                        while( KeyTypeListPop(&key) ) {
+//                            printf("%s %d, count = %d\n", __func__, __LINE__, count++);
+//                            fflush(stdout);
+//                            RelFileNode relFileNode;
+//                            relFileNode.spcNode = key.SpcID;
+//                            relFileNode.dbNode = key.DbID;
+//                            relFileNode.relNode = key.RelID;
+//
+//                            BufferTag bufferTag;
+//                            bufferTag.rnode = relFileNode;
+//                            bufferTag.forkNum = key.ForkNum;
+//                            bufferTag.blockNum = key.BlkNum;
+//                            // Get parsed pageID, now replay it
+//
+//                            // Get latest replay lsn
+//                            uint64_t replayedLsn = HashMapGetReplayedLsn(pageVersionHashMap, key);
+//
+//                            char* targetPage = (char *) malloc(BLCKSZ);
+//                            // Not replayed, or no page in RocksDB yet.
+//                            if(replayedLsn == 0) {
+//                                // Replay without base Page
+//                                ApplyOneLsnWithoutBasePage(relFileNode, (ForkNumber)key.ForkNum, key.BlkNum, xlogreader->ReadRecPtr, targetPage);
+//
+//                            } else {
+//                                // Get base page from RocksDB
+//                                char* basePage = NULL;
+//                                GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+//
+//                                // Replay with base Page
+//                                ApplyOneLsn(relFileNode, (ForkNumber)key.ForkNum, key.BlkNum, xlogreader->ReadRecPtr, basePage, targetPage);
+//                                free(basePage);
+//                            }
+//
+//                            // Insert replayed page to RocksDB
+//                            PutPage2Rocksdb(bufferTag, xlogreader->ReadRecPtr, targetPage);
+//
+//                            // Update replayed lsn in HashMap
+//                            HashMapUpdateReplayedLsn(pageVersionHashMap, key, xlogreader->ReadRecPtr, false);
+//
+//                            free(targetPage);
+//
+//                        }
                     }
+//                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+
+
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s %d, starts = %lu, ends = %lu \n",
@@ -8000,11 +8146,8 @@ StartupXLOG(void)
                     if(xlogreader->ReadRecPtr > XLogParseUpto) {
                         XLogParseUpto = xlogreader->ReadRecPtr;
                     }
-#ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
-#endif
 #ifdef ENABLE_STARTUP_DEBUG_INFO
-                    printf("%s parsed = %d, lsn = %lu\n", __func__ , parsed, xlogreader->ReadRecPtr);
+                    printf("%s lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
 #endif
                 } else {
 #ifdef ENABLE_STARTUP_DEBUG_INFO
@@ -8153,7 +8296,10 @@ StartupXLOG(void)
 //					break;
 //				}
 
-				/* Else, try to fetch the next WAL record */
+#ifdef DEBUG_TIMING
+                RECORD_TIMING(&start, &end, "Trivial Rest Work");
+#endif
+                /* Else, try to fetch the next WAL record */
 				record = ReadRecord(xlogreader, LOG, false);
 			} while (record != NULL);
 
@@ -8725,6 +8871,76 @@ StartupXLOG(void)
 	 */
 	if (fast_promoted)
 		RequestCheckpoint(CHECKPOINT_FORCE);
+}
+
+void
+StartupXLOG2(void)
+{
+    BufferTag* tags = NULL;
+    uint64_t start_lsn;
+    uint64_t end_lsn;
+    int count;
+    while(1) {
+        tags = GetBufferTagListHead(&ReplayBufferTagList, &count, &start_lsn, &end_lsn);
+        if (tags == NULL) {
+            usleep(1000);
+            continue;
+        }
+
+        // Prepare spaces for base pages
+        char* targetPageList = (char *) malloc(BLCKSZ*count);
+
+
+#ifdef DEBUG_INFO
+        printf("%s %d, send lsn = %lu\n", __func__, __LINE__, xlogreader->EndRecPtr);
+                        fflush(stdout);
+#endif
+        ApplyOneXLogGetAllRelatedPagesBack(start_lsn, count, tags, targetPageList);
+#ifdef DEBUG_TIMING2
+        RECORD_TIMING(&start, &end, "CALL_WAL_REDO");
+#endif
+        for (int i = 0; i < count; i++) {
+            // Insert replayed page to RocksDB
+//            XLogRecPtr lsn = PageGetLSN((Page) ((char*)targetPageList + BLCKSZ*i));
+#ifdef DEBUG_INFO
+            printf("%s %d, put page to rocksdb, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, lsn=%lu\n", __func__, __LINE__, bufferTagList[i].rnode.spcNode, bufferTagList[i].rnode.dbNode, bufferTagList[i].rnode.relNode, bufferTagList[i].forkNum, bufferTagList[i].blockNum, lsn);
+                            fflush(stdout);
+#endif
+#ifdef DEBUG_PAGE_GRANULARITY
+            printf("%s, apply pages, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%lu, lsn=%lu\n", __func__, tags[i].rnode.spcNode, tags[i].rnode.dbNode, tags[i].rnode.relNode, tags[i].forkNum, tags[i].blockNum, start_lsn);
+                            fflush(stdout);
+#endif
+            PutPage2Rocksdb(tags[i], start_lsn, (char*)targetPageList + BLCKSZ*i);
+
+            KeyType key;
+            key.SpcID = tags[i].rnode.spcNode;
+            key.DbID = tags[i].rnode.dbNode;
+            key.RelID = tags[i].rnode.relNode;
+            key.ForkNum = tags[i].forkNum;
+            key.BlkNum = tags[i].blockNum;
+            // Update replayed lsn in HashMap
+            HashMapUpdateReplayedLsn(pageVersionHashMap, key, start_lsn, false);
+        }
+#ifdef DEBUG_TIMING2
+        RECORD_TIMING(&start, &end, "RocksDB Page Put");
+#endif
+#ifdef DEBUG_INFO
+        printf("%s %d\n", __func__, __LINE__);
+                        fflush(stdout);
+#endif
+
+        free(targetPageList);
+#ifdef DEBUG_INFO
+        for (int i = 0; i < count; i++) {
+            printf("%s %d, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %lu, lsn = %lu\n",
+                   __func__, __LINE__, tags[i].rnode.spcNode, tags[i].rnode.dbNode, tags[i].rnode.relNode, tags[i].forkNum, tags[i].blockNum, start_lsn);
+        }
+#endif
+
+        BufferTagListPop(&ReplayBufferTagList);
+        if(start_lsn > XLogReplayUpto)
+            XLogReplayUpto = start_lsn;
+    }
 }
 
 /*
@@ -13828,7 +14044,7 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
     }
 #endif
     HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, false);
-
+    KeyTypeListPush(&key);
 #ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);

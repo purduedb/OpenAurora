@@ -30,6 +30,7 @@
 #include "utils/hsearch.h"
 #include "utils/rel.h"
 
+//#define ENABLE_DEBUG_INFO
 #define RPC_REMOTE_DISK
 
 #ifdef RPC_REMOTE_DISK
@@ -327,8 +328,15 @@ XLogRedoAction
 XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
 					  Buffer *buf)
 {
-	return XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
+	XLogRedoAction action = XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
 										 false, buf);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
+    return action;
 }
 
 /*

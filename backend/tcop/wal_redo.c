@@ -110,6 +110,10 @@ static void GetRelSize(StringInfo input_message);
 static void ApplyOneXlog(StringInfo input_message);
 static void ApplyOneXlogWithoutBasePage(StringInfo input_message);
 static void ApplyLsnListXlog(StringInfo input_message);
+static void ExtendRel(StringInfo input_message);
+static void CreateRel(StringInfo input_message);
+static void ApplyOneXLogAndReplyRelatedUpdatedPages(StringInfo input_message);
+
 
 static BufferTag target_redo_tag;
 
@@ -416,43 +420,67 @@ WalRedoMain(int argc, char *argv[],
 #endif
         switch (firstchar)
         {
+            case 's':
+                ApplyOneXLogAndReplyRelatedUpdatedPages(&input_message);
+                break;
+
             case 'E':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 ApplyOneXlogWithoutBasePage(&input_message);
                 break;
 
             case 'O':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 ApplyLsnListXlog(&input_message);
                 break;
 
             case 'D':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 ApplyOneXlog(&input_message);
                 break;
 
             case 'M':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 GetRelSize(&input_message);
                 break;
 
             case 'B':			/* BeginRedoForBlock */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 BeginRedoForBlock(&input_message);
                 break;
 
             case 'P':			/* PushPage */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 PushPage(&input_message);
                 break;
 
             case 'A':			/* ApplyRecord */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 ApplyRecord(&input_message);
                 break;
 
+            case 'C':           /* Create */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+                CreateRel(&input_message);
+                break;
+
+            case 'F':           /* Extend */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
+                ExtendRel(&input_message);
+                break;
+
             case 'G':			/* GetPage */
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 GetPage(&input_message);
                 break;
 
             case 'S':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 SyncLsnReplay(&input_message);
                 break;
 
             case 'U':
+//                printf("%s %s %d\n", __func__ , __FILE__, __LINE__);
                 ApplyXlogUntil(&input_message);
                 break;
                 /*
@@ -815,6 +843,144 @@ BeginRedoForBlock(StringInfo input_message)
 //        reln->smgr_cached_nblocks[forknum] = blknum + 1;
 //    }
 }
+
+static void
+ApplyOneXLogAndReplyRelatedUpdatedPages(StringInfo input_message) {
+    /*
+     * message format:
+     * LSN         *LSN of this xlog
+     * PageCount   *How many pages in this xlog
+     * PageTagList *Page tag list
+     */
+
+    // First parse the xlog, and get all the related page tags.
+    // Then apply the xlog.
+    // Finally, get all the updated pages and send them back to the caller.
+
+#ifdef DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
+    XLogRecPtr lsn;
+    pq_copymsgbytes(input_message, (char *) &lsn, sizeof(lsn));
+//    lsn = pg_ntoh64(lsn);
+
+    int pageCount = pq_getmsgint(input_message, 4);
+#ifdef DEBUG_INFO
+    printf("%s %d, pageCount = %d\n", __func__ , __LINE__, pageCount);
+    fflush(stdout);
+#endif
+    BufferTag *bufferTagList = (BufferTag*) pq_getmsgbytes(input_message, sizeof(BufferTag)*pageCount);
+
+#ifdef DEBUG_INFO
+    printf("%s %d, get record info, record total length is %u\n", __func__ , __LINE__, record->xl_tot_len);
+    fflush(stdout);
+#endif
+    char* err_msg = NULL;
+    XLogBeginRead(reader_state, lsn);
+    XLogRecord * record = XLogReadRecord(reader_state, &err_msg);
+
+#ifdef DEBUG_INFO
+    printf("%s %d, decode record succeed\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+    // Apply the xlog
+    RmgrTable[record->xl_rmid].rm_redo(reader_state);
+
+#ifdef DEBUG_INFO
+    printf("%s %d, apply xlog succeed\n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
+
+    // Read all pages from the buffer
+    for (int i = 0; i < pageCount; i++) {
+#ifdef DEBUG_INFO
+        printf("%s %d, try to get page spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %u\n", __func__ , __LINE__,
+               bufferTagList[i].rnode.spcNode, bufferTagList[i].rnode.dbNode, bufferTagList[i].rnode.relNode,
+               bufferTagList[i].forkNum, bufferTagList[i].blockNum);
+        fflush(stdout);
+#endif
+
+        Buffer buf = ReadBufferWithoutRelcache(bufferTagList[i].rnode, bufferTagList[i].forkNum,
+                                               bufferTagList[i].blockNum, RBM_NORMAL, NULL);
+
+        Page page = BufferGetPage(buf);
+#ifdef DEBUG_INFO
+        printf("%s %d, get page spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %u\n", __func__ , __LINE__,
+                bufferTagList[i].rnode.spcNode, bufferTagList[i].rnode.dbNode, bufferTagList[i].rnode.relNode,
+                bufferTagList[i].forkNum, bufferTagList[i].blockNum);
+        fflush(stdout);
+#endif
+
+        int tot_written = 0;
+        do {
+            ssize_t		rc;
+            rc = write(computePipe[ReplayProcessNum][1], &page[tot_written], BLCKSZ - tot_written);
+            if (rc < 0) {
+                /* If interrupted by signal, just retry */
+                if (errno == EINTR)
+                    continue;
+                ereport(ERROR,
+                        (errcode_for_file_access(),
+                                errmsg("could not write to stdout: %m")));
+            }
+            tot_written += rc;
+        } while (tot_written < BLCKSZ);
+
+#ifdef DEBUG_INFO
+        printf("%s %d, send page back to the caller, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %u\n", __func__ , __LINE__,
+                bufferTagList[i].rnode.spcNode, bufferTagList[i].rnode.dbNode, bufferTagList[i].rnode.relNode, bufferTagList[i].forkNum, bufferTagList[i].blockNum);
+        fflush(stdout);
+#endif
+
+        ReleaseBuffer(buf);
+    }
+}
+
+
+static void
+ApplyOneXlogOnSeveralPages(StringInfo input_message) {
+
+    /*
+     * message format:
+     * PageCount   *How many pages in this xlog
+     * BasePageCount *How many base pages transferred in this msg
+     * BasePageExist *Whether base page exist for mini xlogs
+     * BasePageList *Base page list
+     * XlogRecord *corresponding xlog that need to be applied
+     *
+     *
+     * response format:
+     * PageCount*BLCKSZ *For each mini-xlog, return the page after applied the xlog
+     */
+
+    int pageCount = pq_getmsgint(input_message, 4);
+    int basePageCount = pq_getmsgint(input_message, 4);
+    int basePageExist = pq_getmsgint(input_message, 4);
+
+    char* basePageList = (char *)malloc(basePageCount * BLCKSZ);
+    pq_copymsgbytes(input_message, basePageList, basePageCount * BLCKSZ);
+
+    XLogRecord* record = (XLogRecord *) pq_getmsgbytes(input_message, sizeof(XLogRecord));
+    printf("%s %d, get record info, record total length is %u\n", __func__ , __LINE__, record->xl_tot_len);
+    fflush(stdout);
+
+    int nleft = input_message->len - input_message->cursor;
+    if (record->xl_tot_len != sizeof(XLogRecord) + nleft)
+        elog(ERROR, "mismatch between record (%d) and message size (%d)",
+             record->xl_tot_len, (int) sizeof(XLogRecord) + nleft);
+
+    char* err_msg = NULL;
+    reader_state->decoded_record = record;
+
+    if (!DecodeXLogRecord(reader_state, record, &err_msg))
+        elog(ERROR, "failed to decode WAL record: %s", err_msg);
+
+
+
+}
+
 
 // Optimize: Startup process can put xlog to rocksdb when processing the xlogs
 //              then, rpc server can pass the xlog to this standalone process.
@@ -1407,6 +1573,62 @@ PushPage(StringInfo input_message)
     UnlockReleaseBuffer(buf);
 }
 
+static void
+ExtendRel(StringInfo input_message)
+{
+    RelFileNode rnode;
+    ForkNumber forknum;
+    BlockNumber blknum;
+    const char *content;
+    Buffer		buf;
+    Page		page;
+
+    /*
+     * message format:
+     *
+     * spcNode
+     * dbNode
+     * relNode
+     * ForkNumber
+     * BlockNumber
+     * 8k page content
+     */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+    blknum = pq_getmsgint(input_message, 4);
+    content = pq_getmsgbytes(input_message, BLCKSZ);
+
+    SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+
+    smgrextend(smgrReln, forknum, blknum, content, false);
+
+    /* Response: 1 */
+    int responce = 1;
+    int tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        char * tempP = (char*) &responce;
+        rc = write(computePipe[ReplayProcessNum][1], &(tempP[tot_written]), sizeof(int) - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < sizeof(int));
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s write %d bytes to RPC_SERVER\n", __func__ , tot_written);
+    fflush(stdout);
+#endif
+}
+
 /*
  * Receive a WAL record, and apply it.
  *
@@ -1523,6 +1745,65 @@ redo_block_filter(XLogReaderState *record, uint8 block_id)
      * so that this gets ignored
      */
     return !BUFFERTAGS_EQUAL(target_tag, target_redo_tag);
+}
+
+static void
+CreateRel(StringInfo input_message) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s start, pid=%d\n", __func__ , getpid());
+    fflush(stdout);
+#endif
+
+    RelFileNode rnode;
+    ForkNumber forknum;
+    Buffer		buf;
+    int         pageNum;
+    int			tot_written;
+
+    /*
+     * message format:
+     *
+     * spcNode
+     * dbNode
+     * relNode
+     * ForkNumber
+     */
+    forknum = pq_getmsgbyte(input_message);
+    rnode.spcNode = pq_getmsgint(input_message, 4);
+    rnode.dbNode = pq_getmsgint(input_message, 4);
+    rnode.relNode = pq_getmsgint(input_message, 4);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s  forknum = %d, spc=%ld, db=%ld, rel=%ld\n", __func__ ,forknum, rnode.spcNode, rnode.dbNode, rnode.relNode);
+    fflush(stdout);
+#endif
+
+    SMgrRelation smgrReln = smgropen(rnode, InvalidBackendId);
+
+    smgrcreate(smgrReln, forknum, true);
+
+    /* Response: 1 */
+    pageNum = 1;
+    tot_written = 0;
+    do {
+        ssize_t		rc;
+
+        char * tempP = (char*) &pageNum;
+        rc = write(computePipe[ReplayProcessNum][1], &(tempP[tot_written]), sizeof(int) - tot_written);
+        if (rc < 0) {
+            /* If interrupted by signal, just retry */
+            if (errno == EINTR)
+                continue;
+            ereport(ERROR,
+                    (errcode_for_file_access(),
+                            errmsg("could not write to stdout: %m")));
+        }
+        tot_written += rc;
+    } while (tot_written < sizeof(int));
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s write %d bytes to RPC_SERVER\n", __func__ , tot_written);
+    fflush(stdout);
+#endif
 }
 
 static void
@@ -1717,6 +1998,9 @@ buffered_read(void *buf, size_t count)
 #endif
             if (ret < 0)
             {
+                // Nonblocking, if no data, just read again
+                if (errno == EAGAIN)
+                    continue;
                 /* don't do anything here that could set 'errno' */
                 return ret;
             }
