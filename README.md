@@ -10,9 +10,13 @@ This is **LogDB-MV-SR**'s source code repository.
 You can find other architecture's source code from the following links:
 
 Monolithic: [PostgreSQL v13.0 ](https://www.postgresql.org/ftp/source/v13.0/)
+
 Remote Disk: [Link for Remote Disk](https:google.com)
+
 LogDB: [Link for LogDB](https://google.com)
+
 LogDB-MV: [Link for LogDB-MV](https://google.com)
+
 LogDB-MV-FR: [Link for LogDB-FR](https://google.com)
 
 
@@ -169,9 +173,11 @@ export RPC_CLIENT=1
  <img src="pictures/A6_PERF_1.png" width="600">
 
 **GetPage@LSN Performance Analysis**
+
  <img src="pictures/A6_PERF_2.png" width="500">
 
 **Performance on bulk Insertion and Index creation workload**
+
  <img src="pictures/A6_PERF_3.png" width="500">
 
 
