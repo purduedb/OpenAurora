@@ -30,6 +30,7 @@
 
 
 extern int IsRpcClient;
+extern int IsStandbyClient;
 /*
  * This struct of function pointers defines the API between smgr.c and
  * any individual storage manager module.  Note that smgr subfunctions are
@@ -134,6 +135,12 @@ smgrinit(void)
 
     if(pgRpcClient != NULL) {
         IsRpcClient = 1;
+    }
+
+    char *pgRpcStandby = getenv("STANDBY_CLIENT");
+
+    if(pgRpcStandby != NULL) {
+        IsStandbyClient = 1;
     }
 
 	int			i;
@@ -441,16 +448,12 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 			smgrsw[which].smgr_close(rels[i], forknum);
 	}
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	/*
 	 * Get rid of any remaining buffers for the relations.  bufmgr will just
 	 * drop them without bothering to write the contents.
 	 */
 	DropRelFileNodesAllBuffers(rnodes, nrels);
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	/*
 	 * It'd be nice to tell the stats collector to forget them immediately,
 	 * too. But we can't because we don't know the OIDs.
@@ -467,8 +470,6 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 	for (i = 0; i < nrels; i++)
 		CacheInvalidateSmgr(rnodes[i]);
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	/*
 	 * Delete the physical file(s).
 	 *
@@ -485,8 +486,6 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 			smgrsw[which].smgr_unlink(rnodes[i], forknum, isRedo);
 	}
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	pfree(rnodes);
 }
 
@@ -533,7 +532,7 @@ void
 smgrread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer)
 {
-	smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
+    smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
 }
 
 /*

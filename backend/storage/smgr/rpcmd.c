@@ -91,6 +91,7 @@ typedef struct _MdfdVec
 
 static MemoryContext RpcMdCxt;		/* context for all MdfdVec objects */
 
+extern int IsStandbyClient;
 
 /*** behavior for mdopen & _mdfd_getseg ***/
 /* ereport if segment not present */
@@ -184,8 +185,8 @@ rpcmdexists(SMgrRelation reln, ForkNumber forkNum)
     //! TODO After add these locks, sysbench will crash
     RelSizeSharedLock(relKey);
     if(GetRelSizeCache(relKey, &result)) {
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
+//        printf("%s %d\n", __func__ , __LINE__);
+//        fflush(stdout);
         RelSizeReleaseLock(relKey);
         return result >= 0;
     }
@@ -208,7 +209,11 @@ void
 rpcmdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
 
-#ifdef ENABLE_REL_SIZE_CACHE2
+    if(IsStandbyClient) {
+        return;
+    }
+#ifdef ENABLE_REL_SIZE_CACHE
+
     uint32_t result;
     RelKey relKey;
 
@@ -330,8 +335,6 @@ rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
     RelSizeSharedLock(relKey);
     if(GetRelSizeCache(relKey, &result)) { //After extend, blkNum increased
         RelSizeReleaseLock(relKey);
-        printf("%s %d\n", __func__ , __LINE__);
-        fflush(stdout);
         return result;
     }
     RelSizeReleaseLock(relKey);
@@ -345,7 +348,7 @@ rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
         printf("%s %d, %lu_%lu_%lu_%d cache=%u, rpc=%u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, result, blckNum);
         fflush(stdout);
     }
-//    printf("%s %d, %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, blckNum);
+//    printf("%s %d, get from rpc %lu_%lu_%lu_%d = %u\n", __func__ , __LINE__, relKey.SpcId, relKey.DbId, relKey.RelId, relKey.forkNum, blckNum);
 //    fflush(stdout);
     RelSizeExclusiveLock(relKey);
 

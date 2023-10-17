@@ -66,6 +66,7 @@ std::shared_ptr<TProtocol> rpcprotocol;
 DataPageAccessClient *client=NULL;
 
 int IsRpcClient = 0;
+int IsStandbyClient = 0;
 pid_t MyPid = 0;
 
 //#define DEBUG_TIMING
@@ -294,6 +295,9 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
     gettimeofday(&start, NULL);
 #endif
 
+//    printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
+//           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
+//    fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s Start, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
@@ -321,6 +325,9 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
     client->ReadBufferCommon(_return, _reln, _relpersistence, _forkNum, _blkNum, _readBufferMode, GetLogWrtResultLsn());
 
     _return.copy(buff, BLCKSZ);
+//    XLogRecPtr lsn = PageGetLSN((Page) buff );
+//    printf("%s %d, get page from storage node, spc=%lu, db=%lu, rel=%lu, fork=%d, blk=%u, lsn=%lu, request lsn=%lu\n", __func__, __LINE__, _reln._spc_node, _reln._db_node, _reln._rel_node, _forkNum, _blkNum, lsn, GetLogWrtResultLsn());
+//    fflush(stdout);
 
 #ifdef DEBUG_TIMING2
     gettimeofday(&end, NULL);
@@ -332,6 +339,9 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 #ifdef DEBUG_TIMING
     RECORD_TIMING(&start, &end, &(client_readbuffer_time[1]), &(client_readbuffer_count[1]))
 #endif
+//    printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
+//           reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
+//    fflush(stdout);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s End, spc=%u, db=%u, rel=%u, forkNum=%d, blk=%u, lsn = %lu\n", __func__, reln->smgr_rnode.node.spcNode,
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());

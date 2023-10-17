@@ -30,6 +30,7 @@
 #include "utils/hsearch.h"
 #include "utils/rel.h"
 
+//#define ENABLE_DEBUG_INFO
 #define RPC_REMOTE_DISK
 
 #ifdef RPC_REMOTE_DISK
@@ -327,8 +328,15 @@ XLogRedoAction
 XLogReadBufferForRedo(XLogReaderState *record, uint8 block_id,
 					  Buffer *buf)
 {
-	return XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
+	XLogRedoAction action = XLogReadBufferForRedoExtended(record, block_id, RBM_NORMAL,
 										 false, buf);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
+    return action;
 }
 
 /*
@@ -561,7 +569,7 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 	else
 	{
 #ifdef ENABLE_DEBUG_INFO
-        printf("%s %d, didn't find page in buffer\n", __func__ , __LINE__);
+        printf("%s %d, didn't find page in buffer, pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
 		/* hm, page doesn't exist in file */
@@ -578,6 +586,10 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 		buffer = InvalidBuffer;
 		do
 		{
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d,  pid = %d\n", __func__ , __LINE__, getpid());
+            fflush(stdout);
+#endif
 			if (buffer != InvalidBuffer)
 			{
 				if (mode == RBM_ZERO_AND_LOCK || mode == RBM_ZERO_AND_CLEANUP_LOCK)
@@ -588,6 +600,10 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 											   P_NEW, mode, NULL);
 		}
 		while (BufferGetBlockNumber(buffer) < blkno);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
+        fflush(stdout);
+#endif
 		/* Handle the corner case that P_NEW returns non-consecutive pages */
 		if (BufferGetBlockNumber(buffer) != blkno)
 		{
@@ -597,7 +613,15 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
 			buffer = ReadBufferWithoutRelcache(rnode, forknum, blkno,
 											   mode, NULL);
 		}
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
+        fflush(stdout);
+#endif
 	}
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, pid = %d\n", __func__ , __LINE__, getpid());
+    fflush(stdout);
+#endif
 
 	if (mode == RBM_NORMAL)
 	{

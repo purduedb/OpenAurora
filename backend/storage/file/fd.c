@@ -344,10 +344,11 @@ static void unlink_if_exists_fname(const char *fname, bool isdir, int elevel);
 static int	fsync_parent_path(const char *fname, int elevel);
 
 extern int IsRpcClient;
+extern int IsStandbyClient;
 
 
 int stat_rpc_local(const char* path,struct stat* _stat) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcStat(path, _stat);
     else
         return stat(path, _stat);
@@ -358,7 +359,7 @@ int pg_fsync_rpc_local(int fd) {
     printf("%s fd = %d, isRpc= %d\n",__func__, fd, IsRpcClient);
     fflush(stdout);
 #endif
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgFsync(fd);
     else
         return pg_fsync(fd);
@@ -366,7 +367,7 @@ int pg_fsync_rpc_local(int fd) {
 
 int
 durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elevel) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcDurableRenameExcl(oldfile, newfile, elevel);
     else
         return durable_rename_excl(oldfile, newfile, elevel);
@@ -374,7 +375,7 @@ durable_rename_excl_rpc_local(const char *oldfile, const char *newfile, int elev
 
 int
 durable_unlink_rpc_local(const char *fname, int elevel) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcDurableUnlink(fname, elevel);
     else
         return durable_unlink(fname, elevel);
@@ -382,7 +383,7 @@ durable_unlink_rpc_local(const char *fname, int elevel) {
 
 int
 OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcOpenTransientFile(fileName, fileFlags);
     else
         return OpenTransientFile(fileName, fileFlags);
@@ -390,7 +391,7 @@ OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
 
 int
 CloseTransientFile_Rpc_Local(int fd) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcCloseTransientFile(fd);
     else
         return CloseTransientFile(fd);
@@ -398,7 +399,7 @@ CloseTransientFile_Rpc_Local(int fd) {
 
 int
 BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcBasicOpenFile(fileName, fileFlags);
     else
         return BasicOpenFile(fileName, fileFlags);
@@ -406,7 +407,7 @@ BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags) {
 
 int
 Unlink_Rpc_Local(char *path) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcUnlink(path);
     else
         return unlink(path);
@@ -414,14 +415,14 @@ Unlink_Rpc_Local(char *path) {
 
 int
 pg_fdatasync_rpc_local(int fd) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcPgFdatasync(fd);
     else
         return pg_fdatasync(fd);
 }
 
 int close_rpc_local(int fd) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcClose(fd);
     else
         return close(fd);
@@ -429,7 +430,7 @@ int close_rpc_local(int fd) {
 
 int
 pg_fsync_no_writethrough_rpc_local(int fd) {
-    if (IsRpcClient)
+    if (IsRpcClient && !IsStandbyClient)
         return RpcPgFsyncNoWritethrough(fd);
     else
         return pg_fsync_no_writethrough(fd);
@@ -980,6 +981,11 @@ InitFileAccess(void)
         IsRpcClient = 1;
     }
 
+    char *pgRpcStandby = getenv("STANDBY_CLIENT");
+
+    if(pgRpcStandby != NULL) {
+        IsStandbyClient = 1;
+    }
 
     Assert(SizeVfdCache == 0);	/* call me only once */
 

@@ -609,6 +609,7 @@ void
 mdopen(SMgrRelation reln)
 {
     /* mark it not open */
+//    printf("%s %d, initiate %d forks\n", __func__ , __LINE__, MAX_FORKNUM);
     for (int forknum = 0; forknum <= MAX_FORKNUM; forknum++)
         reln->md_num_open_segs[forknum] = 0;
 }
@@ -741,6 +742,7 @@ void
 mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
        char *buffer)
 {
+//    printf("%s %d\n", __func__ , __LINE__);
     ForkTagData forkTagData = InitForkTagData(reln->smgr_rnode.node, forknum);
     PartitionLock(MdPartitionMutex, (void*)&forkTagData);
 
@@ -754,15 +756,18 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
                                         reln->smgr_rnode.node.relNode,
                                         reln->smgr_rnode.backend);
 
+//    printf("%s %d\n", __func__ , __LINE__);
     v = _mdfd_getseg(reln, forknum, blocknum, false,
                      EXTENSION_FAIL | EXTENSION_CREATE_RECOVERY);
 
+//    printf("%s %d\n", __func__ , __LINE__);
     seekpos = (off_t) BLCKSZ * (blocknum % ((BlockNumber) RELSEG_SIZE));
 
     Assert(seekpos < (off_t) BLCKSZ * RELSEG_SIZE);
 
     nbytes = FileRead(v->mdfd_vfd, buffer, BLCKSZ, seekpos, WAIT_EVENT_DATA_FILE_READ);
 
+//    printf("%s %d\n", __func__ , __LINE__);
     TRACE_POSTGRESQL_SMGR_MD_READ_DONE(forknum, blocknum,
                                        reln->smgr_rnode.node.spcNode,
                                        reln->smgr_rnode.node.dbNode,
@@ -773,6 +778,7 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
     if (nbytes != BLCKSZ)
     {
+//        printf("%s %d\n", __func__ , __LINE__);
         if (nbytes < 0)
             ereport(ERROR,
                     (errcode_for_file_access(),
@@ -797,6 +803,7 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
                                    nbytes, BLCKSZ)));
     }
 
+//    printf("%s %d\n", __func__ , __LINE__);
     PartitionUnlock(MdPartitionMutex, (void*)&forkTagData);
 }
 
@@ -1353,9 +1360,11 @@ _mdfd_getseg(SMgrRelation reln, ForkNumber forknum, BlockNumber blkno,
 
     targetseg = blkno / ((BlockNumber) RELSEG_SIZE);
 
+//    printf("%s %d, forknum = %d\n", __func__ , __LINE__, forknum);
     /* if an existing and opened segment, we're done */
     if (targetseg < reln->md_num_open_segs[forknum])
     {
+//        printf("%s %d\n", __func__ , __LINE__);
         v = &reln->md_seg_fds[forknum][targetseg];
         return v;
     }

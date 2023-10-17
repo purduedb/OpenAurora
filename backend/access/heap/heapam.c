@@ -69,6 +69,7 @@
 #include "utils/snapmgr.h"
 #include "utils/spccache.h"
 
+//#define ENABLE_DEBUG_INFO
 
 static HeapTuple heap_prepare_insert(Relation relation, HeapTuple tup,
 									 TransactionId xid, CommandId cid, int options);
@@ -8069,6 +8070,10 @@ heap_xlog_delete(XLogReaderState *record)
 static void
 heap_xlog_insert(XLogReaderState *record)
 {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	XLogRecPtr	lsn = record->EndRecPtr;
 	xl_heap_insert *xlrec = (xl_heap_insert *) XLogRecGetData(record);
 	Buffer		buffer;
@@ -8091,12 +8096,20 @@ heap_xlog_insert(XLogReaderState *record)
 	ItemPointerSetBlockNumber(&target_tid, blkno);
 	ItemPointerSetOffsetNumber(&target_tid, xlrec->offnum);
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * The visibility map may need to be fixed even if the heap page is
 	 * already up-to-date.
 	 */
 	if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		Relation	reln = CreateFakeRelcacheEntry(target_node);
 		Buffer		vmbuffer = InvalidBuffer;
 
@@ -8112,6 +8125,10 @@ heap_xlog_insert(XLogReaderState *record)
 	 */
 	if (XLogRecGetInfo(record) & XLOG_HEAP_INIT_PAGE)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		buffer = XLogInitBufferForRedo(record, 0);
 		page = BufferGetPage(buffer);
 		PageInit(page, BufferGetPageSize(buffer), 0);
@@ -8119,6 +8136,10 @@ heap_xlog_insert(XLogReaderState *record)
 	}
 	else
 		action = XLogReadBufferForRedo(record, 0, &buffer);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if (action == BLK_NEEDS_REDO)
 	{
 		Size		datalen;
@@ -8150,22 +8171,46 @@ heap_xlog_insert(XLogReaderState *record)
 		HeapTupleHeaderSetCmin(htup, FirstCommandId);
 		htup->t_ctid = target_tid;
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		if (PageAddItem(page, (Item) htup, newlen, xlrec->offnum,
 						true, true) == InvalidOffsetNumber)
 			elog(PANIC, "failed to add tuple");
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		freespace = PageGetHeapFreeSpace(page); /* needed to update FSM below */
 
 		PageSetLSN(page, lsn);
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 		if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
 			PageClearAllVisible(page);
 
 		MarkBufferDirty(buffer);
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d \n", __func__ , __LINE__);
+        fflush(stdout);
+#endif
 	}
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	if (BufferIsValid(buffer))
 		UnlockReleaseBuffer(buffer);
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+    fflush(stdout);
+#endif
 	/*
 	 * If the page is running low on free space, update the FSM as well.
 	 * Arbitrarily, our definition of "low" is less than 20%. We can't do much
@@ -8804,6 +8849,7 @@ heap_xlog_inplace(XLogReaderState *record)
 void
 heap_redo(XLogReaderState *record)
 {
+//    printf("%s %d \n", __func__ , __LINE__);
 	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
 	/*
@@ -8814,15 +8860,27 @@ heap_redo(XLogReaderState *record)
 	switch (info & XLOG_HEAP_OPMASK)
 	{
 		case XLOG_HEAP_INSERT:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_insert(record);
 			break;
 		case XLOG_HEAP_DELETE:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_delete(record);
 			break;
 		case XLOG_HEAP_UPDATE:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_update(record, false);
 			break;
 		case XLOG_HEAP_TRUNCATE:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 
 			/*
 			 * TRUNCATE is a no-op because the actions are already logged as
@@ -8831,15 +8889,27 @@ heap_redo(XLogReaderState *record)
 			 */
 			break;
 		case XLOG_HEAP_HOT_UPDATE:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_update(record, true);
 			break;
 		case XLOG_HEAP_CONFIRM:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_confirm(record);
 			break;
 		case XLOG_HEAP_LOCK:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_lock(record);
 			break;
 		case XLOG_HEAP_INPLACE:
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d \n", __func__ , __LINE__);
+#endif
 			heap_xlog_inplace(record);
 			break;
 		default:
@@ -8850,6 +8920,9 @@ heap_redo(XLogReaderState *record)
 void
 heap2_redo(XLogReaderState *record)
 {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d \n", __func__ , __LINE__);
+#endif
 	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
 	switch (info & XLOG_HEAP_OPMASK)

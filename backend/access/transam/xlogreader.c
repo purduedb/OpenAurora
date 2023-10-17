@@ -35,8 +35,9 @@
 
 #define RPC_REMOTE_DISK
 extern int IsRpcClient;
+extern int IsStandbyClient;
 int pg_pread_rpc_local2(int fd, char *p, int amount, int offset) {
-    if(IsRpcClient)
+    if(IsRpcClient && !IsStandbyClient)
         return RpcPgPRead(fd, p, amount, offset);
     else
         return pg_pread(fd, p, amount, offset);
