@@ -22,7 +22,7 @@ LogDB-MV-SR: [Link for LogDB-MV-SR](https://anonymous.4open.science/r/Disaggrega
 
 # Architecture Overview
 
-<img src=":/f4742f84914e465ead0e4b1a48a67048" width="500">
+<img src="pictures/E3_ARCH_NEW.png" width="500">
 
 
 
