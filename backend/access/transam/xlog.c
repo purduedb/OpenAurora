@@ -148,6 +148,29 @@ int read_rpc_local(int fd, char *p, int amount) {
         return read(fd, p, amount);
 }
 
+//#define DEBUG_TIMING
+
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <stdlib.h>
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, function_name) \
+do { \
+    gettimeofday(end_p, NULL); \
+    long long diff = ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec)); \
+    printf("DEBUG_TIMING %s spent %lld us\n", function_name, diff);                                                 \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+#endif
+
 extern uint32 bootstrap_data_checksum_version;
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
@@ -2482,6 +2505,10 @@ XLogCheckpointNeeded(XLogSegNo new_segno)
 static void
 XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	bool		ispartialpage;
 	bool		last_iteration;
 	bool		finishing_seg;
@@ -2591,6 +2618,9 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 			curridx == XLogCtl->XLogCacheBlck ||
 			finishing_seg)
 		{
+#ifdef DEBUG_TIMING
+            printf("DEBUG_XLOG: XLogWrite: write %d pages\n", npages);
+#endif
 			char	   *from;
 			Size		nbytes;
 			Size		nleft;
@@ -2746,6 +2776,9 @@ XLogWrite(XLogwrtRqst WriteRqst, bool flexible)
 			XLogCtl->LogwrtRqst.Flush = LogwrtResult.Flush;
 		SpinLockRelease(&XLogCtl->info_lck);
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -3693,6 +3726,7 @@ InstallXLogFileSegment(XLogSegNo *segno, char *tmppath,
 	if (!find_free)
 	{
 		/* Force installation: get rid of any pre-existing segment file */
+//        printf("to delete, %s %d\n", __func__ , __LINE__);
 		durable_unlink(path, DEBUG1);
 	}
 	else
@@ -4121,6 +4155,7 @@ RemoveTempXlogFiles(void)
 static void
 RemoveOldXlogFiles(XLogSegNo segno, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 {
+//    printf("%s %d\n", __func__ , __LINE__);
 	DIR		   *xldir;
 	struct dirent *xlde;
 	char		lastoff[MAXFNAMELEN];
@@ -4137,6 +4172,7 @@ RemoveOldXlogFiles(XLogSegNo segno, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 
 	xldir = AllocateDir(XLOGDIR);
 
+    //TODO Dir related functions should also be mapped to remote server.
 	while ((xlde = ReadDir(xldir, XLOGDIR)) != NULL)
 	{
 		/* Ignore files that are not XLOG segments */
@@ -4188,6 +4224,7 @@ RemoveOldXlogFiles(XLogSegNo segno, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 static void
 RemoveNonParentXlogFiles(XLogRecPtr switchpoint, TimeLineID newTLI)
 {
+//    printf("%s %d\n", __func__ , __LINE__);
 	DIR		   *xldir;
 	struct dirent *xlde;
 	char		switchseg[MAXFNAMELEN];
@@ -4274,7 +4311,8 @@ RemoveXlogFile(const char *segname, XLogRecPtr lastredoptr, XLogRecPtr endptr)
 	 * segment. Only recycle normal files, pg_standby for example can create
 	 * symbolic links pointing to a separate archive directory.
 	 */
-#ifdef RPC_REMOTE_DISK
+//#ifdef RPC_REMOTE_DISK
+#ifdef DISABLE
     if (wal_recycle &&
 		endlogSegNo <= recycleSegNo &&
 		lstat_rpc_local(path, &statbuf) == 0 && S_ISREG(statbuf.st_mode) &&
@@ -5754,11 +5792,15 @@ exitArchiveRecovery(TimeLineID endTLI, XLogRecPtr endOfLog)
 	 * Remove the signal files out of the way, so that we don't accidentally
 	 * re-enter archive recovery mode in a subsequent crash.
 	 */
-	if (standby_signal_file_found)
-		durable_unlink(STANDBY_SIGNAL_FILE, FATAL);
+	if (standby_signal_file_found){
+//        printf("to delete, %s %d\n", __func__ , __LINE__);
+        durable_unlink(STANDBY_SIGNAL_FILE, FATAL);
+    }
 
-	if (recovery_signal_file_found)
-		durable_unlink(RECOVERY_SIGNAL_FILE, FATAL);
+	if (recovery_signal_file_found){
+//        printf("to delete, %s %d\n", __func__ , __LINE__);
+        durable_unlink(RECOVERY_SIGNAL_FILE, FATAL);
+    }
 
 	ereport(LOG,
 			(errmsg("archive recovery complete")));
@@ -11254,12 +11296,14 @@ do_pg_stop_backup(char *labelfile, bool waitforarchive, TimeLineID *stoptli_p)
 						(errcode_for_file_access(),
 						 errmsg("could not read file \"%s\": %m",
 								BACKUP_LABEL_FILE)));
+//            printf("to delete, %s %d\n", __func__ , __LINE__);
 			durable_unlink(BACKUP_LABEL_FILE, ERROR);
 
 			/*
 			 * Remove tablespace_map file if present, it is created only if
 			 * there are tablespaces.
 			 */
+//            printf("to delete, %s %d\n", __func__ , __LINE__);
 			durable_unlink(TABLESPACE_MAP, DEBUG1);
 		}
 		PG_END_ENSURE_ERROR_CLEANUP(pg_stop_backup_callback, (Datum) BoolGetDatum(exclusive));

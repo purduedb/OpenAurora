@@ -66,6 +66,31 @@
 #define ftruncate(_fd, _size) RpcFtruncate(_fd, _size)
 
 #endif
+
+//#define DEBUG_TIMING
+
+#ifdef DEBUG_TIMING
+
+#include <sys/time.h>
+#include <pthread.h>
+#include <stdlib.h>
+
+#define START_TIMING(start_p)  \
+do {                         \
+    gettimeofday(start_p, NULL); \
+} while(0);
+
+#define RECORD_TIMING(start_p, end_p, function_name) \
+do { \
+    gettimeofday(end_p, NULL); \
+    long long diff = ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec)); \
+    printf("DEBUG_TIMING %s spent %lld us\n", function_name, diff);                                                 \
+    gettimeofday(start_p, NULL); \
+} while (0);
+
+
+#endif
+
 int IsRpcClient = 0;
 /*
  *	The magnetic disk storage manager keeps track of open file
@@ -195,13 +220,23 @@ mdinit(void)
 bool
 mdexists(SMgrRelation reln, ForkNumber forkNum)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	/*
 	 * Close it first, to ensure that we notice if the fork has been unlinked
 	 * since we opened it.
 	 */
 	mdclose(reln, forkNum);
 
-	return (mdopenfork(reln, forkNum, EXTENSION_RETURN_NULL) != NULL);
+	bool result = (mdopenfork(reln, forkNum, EXTENSION_RETURN_NULL) != NULL);
+
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
+
+    return result;
 }
 
 /*
@@ -212,6 +247,10 @@ mdexists(SMgrRelation reln, ForkNumber forkNum)
 void
 mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	MdfdVec    *mdfd;
 	char	   *path;
 	File		fd;
@@ -260,6 +299,9 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 	mdfd = &reln->md_seg_fds[forkNum][0];
 	mdfd->mdfd_vfd = fd;
 	mdfd->mdfd_segno = 0;
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -311,6 +353,10 @@ mdcreate(SMgrRelation reln, ForkNumber forkNum, bool isRedo)
 void
 mdunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	/* Now do the per-fork work */
 	if (forkNum == InvalidForkNumber)
 	{
@@ -319,6 +365,9 @@ mdunlink(RelFileNodeBackend rnode, ForkNumber forkNum, bool isRedo)
 	}
 	else
 		mdunlinkfork(rnode, forkNum, isRedo);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 static void
@@ -422,6 +471,10 @@ void
 mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer, bool skipFsync)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -470,6 +523,9 @@ mdextend(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		register_dirty_segment(reln, forknum, v);
 
 	Assert(_mdnblocks(reln, forknum, v) <= ((BlockNumber) RELSEG_SIZE));
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -539,6 +595,10 @@ mdopen(SMgrRelation reln)
 void
 mdclose(SMgrRelation reln, ForkNumber forknum)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	int			nopensegs = reln->md_num_open_segs[forknum];
 
 	/* No work if already closed */
@@ -554,6 +614,9 @@ mdclose(SMgrRelation reln, ForkNumber forknum)
 		_fdvec_resize(reln, forknum, nopensegs - 1);
 		nopensegs--;
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -562,6 +625,10 @@ mdclose(SMgrRelation reln, ForkNumber forknum)
 bool
 mdprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 #ifdef USE_PREFETCH
 	off_t		seekpos;
 	MdfdVec    *v;
@@ -578,6 +645,9 @@ mdprefetch(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum)
 	(void) FilePrefetch(v->mdfd_vfd, seekpos, BLCKSZ, WAIT_EVENT_DATA_FILE_PREFETCH);
 #endif							/* USE_PREFETCH */
 
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 	return true;
 }
 
@@ -591,6 +661,10 @@ void
 mdwriteback(SMgrRelation reln, ForkNumber forknum,
 			BlockNumber blocknum, BlockNumber nblocks)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	/*
 	 * Issue flush requests in as few requests as possible; have to split at
 	 * segment boundaries though, since those are actually separate files.
@@ -631,6 +705,9 @@ mdwriteback(SMgrRelation reln, ForkNumber forknum,
 		nblocks -= nflush;
 		blocknum += nflush;
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -640,6 +717,10 @@ void
 mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 	   char *buffer)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -692,6 +773,9 @@ mdread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 							blocknum, FilePathName(v->mdfd_vfd),
 							nbytes, BLCKSZ)));
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -705,6 +789,10 @@ void
 mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		char *buffer, bool skipFsync)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	off_t		seekpos;
 	int			nbytes;
 	MdfdVec    *v;
@@ -756,6 +844,9 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 
 	if (!skipFsync && !SmgrIsTemp(reln))
 		register_dirty_segment(reln, forknum, v);
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -769,6 +860,10 @@ mdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 BlockNumber
 mdnblocks(SMgrRelation reln, ForkNumber forknum)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	MdfdVec    *v = mdopenfork(reln, forknum, EXTENSION_FAIL);
 	BlockNumber nblocks;
 	BlockNumber segno = 0;
@@ -816,6 +911,9 @@ mdnblocks(SMgrRelation reln, ForkNumber forknum)
 		if (v == NULL)
 			return segno * ((BlockNumber) RELSEG_SIZE);
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -824,6 +922,10 @@ mdnblocks(SMgrRelation reln, ForkNumber forknum)
 void
 mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	BlockNumber curnblk;
 	BlockNumber priorblocks;
 	int			curopensegs;
@@ -910,6 +1012,9 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 		}
 		curopensegs--;
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
@@ -926,6 +1031,10 @@ mdtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
 void
 mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 {
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    START_TIMING(&start);
+#endif
 	int			segno;
 	int			min_inactive_seg;
 
@@ -965,6 +1074,9 @@ mdimmedsync(SMgrRelation reln, ForkNumber forknum)
 
 		segno--;
 	}
+#ifdef DEBUG_TIMING
+    RECORD_TIMING(&start, &end, __func__ );
+#endif
 }
 
 /*
