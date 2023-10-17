@@ -146,7 +146,7 @@ export RPC_CLIENT=1
  <img src="pictures/A2_PERF_1.png" width="600">
 
 
-**Performance Comparison with Monolithic on 100GB SysBench data set**
+**Performance Comparison with LogDB on 100GB SysBench data set**
 
 
  <img src="pictures/A2_PERF_2.png" width="600">
