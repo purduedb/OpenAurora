@@ -11,13 +11,13 @@ You can find other architecture's source code from the following links:
 
 Monolithic: [PostgreSQL v13.0 ](https://www.postgresql.org/ftp/source/v13.0/)
 
-Remote Disk: [Link for Remote Disk](https:google.com)
+Remote Disk: [Link for Remote Disk](https://anonymous.4open.science/r/Disaggregated-DBMS-Remote-Disk)
 
-LogDB: [Link for LogDB](https://google.com)
+LogDB: [Link for LogDB](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB)
 
-LogDB-MV: [Link for LogDB-MV](https://google.com)
+LogDB-MV: [Link for LogDB-MV](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV)
 
-LogDB-MV-FR: [Link for LogDB-FR](https://google.com)
+LogDB-MV-FR: [Link for LogDB-MV-FR](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV-FR)
 
 
 # Architecture Overview
@@ -180,7 +180,9 @@ export RPC_CLIENT=1
 
  <img src="pictures/A6_PERF_3.png" width="500">
 
+**Performance on TPC-C**
 
+ <img src="pictures/A6_PERF_4.png" width="600">
 
 
 
