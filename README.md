@@ -11,13 +11,13 @@ You can find other architecture's source code from the following links:
 
 Monolithic: [PostgreSQL v13.0 ](https://www.postgresql.org/ftp/source/v13.0/)
 
-Remote Disk: [Link for Remote Disk](anonymous.4open.science/r/Disaggregated-DBMS-Remote-Disk)
+Remote Disk: [Link for Remote Disk](https://anonymous.4open.science/r/Disaggregated-DBMS-Remote-Disk)
 
-LogDB: [Link for LogDB](anonymous.4open.science/r/Disaggregated-DBMS-LogDB)
+LogDB: [Link for LogDB](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB)
 
-LogDB-MV: [Link for LogDB-MV](anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV)
+LogDB-MV: [Link for LogDB-MV](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV)
 
-LogDB-MV-SR: [Link for LogDB-MV-SR](anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV-SR)
+LogDB-MV-SR: [Link for LogDB-MV-SR](https://anonymous.4open.science/r/Disaggregated-DBMS)
 
 # Architecture Overview
 
