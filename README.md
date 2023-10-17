@@ -17,7 +17,7 @@ LogDB-MV: [Link for LogDB-MV](https://anonymous.4open.science/r/Disaggregated-DB
 
 LogDB-MV-FR: [Link for LogDB-MV-FR](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV-FR)
 
-LogDB-MV-SR: [Link for LogDB-MV-SR](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV-SR)
+LogDB-MV-SR: [Link for LogDB-MV-SR](https://anonymous.4open.science/r/Disaggregated-DBMS)
 
 
 # Architecture Overview
