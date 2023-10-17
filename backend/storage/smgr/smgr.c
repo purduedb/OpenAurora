@@ -200,6 +200,9 @@ smgropen(RelFileNode rnode, BackendId backend)
 	/* Initialize it if not present before */
 	if (!found)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, create a new smgrRelation, spc=%lu, db=%lu, rel=%lu\n", __func__ , __LINE__, rnode.spcNode, rnode.dbNode, rnode.relNode);
+#endif
 		/* hash_search already filled in the lookup key */
 		reln->smgr_owner = NULL;
 		reln->smgr_targblock = InvalidBlockNumber;
@@ -533,7 +536,10 @@ void
 smgrread(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
 		 char *buffer)
 {
-	smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
+    smgrsw[reln->smgr_which].smgr_read(reln, forknum, blocknum, buffer);
 }
 
 /*

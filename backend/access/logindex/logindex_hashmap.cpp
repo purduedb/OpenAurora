@@ -240,6 +240,40 @@ bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn) {
 
 }
 
+// Get the replayed lsn
+uint64_t HashMapGetReplayedLsn(HashMap hashMap, KeyType key) {
+    uint32_t hashValue = HashKey(key);
+    uint32_t bucketPos = hashValue % hashMap->bucketNum;
+
+    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
+
+    HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
+    bool foundHead = false;
+    while(iter != NULL) {
+        // If found matched key, break the loop
+        if(iter->hashValue == hashValue
+           && KeyMatch(iter->key, key)) {
+            foundHead = true;
+            break;
+        }
+
+        iter = iter->nextHead;
+    }
+
+    if (!foundHead) {
+        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+        return 0;
+    }
+
+
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+    pthread_rwlock_wrlock(&iter->headLock);
+
+    uint64_t res = iter->replayedLsn;
+    pthread_rwlock_unlock(&iter->headLock);
+    return res;
+}
+
 // It can be called by two different logics
 // 1. Set the base page as the replayed page (lsn=1), and we should acquire holdHeadLock in this function
 // 2. After GetReplayLsnList (it holds the header lock and doesn't release), and ApplyLsnList, we use this function

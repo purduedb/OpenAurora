@@ -99,7 +99,9 @@
 //#define ENABLE_DEBUG_INFO
 //#define ENABLE_DEBUG_INFO2
 //#define ENABLE_STARTUP_DEBUG_INFO2
+//#define ENABLE_STARTUP_DEBUG_INFO
 // #define ENABLE_STARTUP_DEBUG_INFO3
+//#define ENABLE_DEBUG_INFO_WAIT
 
 #ifndef FRONTEND
 #define RPC_REMOTE_DISK
@@ -274,53 +276,17 @@ const struct config_enum_entry sync_method_options[] = {
 #include <pthread.h>
 #include <stdlib.h>
 
-int initialized2 = 0;
-struct timeval output_timing2;
-
-pthread_mutex_t timing_mutex2 = PTHREAD_MUTEX_INITIALIZER;
-
-long startupTime[20];
-long startupCount[20];
-
-void PrintTimingResult() {
-    struct timeval now;
-
-    if(!initialized2){
-        gettimeofday(&output_timing2, NULL);
-        memset(startupCount, 0, 20*sizeof(startupCount[0]));
-        memset(startupTime, 0, 20*sizeof(startupTime[0]));
-        initialized2 = 1;
-
-    }
-
-
-    gettimeofday(&now, NULL);
-
-    if(now.tv_sec-output_timing2.tv_sec >= 5) {
-        for(int i = 0 ; i < 20; i++) {
-            if(startupCount[i] == 0)
-                continue;
-            printf("startup_%d = %ld\n",i,  startupTime[i]/startupCount[i]);
-            printf("total_startup_%d = %ld, count = %ld\n",i,  startupTime[i], startupCount[i]);
-            fflush(stdout);
-        }
-        output_timing2 = now;
-    }
-}
-
 #define START_TIMING(start_p)  \
 do {                         \
     gettimeofday(start_p, NULL); \
 } while(0);
 
-#define RECORD_TIMING(start_p, end_p, global_timing, global_count) \
+#define RECORD_TIMING(start_p, end_p, info_string) \
 do { \
-    gettimeofday(end_p, NULL); \
-    pthread_mutex_lock(&timing_mutex2); \
-    (*global_timing) += ((*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec))/1000; \
-    (*global_count)++;                                                               \
-    pthread_mutex_unlock(&timing_mutex2); \
-    PrintTimingResult(); \
+    gettimeofday(end_p, NULL);                     \
+    uint64 diff = (*end_p.tv_sec*1000000+*end_p.tv_usec) - (*start_p.tv_sec*1000000+*start_p.tv_usec); \
+    printf("%s, timing = %lu us\n", info_string, diff);                                                \
+    fflush(stdout);                                               \
     gettimeofday(start_p, NULL); \
 } while (0);
 
@@ -387,6 +353,35 @@ bool		InRecovery = false;
 
 /* Are we in Hot Standby mode? Only valid in startup process, see xlog.h */
 HotStandbyState standbyState = STANDBY_DISABLED;
+
+struct KeyTypeList {
+	KeyType tag;
+	struct KeyTypeList *next;
+};
+
+typedef struct KeyTypeList KeyTypeList;
+
+KeyTypeList * ToReplayKeyTypeList = NULL;
+
+void KeyTypeListPush(KeyType *tag) {
+    KeyTypeList *newTag = (KeyTypeList *)malloc(sizeof(KeyTypeList));
+    memcpy(&newTag->tag, tag, sizeof(KeyType));
+    newTag->next = ToReplayKeyTypeList;
+    ToReplayKeyTypeList = newTag;
+}
+
+// return false if no more tag to replay
+bool KeyTypeListPop(KeyType *tag) {
+    KeyTypeList *oldTag = ToReplayKeyTypeList;
+    if(oldTag == NULL) {
+        return false;
+    }
+    memcpy(tag, &oldTag->tag, sizeof(KeyType));
+    ToReplayKeyTypeList = oldTag->next;
+    free(oldTag);
+    return true;
+}
+
 
 static XLogRecPtr LastRec;
 
@@ -907,6 +902,8 @@ typedef struct XLogCtlData
 	XLogRecPtr	lastFpwDisableRecPtr;
 
 	slock_t		info_lck;		/* locks shared variables shown above */
+
+    XLogRecPtr lastReplayedRecPtr; /* last replayed record */
 } XLogCtlData;
 
 static XLogCtlData *XLogCtl = NULL;
@@ -3474,6 +3471,10 @@ XLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock)
     fflush(stdout);
 #endif
 
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, ThisTimeLineID = %d, logsegno = %d, wal_segment_size = %d\n", __func__ , __LINE__, ThisTimeLineID, logsegno, wal_segment_size);
+#endif
+
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	PGAlignedXLogBlock zbuffer;
@@ -3940,8 +3941,10 @@ static int
 XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 			 XLogSource source, bool notfoundOk)
 {
-//    printf("pid=%d, %s %s %d, source = %d\n", getpid(), __func__ , __FILE__, __LINE__, source );
-//    fflush(stdout);
+#ifdef ENABLE_DEBUG_INFO
+    printf("pid=%d, %s %s %d, source = %d, timeLineID = %d\n", getpid(), __func__ , __FILE__, __LINE__, source, tli);
+    fflush(stdout);
+#endif
     char		xlogfname[MAXFNAMELEN];
 	char		activitymsg[MAXFNAMELEN + 16];
 	char		path[MAXPGPATH];
@@ -3993,6 +3996,11 @@ XLogFileRead(XLogSegNo segno, int emode, TimeLineID tli,
 	}
 
 	fd = BasicOpenFile(path, O_RDONLY | PG_BINARY);
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, path = %s, fd = %d\n", __func__ , __LINE__, path, fd);
+    fflush(stdout);
+#endif
+
 	if (fd >= 0)
 	{
 		/* Success! */
@@ -4637,6 +4645,7 @@ static XLogRecord *
 ReadRecord(XLogReaderState *xlogreader, int emode,
 		   bool fetching_ckpt)
 {
+//    printf("%s %d\n", __func__ , __LINE__);
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
@@ -7619,7 +7628,15 @@ StartupXLOG(void)
 		 * Find the first record that logically follows the checkpoint --- it
 		 * might physically precede it, though.
 		 */
-		if (checkPoint.redo < RecPtr)
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__, __LINE__);
+        fflush(stdout);
+#endif
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
+        if (checkPoint.redo < RecPtr)
 		{
 			/* back up to find the record */
 			XLogBeginRead(xlogreader, checkPoint.redo);
@@ -7631,6 +7648,10 @@ StartupXLOG(void)
 			record = ReadRecord(xlogreader, LOG, false);
 		}
 
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__, __LINE__);
+        fflush(stdout);
+#endif
 #ifdef ITER_TIMING
         struct timeval start;
         gettimeofday(&start, NULL);
@@ -7646,17 +7667,13 @@ StartupXLOG(void)
 			ereport(LOG,
 					(errmsg("redo starts at %X/%X",
 							(uint32) (ReadRecPtr >> 32), (uint32) ReadRecPtr)));
-#ifdef DEBUG_TIMING
-            struct timeval start, end;
-            START_TIMING(&start);
-#endif
-			/*
-			 * main redo apply loop
-			 */
+            /*
+             * main redo apply loop
+             */
 			do
 			{
 #ifdef DEBUG_TIMING
-                RECORD_TIMING(&start, &end, &(startupTime[0]), &(startupCount[0]))
+                RECORD_TIMING(&start, &end, "ReadRecord Timing");
 #endif
 				bool		switchedTLI = false;
 
@@ -7796,7 +7813,7 @@ StartupXLOG(void)
 					TransactionIdIsValid(record->xl_xid))
 					RecordKnownAssignedTransactionIds(record->xl_xid);
 
-#ifdef ENABLE_STARTUP_DEBUG_INFO3
+#ifdef ENABLE_STARTUP_DEBUG_INFO
                 const char*id=NULL;
                 id = RmgrTable[record->xl_rmid].rm_identify( record->xl_info );
                 if (id)
@@ -7815,18 +7832,20 @@ StartupXLOG(void)
 
                 gettimeofday(&start, NULL);
 #endif
-#ifdef DEBUG_TIMING
-                RECORD_TIMING(&start, &end, &(startupTime[1]), &(startupCount[1]))
+#ifdef ENABLE_DEBUG_INFO
+                printf("%s %d, IsRpcServer = %d\n", __func__ , __LINE__, IsRpcServer);
+                fflush(stdout);
 #endif
 
                 if(IsRpcServer) {
                     //For the page related xlog, replay process will deal with them
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s starts to process xlog, rmid = %d, info = %d\n", __func__ , record->xl_rmid, XLogRecGetInfo(xlogreader) & ~XLR_INFO_MASK);
+                    fflush(stdout);
 #endif
 
                     // Deal With HEAP: add VM blocks to xlogreader->decoded_block
-                    polar_xlog_decode_data(xlogreader);
+//                    polar_xlog_decode_data(xlogreader);
 
 
 
@@ -7847,6 +7866,7 @@ StartupXLOG(void)
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                             printf("%s max_block_id = %d\n", __func__ , xlogreader->max_block_id);
+                            fflush(stdout);
 #endif
                             if(xlogreader->max_block_id >= 0) {
                                 for(int i = 0; i <= xlogreader->max_block_id; i++) {
@@ -7863,16 +7883,18 @@ StartupXLOG(void)
 //                                    key.RelID = xlogreader->blocks[i].rnode.relNode;
 //                                    key.ForkNum = xlogreader->blocks[i].forknum;
 //                                    key.BlkNum = -1;
-#ifdef ENABLE_STARTUP_DEBUG_INFO
-                                    printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
-                                           key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
+//#ifdef ENABLE_STARTUP_DEBUG_INFO
+//                                    printf("%s , spc=%lu, db=%lu, rel=%lu, forkNum=%u, blkNo=%u\n", __func__ , key.SpcID,
+//                                           key.DbID, key.RelID, key.ForkNum, xlogreader->blocks[i].blkno);
+//#endif
+#ifdef ENABLE_DEBUG_INFO
+                                    printf("%s , spc = %lu, db = %lu, rel = %lu, fork = %u, blkNo = %u\n", __func__ , relKey.SpcId,
+                                           relKey.DbId, relKey.RelId, relKey.forkNum, xlogreader->blocks[i].blkno);
+                                    fflush(stdout);
 #endif
-//                                    printf("%s , spc = %lu, db = %lu, rel = %lu, fork = %u, blkNo = %u\n", __func__ , relKey.SpcId,
-//                                           relKey.DbId, relKey.RelId, relKey.forkNum, xlogreader->blocks[i].blkno);
-//                                    fflush(stdout);
 
-                                    uint64_t foundLsn;
-                                    int foundPageNum;
+//                                    uint64_t foundLsn;
+//                                    int foundPageNum;
 
                                     // If not found relation page number in cache, then no updates is on this relation
                                     // Then we read from standalone process ($basePageNum),
@@ -7884,19 +7906,19 @@ StartupXLOG(void)
 //                                    RelSizeExclusiveLock(relKey);
 //                                    printf("%s %d\n", __func__ , __LINE__);
 //                                    fflush(stdout);
-                                    uint32_t result = -1;
-                                    bool found = GetRelSizeCache(relKey, &result);
-                                    if(found && result<xlogreader->blocks[i].blkno+1) {
-                                        InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
-                                    } else if(!found) {
-                                        // TODO: Could this merge with RocksDb creating list, since we will migrate list from RocksDb to inMem hashTable
-                                        int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
-                                        if(baseRelSize > xlogreader->blocks[i].blkno+1) {
-                                            InsertRelSizeCache(relKey, baseRelSize);
-                                        } else {
-                                            InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
-                                        }
-                                    }
+//                                    uint32_t result = -1;
+//                                    bool found = GetRelSizeCache(relKey, &result);
+//                                    if(found && result<xlogreader->blocks[i].blkno+1) {
+//                                        InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
+//                                    } else if(!found) {
+//                                         TODO: Could this merge with RocksDb creating list, since we will migrate list from RocksDb to inMem hashTable
+//                                        int baseRelSize = SyncGetRelSize(xlogreader->blocks[i].rnode, xlogreader->blocks[i].forknum, xlogreader->ReadRecPtr);
+//                                        if(baseRelSize > xlogreader->blocks[i].blkno+1) {
+//                                            InsertRelSizeCache(relKey, baseRelSize);
+//                                        } else {
+//                                            InsertRelSizeCache(relKey, xlogreader->blocks[i].blkno+1);
+//                                        }
+//                                    }
 //                                    printf("%s %d\n", __func__ , __LINE__);
 //                                    fflush(stdout);
 //                                    RelSizeReleaseLock(relKey);
@@ -7909,52 +7931,49 @@ StartupXLOG(void)
                             break;
                     }
 
-#ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[2]), &(startupCount[2]))
-#endif
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s %d, start to prase xlog\n", __func__, __LINE__);
                     fflush(stdout);
 #endif
-                    bool parsed = false;
-                    switch (record->xl_rmid) {
-                        case RM_XLOG_ID:
-                            parsed = polar_xlog_idx_save(xlogreader);
-                            break;
-                        case RM_HEAP2_ID:
-                            parsed = polar_heap2_idx_save(xlogreader);
-                            break;
-                        case RM_HEAP_ID:
-                            parsed = polar_heap_idx_save(xlogreader);
-                            break;
-                        case RM_BTREE_ID:
-                            parsed = polar_btree_idx_save(xlogreader);
-                            break;
-                        case RM_HASH_ID:
-                            parsed = polar_hash_idx_save(xlogreader);
-                            break;
-                        case RM_GIN_ID:
-                            parsed = polar_gin_idx_save(xlogreader);
-                            break;
-                        case RM_GIST_ID:
-                            parsed = polar_gist_idx_save(xlogreader);
-                            break;
-                        case RM_SEQ_ID:
-                            parsed = polar_seq_idx_save(xlogreader);
-                            break;
-                        case RM_SPGIST_ID:
-                            parsed = polar_spg_idx_save(xlogreader);
-                            break;
-                        case RM_BRIN_ID:
-                            parsed = polar_brin_idx_save(xlogreader);
-                            break;
-                        case RM_GENERIC_ID:
-                            parsed = polar_generic_idx_save(xlogreader);
-                            break;
-                        default:
-                            break;
-                    }
+//                    bool parsed = false;
+//                    switch (record->xl_rmid) {
+//                        case RM_XLOG_ID:
+//                            parsed = polar_xlog_idx_save(xlogreader);
+//                            break;
+//                        case RM_HEAP2_ID:
+//                            parsed = polar_heap2_idx_save(xlogreader);
+//                            break;
+//                        case RM_HEAP_ID:
+//                            parsed = polar_heap_idx_save(xlogreader);
+//                            break;
+//                        case RM_BTREE_ID:
+//                            parsed = polar_btree_idx_save(xlogreader);
+//                            break;
+//                        case RM_HASH_ID:
+//                            parsed = polar_hash_idx_save(xlogreader);
+//                            break;
+//                        case RM_GIN_ID:
+//                            parsed = polar_gin_idx_save(xlogreader);
+//                            break;
+//                        case RM_GIST_ID:
+//                            parsed = polar_gist_idx_save(xlogreader);
+//                            break;
+//                        case RM_SEQ_ID:
+//                            parsed = polar_seq_idx_save(xlogreader);
+//                            break;
+//                        case RM_SPGIST_ID:
+//                            parsed = polar_spg_idx_save(xlogreader);
+//                            break;
+//                        case RM_BRIN_ID:
+//                            parsed = polar_brin_idx_save(xlogreader);
+//                            break;
+//                        case RM_GENERIC_ID:
+//                            parsed = polar_generic_idx_save(xlogreader);
+//                            break;
+//                        default:
+//                            break;
+//                    }
 
 #ifdef XLOG_IN_ROCKSDB
                     if(parsed) {
@@ -7974,13 +7993,60 @@ StartupXLOG(void)
                     }
 #endif
 
-#ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[3]), &(startupCount[3]))
+//                    if(!parsed) {
+//                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+//                    } else {
+//                        KeyType key;
+//                        while( KeyTypeListPop(&key) ) {
+//                            RelFileNode relFileNode;
+//                            relFileNode.spcNode = key.SpcID;
+//                            relFileNode.dbNode = key.DbID;
+//                            relFileNode.relNode = key.RelID;
+//
+//                            BufferTag bufferTag;
+//                            bufferTag.rnode = relFileNode;
+//                            bufferTag.forkNum = key.ForkNum;
+//                            bufferTag.blockNum = key.BlkNum;
+//                            // Get parsed pageID, now replay it
+//
+//                            // Get latest replay lsn
+//                            uint64_t replayedLsn = HashMapGetReplayedLsn(pageVersionHashMap, key);
+//
+//                            char* targetPage = (char *) malloc(BLCKSZ);
+//                            // Not replayed, or no page in RocksDB yet.
+//                            if(replayedLsn == 0) {
+//                                // Replay without base Page
+//                                ApplyOneLsnWithoutBasePage(relFileNode, (ForkNumber)key.ForkNum, key.BlkNum, xlogreader->ReadRecPtr, targetPage);
+//
+//                            } else {
+//                                // Get base page from RocksDB
+//                                char* basePage = NULL;
+//                                GetPageFromRocksdb(bufferTag, replayedLsn, &basePage);
+//
+//                                // Replay with base Page
+//                                ApplyOneLsn(relFileNode, (ForkNumber)key.ForkNum, key.BlkNum, xlogreader->ReadRecPtr, basePage, targetPage);
+//                                free(basePage);
+//                            }
+//
+//                            // Insert replayed page to RocksDB
+//                            PutPage2Rocksdb(bufferTag, xlogreader->ReadRecPtr, targetPage);
+//
+//                            // Update replayed lsn in HashMap
+//                            HashMapUpdateReplayedLsn(pageVersionHashMap, key, xlogreader->ReadRecPtr, false);
+//
+//                            free(targetPage);
+//
+//                        }
+//                    }
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d ready to replay xlog\n", __func__ , __LINE__);
 #endif
-                    if(!parsed) {
-                        RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+                    RmgrTable[record->xl_rmid].rm_redo(xlogreader);
+#ifdef ENABLE_DEBUG_INFO
+                    printf("%s %d end replay xlog\n", __func__ , __LINE__);
+#endif
 
-                    }
+
 
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                     printf("%s %d, starts = %lu, ends = %lu \n",
@@ -7988,23 +8054,21 @@ StartupXLOG(void)
                     fflush(stdout);
 #endif
 
-                    if(xlogreader->EndRecPtr > XLogParseUpto) {
-                        XLogParseUpto = xlogreader->EndRecPtr;
+                    SetWalLastReplayedLsn(xlogreader->EndRecPtr);
+//                    if(xlogreader->EndRecPtr > XLogParseUpto) {
+//                        XLogParseUpto = xlogreader->EndRecPtr;
 #ifdef ENABLE_STARTUP_DEBUG_INFO
-                        printf("%s %d , set XLogParseUpto as %lu\n", __func__ , __LINE__, XLogParseUpto);
-                        fflush(stdout);
+//                        printf("%s %d , set XLogParseUpto as %lu\n", __func__ , __LINE__, XLogParseUpto);
+//                        fflush(stdout);
 #endif
-
-                    }
+//
+//                    }
                     // It seems sometime xlogreader->EndRecPtr won't change
                     if(xlogreader->ReadRecPtr > XLogParseUpto) {
                         XLogParseUpto = xlogreader->ReadRecPtr;
                     }
-#ifdef DEBUG_TIMING
-                    RECORD_TIMING(&start, &end, &(startupTime[4]), &(startupCount[4]))
-#endif
 #ifdef ENABLE_STARTUP_DEBUG_INFO
-                    printf("%s parsed = %d, lsn = %lu\n", __func__ , parsed, xlogreader->ReadRecPtr);
+                    printf("%s lsn = %lu\n", __func__ , xlogreader->ReadRecPtr);
 #endif
                 } else {
 #ifdef ENABLE_STARTUP_DEBUG_INFO
@@ -8153,8 +8217,12 @@ StartupXLOG(void)
 //					break;
 //				}
 
+#ifdef DEBUG_TIMING
+                RECORD_TIMING(&start, &end, "XLogReplay Timing");
+#endif
 				/* Else, try to fetch the next WAL record */
 				record = ReadRecord(xlogreader, LOG, false);
+
 			} while (record != NULL);
 
 			/*
@@ -12703,15 +12771,20 @@ retry:
     //! Need to understand the difference between currentSource and readSource
 	if (readFile < 0 ||
 		(readSource == XLOG_FROM_STREAM &&
-		 flushedUpto < targetPagePtr + reqLen) ||
-         ( (currentSource == XLOG_FROM_RPC||readSource == XLOG_FROM_RPC) &&
-         RpcXLogFlushedLsn < targetPagePtr + reqLen))
+		 flushedUpto < targetPagePtr + reqLen) )
 	{
-		if (!WaitForWALToBecomeAvailable(targetPagePtr + reqLen,
+#ifdef DEBUG_TIMING
+        struct timeval start, end;
+        START_TIMING(&start);
+#endif
+        if (!WaitForWALToBecomeAvailable(targetPagePtr + reqLen,
 										 private->randAccess,
 										 private->fetching_ckpt,
 										 targetRecPtr))
 		{
+#ifdef DEBUG_TIMING
+            RECORD_TIMING(&start, &end, "Wait for xlog");
+#endif
 #ifdef ENABLE_DEBUG_INFO
             printf("%s %d , waitForXlog failed\n",__func__ ,__LINE__);
             fflush(stdout);
@@ -12724,7 +12797,10 @@ retry:
 
 			return -1;
 		}
-	}
+#ifdef DEBUG_TIMING
+        RECORD_TIMING(&start, &end, "Wait for xlog");
+#endif
+    }
 
 	/*
 	 * At this point, we have the right segment open and if we're streaming we
@@ -12752,23 +12828,23 @@ retry:
 			readLen = XLogSegmentOffset(flushedUpto, wal_segment_size) -
 				targetPageOff;
 	}
-    else if (readSource == XLOG_FROM_RPC) {
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
-#endif
-
-        if(readFile == -1)
-            readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2, XLOG_FROM_RPC);
-#ifdef ENABLE_DEBUG_INFO
-        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
-        fflush(stdout);
-#endif
-        if (((targetPagePtr) / XLOG_BLCKSZ) < (RpcXLogFlushedLsn / XLOG_BLCKSZ))
-            readLen = XLOG_BLCKSZ;
-        else
-            readLen = XLogSegmentOffset(flushedUpto, wal_segment_size) -
-                      targetPageOff;
-    }
+//    else if (readSource == XLOG_FROM_RPC) {
+//#ifdef ENABLE_DEBUG_INFO
+//        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
+//#endif
+//
+//        if(readFile == -1)
+//            readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2, XLOG_FROM_RPC);
+//#ifdef ENABLE_DEBUG_INFO
+//        printf("%s %d, readFile = %d\n", __func__ , __LINE__, readFile);
+//        fflush(stdout);
+//#endif
+//        if (((targetPagePtr) / XLOG_BLCKSZ) < (RpcXLogFlushedLsn / XLOG_BLCKSZ))
+//            readLen = XLOG_BLCKSZ;
+//        else
+//            readLen = XLogSegmentOffset(flushedUpto, wal_segment_size) -
+//                      targetPageOff;
+//    }
 	else
 		readLen = XLOG_BLCKSZ;
 
@@ -12785,10 +12861,10 @@ retry:
 #ifdef ENABLE_DEBUG_INFO2
     printf("%s %d, targetPagePtr = %lu\n", __func__ , __LINE__, targetPagePtr);
 #endif
-    if(IsRpcServer) {
+    if(0 && IsRpcServer) {
         pthread_rwlock_rdlock(&(RpcXLogPagesLocks[bufferIdx]));
     }
-    if(IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
+    if(0 && IsRpcServer && RpcXlblocks[bufferIdx] == targetPagePtr+BLCKSZ) {
 #ifdef ENABLE_DEBUG_INFO4
         printf("%s %d read xlog from Rpc Buffer: bufferIdx = %d\n", __func__ , __LINE__, bufferIdx);
         fflush(stdout);
@@ -12823,12 +12899,13 @@ retry:
         fflush(stdout);
 #endif
 #ifdef RPC_REMOTE_DISK
+//        printf("%s %d, read xlog from disk, readFile = %d, targetPagePtr = %lu\n", __func__ , __LINE__, readFile, targetPagePtr);
         r = pg_pread_rpc_local(readFile, readBuf, XLOG_BLCKSZ, (int) readOff);
 #else
         r = pg_pread(readFile, readBuf, XLOG_BLCKSZ, (off_t) readOff);
 #endif
     }
-    if(IsRpcServer) {
+    if(0 && IsRpcServer) {
         pthread_rwlock_unlock(&(RpcXLogPagesLocks[bufferIdx]));
     }
 
@@ -12959,7 +13036,7 @@ static bool
 WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 							bool fetching_ckpt, XLogRecPtr tliRecPtr)
 {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
 	printf("%s Start\n", __func__ );
 	fflush(stdout);
 #endif
@@ -12994,23 +13071,28 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 	 * the end of recovery.
 	 *-------
 	 */
+
+#ifdef ENABLE_DEBUG_INFO_WAIT
+    printf("pid=%d, %s current source is %d, lastSourceFailed = %d\n", getpid() ,__func__ , currentSource, lastSourceFailed);
+	fflush(stdout);
+#endif
 	if (!InArchiveRecovery && !IsRpcServer)
 		currentSource = XLOG_FROM_PG_WAL;
 	else if (currentSource == XLOG_FROM_ANY ||
-			 (!StandbyMode && currentSource == XLOG_FROM_STREAM))
+			 (!IsRpcServer && !StandbyMode && currentSource == XLOG_FROM_STREAM))
 	{
 		lastSourceFailed = false;
 		currentSource = XLOG_FROM_ARCHIVE;
 	}
 
-#ifdef ENABLE_DEBUG_INFO
-	printf("pid=%d, %s current source is %d, StandbyMode flag is %d\n", getpid() ,__func__ , currentSource, StandbyMode);
-	fflush(stdout);
+#ifdef ENABLE_DEBUG_INFO_WAIT
+    printf("pid=%d, %s current source is %d, lastSourceFailed = %d\n", getpid() ,__func__ , currentSource, lastSourceFailed);
+    fflush(stdout);
 #endif
 
 	for (;;)
 	{
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
         printf("%s %d \n", __func__ , __LINE__);
         fflush(stdout);
 #endif
@@ -13032,8 +13114,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				case XLOG_FROM_ARCHIVE:
 				case XLOG_FROM_PG_WAL:
 
-#ifdef ENABLE_DEBUG_INFO
-                    printf("%s %d \n", __func__ , __LINE__);
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                    printf("%s %d IsRpcServer = %d\n", __func__ , __LINE__, IsRpcServer);
                     fflush(stdout);
 #endif
 					/*
@@ -13061,20 +13143,18 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * Move to XLOG_FROM_STREAM state, and set to start a
 					 * walreceiver if necessary.
 					 */
-                    if(StandbyMode) {
+                    if(StandbyMode || IsRpcServer) {
                         currentSource = XLOG_FROM_STREAM;
                         startWalReceiver = true;
-                    } else { // In RpcServer mode
-                        currentSource = XLOG_FROM_RPC;
                     }
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                     printf("%s %d \n", __func__ , __LINE__);
                     fflush(stdout);
 #endif
 					break;
 
                 case XLOG_FROM_RPC:
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                     printf("%s %d \n", __func__ , __LINE__);
                     fflush(stdout);
 #endif
@@ -13096,7 +13176,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
                                     (secs * 1000 + usecs / 1000);
 
                         if(RecPtr < RpcXLogFlushedLsn) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                             printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
                             fflush(stdout);
 #endif
@@ -13104,25 +13184,25 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
                             lastSourceFailed = false;
                             return true;
                         }
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                         printf("%s %d, start waitlatch\n", __func__ , __LINE__);
                         printf("%s %d, get into RPC Latch waiting, flushedLsn = %lu\n", __func__ , __LINE__, RpcXLogFlushedLsn);
                         fflush(stdout);
 #endif
-                        WaitForNewXLog(0, 5000000);
-//                        (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
-//                                         WL_LATCH_SET | WL_TIMEOUT |
-//                                         WL_EXIT_ON_PM_DEATH,
-//                                         wait_time,
-//                                         WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
-#ifdef ENABLE_DEBUG_INFO
+//                        WaitForNewXLog(0, 5000000);
+                        (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
+                                         WL_LATCH_SET | WL_TIMEOUT |
+                                         WL_EXIT_ON_PM_DEATH,
+                                         wait_time,
+                                         WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL);
+#ifdef ENABLE_DEBUG_INFO_WAIT
                         printf("%s %d, got latch\n", __func__ , __LINE__);
 #endif
-//                        ResetLatch(&XLogCtl->recoveryWakeupLatch);
+                        ResetLatch(&XLogCtl->recoveryWakeupLatch);
                         now = GetCurrentTimestamp();
 
                         if(RecPtr < RpcXLogFlushedLsn) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                             printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
                             fflush(stdout);
 #endif
@@ -13134,7 +13214,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
                     last_fail_time = now;
                     currentSource = XLOG_FROM_RPC;
 
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                     printf("%s %d \n", __func__ , __LINE__);
                     fflush(stdout);
 #endif
@@ -13142,8 +13222,8 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 
 				case XLOG_FROM_STREAM:
 
-//                    printf("%s %d \n", __func__ , __LINE__);
-//                    fflush(stdout);
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
 					/*
 					 * Failure while streaming. Most likely, we got here
 					 * because streaming replication was terminated, or
@@ -13163,14 +13243,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * We should be able to move to XLOG_FROM_STREAM only in
 					 * standby mode.
 					 */
-					Assert(StandbyMode);
+//					Assert(StandbyMode);
 
 					/*
 					 * Before we leave XLOG_FROM_STREAM state, make sure that
 					 * walreceiver is not active, so that it won't overwrite
 					 * WAL that we restore from archive.
 					 */
-					if (WalRcvStreaming())
+					if (!IsRpcServer && WalRcvStreaming())
 						ShutdownWalRcv();
 
 					/*
@@ -13186,6 +13266,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						}
 					}
 
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                    printf("%s %d \n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
 					/*
 					 * XLOG_FROM_STREAM is the last state in our state
 					 * machine, so we've exhausted all the options for
@@ -13198,6 +13282,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					if (!TimestampDifferenceExceeds(last_fail_time, now,
 													wal_retrieve_retry_interval))
 					{
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                        printf("%s %d \n", __func__ , __LINE__);
+                        fflush(stdout);
+#endif
 						long		secs,
 									wait_time;
 						int			usecs;
@@ -13206,8 +13294,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						wait_time = wal_retrieve_retry_interval -
 							(secs * 1000 + usecs / 1000);
 
-//                        printf("%s %d, get into Standby Latch waiting\n", __func__ , __LINE__);
-//                        fflush(stdout);
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                        printf("%s %d, get into Standby Latch waiting\n", __func__ , __LINE__);
+                        fflush(stdout);
+#endif
 						(void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 										 WL_LATCH_SET | WL_TIMEOUT |
 										 WL_EXIT_ON_PM_DEATH,
@@ -13226,7 +13316,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		}
 		else if (currentSource == XLOG_FROM_PG_WAL)
 		{
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
             printf("%s %d \n", __func__ , __LINE__);
             fflush(stdout);
 #endif
@@ -13240,7 +13330,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 		}
 
 
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
 		printf("%s ready to read xlog, current source is %d, pid = %d\n", __func__ , currentSource, getpid());
 		fflush(stdout);
 #endif
@@ -13263,7 +13353,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 			case XLOG_FROM_ARCHIVE:
 			case XLOG_FROM_PG_WAL:
 
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
 				printf("pid=%d, %s asserting\n",  getpid(), __func__ );
                 fflush(stdout);
 #endif
@@ -13275,7 +13365,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 //                fflush(stdout);
 
 				Assert(!WalRcvStreaming());
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
 				printf("pid=%d, %s passed asserting\n", getpid(), __func__ );
                 fflush(stdout);
 #endif
@@ -13297,7 +13387,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2,
 											  currentSource == XLOG_FROM_ARCHIVE ? XLOG_FROM_ANY :
 											  currentSource);
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                 printf("%s %d pid=%d\n", __func__ , __LINE__, getpid());
 #endif
 				if (readFile >= 0)
@@ -13306,7 +13396,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				/*
 				 * Nope, not found in archive or pg_wal.
 				 */
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                 printf("%s %d read xlog file failed\n", __func__ , __LINE__);
                 fflush(stdout);
 #endif
@@ -13321,7 +13411,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * We should be able to move to XLOG_FROM_STREAM only in
 					 * standby mode.
 					 */
-					Assert(StandbyMode);
+//					Assert(StandbyMode);
 
 					/*
 					 * First, shutdown walreceiver if its restart has been
@@ -13390,7 +13480,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					/*
 					 * Check if WAL receiver is active or wait to start up.
 					 */
-					if (!WalRcvStreaming())
+					if (!IsRpcServer && !WalRcvStreaming())
 					{
 						lastSourceFailed = true;
 						break;
@@ -13408,6 +13498,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * XLogReceiptTime will not advance, so the grace time
 					 * allotted to conflicting queries will decrease.
 					 */
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                    printf("%s %d, RecPtr=%lu, flushedUpto=%lu\n", __func__, __LINE__, RecPtr, flushedUpto);
+                    fflush(stdout);
+#endif
 					if (RecPtr < flushedUpto)
 						havedata = true;
 					else
@@ -13429,6 +13523,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					}
 					if (havedata)
 					{
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                        printf("%s %d\n", __func__, __LINE__);
+                        fflush(stdout);
+#endif
 						/*
 						 * Great, streamed far enough.  Open the file if it's
 						 * not open already.  Also read the timeline history
@@ -13440,6 +13538,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						 */
 						if (readFile < 0)
 						{
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                            printf("%s %d\n", __func__, __LINE__);
+                            fflush(stdout);
+#endif
 							if (!expectedTLEs)
 								expectedTLEs = readTimeLineHistory(receiveTLI);
 							readFile = XLogFileRead(readSegNo, PANIC,
@@ -13449,6 +13551,10 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						}
 						else
 						{
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                            printf("%s %d\n", __func__, __LINE__);
+                            fflush(stdout);
+#endif
 							/* just make sure source info is correct... */
 							readSource = XLOG_FROM_STREAM;
 							XLogReceiptSource = XLOG_FROM_STREAM;
@@ -13494,22 +13600,26 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 					 * to react to a trigger file promptly and to check if the
 					 * WAL receiver is still active.
 					 */
-//                    printf("%s %d, pid = %d start waitlatch\n", __func__ , __LINE__, getpid());
-//                    fflush(stdout);
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                    printf("%s %d, pid = %d start waitlatch\n", __func__ , __LINE__, getpid());
+                    fflush(stdout);
+#endif
 //                    printf("%s %d, get into Standby Latch waiting\n", __func__ , __LINE__);
 //                    fflush(stdout);
                     (void) WaitLatch(&XLogCtl->recoveryWakeupLatch,
 									 WL_LATCH_SET | WL_TIMEOUT |
 									 WL_EXIT_ON_PM_DEATH,
 									 5000L, WAIT_EVENT_RECOVERY_WAL_STREAM);
-//                    printf("%s %d, got latch\n", __func__ , __LINE__);
-//                    fflush(stdout);
+#ifdef ENABLE_DEBUG_INFO_WAIT
+                    printf("%s %d, got latch\n", __func__ , __LINE__);
+                    fflush(stdout);
+#endif
 					ResetLatch(&XLogCtl->recoveryWakeupLatch);
 					break;
 				}
             case XLOG_FROM_RPC:
                 if(RecPtr < RpcXLogFlushedLsn) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                     printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
                     fflush(stdout);
 #endif
@@ -13527,7 +13637,7 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 //                printf("%s %d, get out of RPC Latch waiting, pid = %d\n", __func__ , __LINE__, gettid());
 //                fflush(stdout);
                 if(RecPtr < RpcXLogFlushedLsn) {
-#ifdef ENABLE_DEBUG_INFO
+#ifdef ENABLE_DEBUG_INFO_WAIT
                     printf("%s %d, %lu < %lu\n", __func__ , __LINE__, tliRecPtr, RpcXLogFlushedLsn);
                     fflush(stdout);
 #endif
@@ -13828,7 +13938,7 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
     }
 #endif
     HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, false);
-
+    KeyTypeListPush(&key);
 #ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {
         printf("%s %d\n", __func__ , __LINE__);
@@ -13838,4 +13948,66 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
     fflush(stdout);
 #endif
     return;
+}
+
+void SetWalRcvTimeline(TimeLineID timeline) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
+#endif
+
+    WalRcvData *walrcv = WalRcv;
+    if(walrcv) {
+        SpinLockAcquire(&walrcv->mutex);
+
+        walrcv->receivedTLI = timeline;
+
+        SpinLockRelease(&walrcv->mutex);
+    }
+}
+
+void SetWalRcvFlushedUpto(XLogRecPtr lsn) {
+    WalRcvData *walrcv = WalRcv;
+    if(walrcv && walrcv->flushedUpto < lsn) {
+        SpinLockAcquire(&walrcv->mutex);
+
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d, flushedUpto = %lu, lsn = %lu\n", __func__, __LINE__, walrcv->flushedUpto, lsn);
+        fflush(stdout);
+#endif
+        walrcv->flushedUpto = lsn;
+
+        SpinLockRelease(&walrcv->mutex);
+    }
+}
+
+void SetWalLastReplayedLsn(XLogRecPtr lsn) {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, set lsn = %lu\n", __func__, __LINE__, lsn);
+    fflush(stdout);
+#endif
+
+    if(lsn > XLogCtl->lastReplayedRecPtr) {
+        SpinLockAcquire(&XLogCtl->info_lck);
+
+        XLogCtl->lastReplayedRecPtr = lsn;
+
+        SpinLockRelease(&XLogCtl->info_lck);
+    }
+}
+
+XLogRecPtr GetWalLastReplayedLsn(void) {
+    XLogRecPtr lsn;
+    SpinLockAcquire(&XLogCtl->info_lck);
+
+    lsn = XLogCtl->lastReplayedRecPtr;
+
+    SpinLockRelease(&XLogCtl->info_lck);
+
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d, get lsn = %lu\n", __func__, __LINE__, lsn);
+    fflush(stdout);
+#endif
+
+    return lsn;
 }

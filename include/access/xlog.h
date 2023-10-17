@@ -364,6 +364,12 @@ extern void ReadControlFileTimeLine(void);
 extern uint64_t GetLogWrtResultLsn(void);
 extern void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId);
 
+extern void SetWalRcvFlushedUpto(XLogRecPtr lsn);
+extern void SetWalRcvTimeline(TimeLineID timeline);
+
+extern void SetWalLastReplayedLsn(XLogRecPtr lsn);
+extern XLogRecPtr GetWalLastReplayedLsn(void);
+
 #ifdef __cplusplus
 }
 #endif

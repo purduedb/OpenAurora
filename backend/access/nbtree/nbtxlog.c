@@ -163,6 +163,9 @@ static void
 btree_xlog_insert(bool isleaf, bool ismeta, bool posting,
 				  XLogReaderState *record)
 {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
 	XLogRecPtr	lsn = record->EndRecPtr;
 	xl_btree_insert *xlrec = (xl_btree_insert *) XLogRecGetData(record);
 	Buffer		buffer;
@@ -944,6 +947,9 @@ btree_xlog_reuse_page(XLogReaderState *record)
 void
 btree_redo(XLogReaderState *record)
 {
+#ifdef ENABLE_DEBUG_INFO
+    printf("%s %d\n", __func__ , __LINE__);
+#endif
 	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 	MemoryContext oldCtx;
 

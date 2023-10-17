@@ -43,6 +43,7 @@ int pg_pread_rpc_local2(int fd, char *p, int amount, int offset) {
 }
 #endif
 
+//#define ENABLE_DEBUG_INFO
 
 static void report_invalid_record(XLogReaderState *state, const char *fmt,...)
 			pg_attribute_printf(2, 3);
@@ -809,6 +810,10 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 {
 	if (record->xl_tot_len < SizeOfXLogRecord)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__, __LINE__);
+        fflush(stdout);
+#endif
 		report_invalid_record(state,
 							  "invalid record length at %X/%X: wanted %u, got %u",
 							  (uint32) (RecPtr >> 32), (uint32) RecPtr,
@@ -817,6 +822,10 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 	}
 	if (record->xl_rmid > RM_MAX_ID)
 	{
+#ifdef ENABLE_DEBUG_INFO
+        printf("%s %d\n", __func__, __LINE__);
+        fflush(stdout);
+#endif
 		report_invalid_record(state,
 							  "invalid resource manager ID %u at %X/%X",
 							  record->xl_rmid, (uint32) (RecPtr >> 32),
@@ -831,6 +840,10 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 		 */
 		if (!(record->xl_prev < RecPtr))
 		{
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d\n", __func__, __LINE__);
+            fflush(stdout);
+#endif
 			report_invalid_record(state,
 								  "record with incorrect prev-link %X/%X at %X/%X",
 								  (uint32) (record->xl_prev >> 32),
@@ -848,6 +861,10 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 		 */
 		if (record->xl_prev != PrevRecPtr)
 		{
+#ifdef ENABLE_DEBUG_INFO
+            printf("%s %d\n", __func__, __LINE__);
+            fflush(stdout);
+#endif
 			report_invalid_record(state,
 								  "record with incorrect prev-link %X/%X at %X/%X",
 								  (uint32) (record->xl_prev >> 32),

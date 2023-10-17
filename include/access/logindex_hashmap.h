@@ -107,6 +107,7 @@ extern bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t ta
 extern bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t *replayedLsn, uint64_t **toReplayList, int *listLen);
 extern bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn);
 extern bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock);
+extern uint64_t HashMapGetReplayedLsn(HashMap hashMap, KeyType key);
 
 #ifdef __cplusplus
 }
