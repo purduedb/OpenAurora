@@ -21,7 +21,7 @@ LogDB-MV-SR: [Link for LogDB-MV-SR](anonymous.4open.science/r/Disaggregated-DBMS
 
 # Architecture Overview
 
-<img src="pictures/E4_ARCH_NEW" width="500">
+<img src="pictures/E4_ARCH_NEW.png" width="500">
 
 
 
