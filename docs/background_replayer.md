@@ -22,3 +22,16 @@ It will periodically check whether there is a page version that can be replayed.
 the RocksDB, and also fetch several XLogs from the storage. Then it will replay these XLogs to generate the page version. 
 
 Finally, it will inserted the new page version into the RocksDB, and also update the LogIndex.
+
+## 3. How to partially replay XLogs?
+
+### 3.1 Why partially replay XLogs?
+
+As one XLog usually contains information of multiple pages, it is not necessary to replay the whole XLog to get the page version of one page.
+For example, if there is a XLog that contains the changes of page 1, page 2, page 3, and page 4. And if we want to get the page version of page 1, we only need to replay the XLog for page 1, and ignore the XLog for page 2, page 3, and page 4.
+
+### 3.2 How to partially replay XLogs?
+
+The original XLog replay code will replay the whole XLog. So we need to revise the XLog replay code to support partial replay.
+The new revised code will first check which pages are changed in this XLog, and then only extract the updated record for the target page, and 
+execute the code to only update the target page.

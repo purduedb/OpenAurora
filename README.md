@@ -30,14 +30,14 @@ All the implementations are based on PostgreSQL v13.0. To ensure full compatibil
 
 ## Documentations
 * [Delve into LogIndex: What is LogIndex? How does it work?](docs/backend_logindex.md)
-* [Backgrond XLog Replayer](docs/background_replayer.md)
-* [Concurrency Control in Disaggregated Database : Multi-Version Page Store](docs/multi_version_page_store.md)
-* [Background LogIndex Vacuumer Implementation Details](docs/access_logindex_vacuumer.md)
 * [Pluggable KV-Store: Working with your own KVStore](docs/pluggable_kvstore.md)
-* [What is Metadata Cache? Why does it important?](docs/relation_cache.md)
 * [The Truth of the Disk Disaggregation: Virtual File Descriptor](docs/virtual_file_descriptor.md)
-* [XLog Replay: Concurrently Replay XLog with un-multi-thread-safe XLog Replay Code](docs/wal_redo.md)
+* [Concurrency Control in Disaggregated Database : Multi-Version Page Store](docs/multi_version_page_store.md)
 * [How does Compute Node directly commit XLogs to Storage Nodes?](docs/xlog_disaggregation.md)
+* [Background LogIndex Vacuumer Implementation Details](docs/access_logindex_vacuumer.md)
+* [What is Metadata Cache? Why does it important?](docs/relation_cache.md)
+* [XLog Replay: Concurrently Replay XLog with un-multi-thread-safe XLog Replay Code](docs/wal_redo.md)
+* [Backgrond XLog Replayer](docs/background_replayer.md)
 * [XLog's Life Time inside Storage Node](docs/xlog_life_time.md)
 
 ## New code developed based on PostgreSQL
