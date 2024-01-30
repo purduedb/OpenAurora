@@ -441,16 +441,12 @@ smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo)
 			smgrsw[which].smgr_close(rels[i], forknum);
 	}
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	/*
 	 * Get rid of any remaining buffers for the relations.  bufmgr will just
 	 * drop them without bothering to write the contents.
 	 */
 	DropRelFileNodesAllBuffers(rnodes, nrels);
 
-    printf("%s %s %d \n", __func__ , __FILE__, __LINE__);
-    fflush(stdout);
 	/*
 	 * It'd be nice to tell the stats collector to forget them immediately,
 	 * too. But we can't because we don't know the OIDs.

@@ -16,5 +16,12 @@ include $(top_builddir)/src/Makefile.global
 OBJS = \
 	$(WIN32RES) \
 	kv_interface.o
+#	lru_node.o \
+#	concurrent_hashmap.o \
+#	concurrent_hashmap_bucket.o \
+#	concurrent_hashmap_node.o \
+#	concurrent_lru_buffer_pool.o \
+#	light_weighted_kvstore.o \
+#	disk_manager.o \
 
 include $(top_srcdir)/src/backend/common.mk

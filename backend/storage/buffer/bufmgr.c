@@ -3123,9 +3123,6 @@ DropRelFileNodeBuffers(RelFileNodeBackend rnode, ForkNumber *forkNum,
 void
 DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 {
-	printf("%s nnodes = %d\n", __func__ , nnodes);
-	fflush(stdout);
-
 	int			i,
 				n = 0;
 	RelFileNode *nodes;
@@ -3148,8 +3145,6 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 			nodes[n++] = rnodes[i].node;
 	}
 
-	printf("%s %d\n", __func__ , __LINE__);
-	fflush(stdout);
 	/*
 	 * If there are no non-local relations, then we're done. Release the
 	 * memory and return.
@@ -3172,12 +3167,8 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 	if (use_bsearch)
 		pg_qsort(nodes, n, sizeof(RelFileNode), rnode_comparator);
 
-	printf("%s %d, NBuffers = %d\n", __func__ , __LINE__, NBuffers);
-	fflush(stdout);
 	for (i = 0; i < NBuffers; i++)
 	{
-		printf("%s %d\n", __func__ , __LINE__);
-		fflush(stdout);
 		RelFileNode *rnode = NULL;
 		BufferDesc *bufHdr = GetBufferDescriptor(i);
 		uint32		buf_state;
@@ -3207,25 +3198,17 @@ DropRelFileNodesAllBuffers(RelFileNodeBackend *rnodes, int nnodes)
 							rnode_comparator);
 		}
 
-		printf("%s %d\n", __func__ , __LINE__);
-		fflush(stdout);
 		/* buffer doesn't belong to any of the given relfilenodes; skip it */
 		if (rnode == NULL)
 			continue;
 
 		buf_state = LockBufHdr(bufHdr);
-		printf("%s %d\n", __func__ , __LINE__);
-		fflush(stdout);
 		if (RelFileNodeEquals(bufHdr->tag.rnode, (*rnode)))
 			InvalidateBuffer(bufHdr);	/* releases spinlock */
 		else
 			UnlockBufHdr(bufHdr, buf_state);
-		printf("%s %d\n", __func__ , __LINE__);
-		fflush(stdout);
 	}
 
-	printf("%s %d\n", __func__ , __LINE__);
-	fflush(stdout);
 	pfree(nodes);
 }
 
