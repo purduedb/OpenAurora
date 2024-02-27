@@ -197,5 +197,13 @@ export RPC_CLIENT=1
 
  <img src="pictures/A6_PERF_4.png" width="500">
 
+# Citation
 
+If you'd like to cite OpenAurora, you may use the following:
 
+@inproceedings{OpenAurora,
+  author       = {Xi Pang and Jianguo Wang},
+  title        = {{Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases}},
+  booktitle    = {Proceedings of ACM Conference on Management of Data (SIGMOD)},
+  year         = {2024},
+}
