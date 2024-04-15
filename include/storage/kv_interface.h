@@ -16,9 +16,12 @@ extern int KvPut(char *, char *, int);
 extern void InitKvStore();
 extern int KvGet(char *, char **, size_t* len);
 extern void KvClose();
+#ifdef DISABLED_FUNCTION
 extern int KvGetInt(char *, int*);
 extern int KvPutInt(char *, int);
+#endif
 extern int KvDelete(char *);
+#ifdef DISABLED_FUNCTION
 extern void KvPrefixCopyDir(char* , char* , const char* );
 
 // If list exists, insert it to list. otherwise, create a new list
@@ -29,6 +32,7 @@ extern void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn);
 // Lsn list related
 extern int GetListFromRocksdb(BufferTag bufferTag, uint64_t** listPointer, int* listSize);
 extern void PutList2Rocksdb(BufferTag bufferTag, uint64_t* listPointer, int listSize);
+#endif
 
 // Page related
 extern int GetPageFromRocksdb(BufferTag bufferTag, uint64_t lsn, char** pageContent);

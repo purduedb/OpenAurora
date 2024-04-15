@@ -1803,7 +1803,7 @@ RpcServerLoop(void){
 
     std::shared_ptr<concurrency::ThreadFactory> threadFactory = std::make_shared<concurrency::ThreadFactory>(new concurrency::ThreadFactory());
 //    std::shared_ptr<concurrency::ThreadManager> threadManager = concurrency::ThreadManager::newThreadManager();
-    std::shared_ptr<concurrency::ThreadManager> threadManager = concurrency::ThreadManager::newSimpleThreadManager(50);
+    std::shared_ptr<concurrency::ThreadManager> threadManager = concurrency::ThreadManager::newSimpleThreadManager(150);
     threadManager->threadFactory(threadFactory);
     threadManager->start();
 

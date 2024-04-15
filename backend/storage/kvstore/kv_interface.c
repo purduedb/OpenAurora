@@ -16,9 +16,17 @@
 #include "postgres.h"
 #include "storage/buf_internals.h"
 #include "access/xlogreader.h"
+#include "storage/light_weighted_kvstore_api.h"
+
+#define USE_ROCKSDB 1
+//#define USE_LIGHT_KV 1
+
+#ifdef USE_ROCKSDB
 
 #include "rocksdb/c.h"
 rocksdb_t *db = NULL;
+
+#endif
 
 // $SpcID_$DbID_$RelID_$ForkNum_$BlkNum
 #define ROCKSDB_LSN_LIST_KEY  ("rocks_list_%lu_%lu_%lu_%d_%u\0")
@@ -37,6 +45,13 @@ char KvStorePath[MAXPGPATH];
 //! Total length = uint64 * ($ListLen+2)
 //! $CurrPos points to [0, ..., (n-1)]
 
+#ifdef USE_LIGHT_KV
+void InitKvStore() {
+    InitLightWeightedKVStore();
+}
+#endif
+
+#ifdef USE_ROCKSDB
 void InitKvStore() {
     if (db != NULL) {
         return;
@@ -92,8 +107,10 @@ void InitKvStore() {
     fflush(stdout);
     return;
 }
+#endif
 
 
+#ifdef USE_ROCKSDB
 int KvPut(char *key, char *value, int valueLen) {
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
@@ -117,8 +134,18 @@ int KvPut(char *key, char *value, int valueLen) {
     }
     return 0;
 }
+#endif
+
+#ifdef USE_LIGHT_KV
+int KvPut(char *key, char *value, int valueLen) {
+    KvStoreInsertKVPair(key, strlen(key), value);
+    return 0;
+}
+
+#endif
 
 
+#ifdef USE_ROCKSDB
 // returned_value should be freed by caller function.
 int KvGet(char *key, char **value, size_t *len) {
 //    ereport(NOTICE,
@@ -135,7 +162,26 @@ int KvGet(char *key, char **value, size_t *len) {
     }
     return 0;
 }
+#endif
 
+#ifdef USE_LIGHT_KV
+// returned_value should be freed by caller function.
+int KvGet(char *key, char **value, size_t *len) {
+    *value = (char*)malloc(8192);
+    int err = KvStoreGetValue(key, strlen(key), *value);
+    if (!err) {
+        *len = 8192;
+        return 0;
+    } else {
+        free(*value);
+        *value = NULL;
+        return 1;
+    }
+}
+
+#endif
+
+#ifdef DISABLED_FUNCTION
 // if the key doesn't exist, return 1
 // else return 0
 int KvGetInt(char *key, int *result) {
@@ -163,7 +209,9 @@ int KvPutInt(char *key, int value) {
 //                    errmsg("[KvPutInt] End\n\n\n")));
     return err;
 }
+#endif
 
+#ifdef USE_ROCKSDB
 void KvClose() {
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
@@ -178,7 +226,17 @@ void KvClose() {
 
     return;
 }
+#endif
 
+#ifdef USE_LIGHT_KV
+void KvClose() {
+    DestroyLightWeightedKVStore();
+    return;
+}
+#endif
+
+
+#ifdef USE_ROCKSDB
 int KvDelete(char *key) {
 //    ereport(NOTICE,
 //            (errcode(ERRCODE_INTERNAL_ERROR),
@@ -193,6 +251,14 @@ int KvDelete(char *key) {
     }
     return 0;
 }
+#endif
+
+#ifdef USE_LIGHT_KV
+int KvDelete(char *key) {
+    KvStoreDeleteValue(key, strlen(key));
+    return 0;
+}
+#endif
 
 
 int PutXlogWithLsn(XLogRecPtr lsn, XLogRecord* record) {
@@ -211,6 +277,7 @@ int GetXlogWithLsn(XLogRecPtr lsn, XLogRecord** record, size_t* record_size) {
     return *record_size > 0;
 }
 
+#ifdef DISABLED_FUNCTION
 // Put list:
 //      input: list, listNum
 //      Set listNum to rocksdb
@@ -235,6 +302,7 @@ int GetListWithKey(char* key, uint64_t** listPointer, int* listSize) {
     // If found, return 1. Else, return 0
     return (size>0);
 }
+
 
 // Returned values should be freed
 // return value: 0->not found, 1->found
@@ -294,6 +362,7 @@ int FindListLowerBound(uint64_t* uintList, uint64_t targetLsn, uint64_t *foundLs
 
     return 1;
 }
+#endif
 
 void DeletePageFromRocksdb(BufferTag bufferTag, uint64_t lsn) {
     char tempKey[MAX_PATH_LEN];
@@ -336,6 +405,9 @@ void PutPage2Rocksdb(BufferTag bufferTag, uint64_t lsn, char* pageContent) {
 
     return;
 }
+
+
+#ifdef DISABLED_FUNCTION
 
 void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
 #ifdef ENABLE_DEBUG_INFO
@@ -425,38 +497,6 @@ void InsertLsn2RocksdbList(BufferTag bufferTag, uint64_t lsn) {
     return;
 }
 
-//void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
-//#ifdef ENABLE_DEBUG_INFO
-//    printf("%s Start \n", __func__ );
-//    fflush(stdout);
-//#endif
-//
-//    BufferTag tag;
-//
-//    if(record->max_block_id < recordBlockId) {
-//        printf("%s parameter block id %d is larger than max_block_id %d\n", __func__, recordBlockId, record->max_block_id );
-//        return;
-//    }
-//
-//    if(!XLogRecHasBlockRef(record, recordBlockId)) {
-//        printf("%s this block is not used\n", __func__ );
-//        return;
-//    }
-//
-//    if(!XLogRecGetBlockTag(record, recordBlockId, &tag.rnode, &tag.forkNum, &tag.blockNum)) {
-//        printf("%s get block tag failed \n", __func__ );
-//        return;
-//    }
-//
-//    InsertLsn2RocksdbList(tag, record->ReadRecPtr);
-//
-//#ifdef ENABLE_DEBUG_INFO
-//    printf("%s Ends \n", __func__ );
-//    fflush(stdout);
-//#endif
-//    return;
-//}
-
 void MarshalIntList(int* numList, int size, char **p) {
     *p = malloc(sizeof(int) * (size+1));
     int* pInt = (int*)*p;
@@ -476,3 +516,5 @@ int* UnmarshalListGetList(char *p) {
     int *pInt = (int*)p;
     return &pInt[1];
 }
+
+#endif
