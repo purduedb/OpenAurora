@@ -90,6 +90,8 @@
 #include "storage/rpcclient.h"
 #include "storage/rel_cache.h"
 
+#include "storage/GroundDB/mempool_client.h"
+
 //#define ITER_TIMING
 #ifdef ITER_TIMING
 #include <sys/time.h>
@@ -1298,6 +1300,9 @@ XLogInsertRecord(XLogRecData *rdata,
 		COMP_CRC32C(rdata_crc, rechdr, offsetof(XLogRecord, xl_crc));
 		FIN_CRC32C(rdata_crc);
 		rechdr->xl_crc = rdata_crc;
+
+		if(IsRpcClient)
+			UpdateVersionMap(rdata, EndPos);
 
 		/*
 		 * All the record data, including the header, is now ready to be

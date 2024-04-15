@@ -246,7 +246,7 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
 };
 
 int main(int argc, char **argv) {
-  int port = 9090;
+  int port = 9092;
   ::std::shared_ptr<DataPageAccessHandler> handler(new DataPageAccessHandler());
   ::std::shared_ptr<TProcessor> processor(new DataPageAccessProcessor(handler));
   ::std::shared_ptr<TServerTransport> serverTransport(new TServerSocket(port));

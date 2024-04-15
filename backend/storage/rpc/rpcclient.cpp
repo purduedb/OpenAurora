@@ -224,7 +224,7 @@ void RpcInit()
     int myPid = getpid();
     if(myPid == MyPid)
         return;
-    rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, 9090);
+    rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, 9092);
     rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
     rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
     client = new DataPageAccessClient(rpcprotocol);
