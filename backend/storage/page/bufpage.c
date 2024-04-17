@@ -154,6 +154,47 @@ PageIsVerified(Page page, BlockNumber blkno)
 	return false;
 }
 
+bool
+PageFromMemPoolIsVerified(Page page, BlockNumber blkno)
+{
+	PageHeader	p = (PageHeader) page;
+	bool		checksum_failure = false;
+	bool		header_sane = false;
+	uint16		checksum = 0;
+
+	/*
+	 * Don't verify page data unless the page passes basic non-zero test
+	 */
+	if (!PageIsNew(page))
+	{
+		if (DataChecksumsEnabled())
+		{
+			checksum = pg_checksum_page((char *) page, blkno);
+
+			if (checksum != p->pd_checksum)
+				checksum_failure = true;
+		}
+
+		/*
+		 * The following checks don't prove the header is correct, only that
+		 * it looks sane enough to allow into the buffer pool. Later usage of
+		 * the block can still reveal problems, which is why we offer the
+		 * checksum option.
+		 */
+		if ((p->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
+			p->pd_lower <= p->pd_upper &&
+			p->pd_upper <= p->pd_special &&
+			p->pd_special <= BLCKSZ &&
+			p->pd_special == MAXALIGN(p->pd_special))
+			header_sane = true;
+
+		if (header_sane && !checksum_failure)
+			return true;
+	}
+
+	return false;
+}
+
 
 /*
  *	PageAddItemExtended

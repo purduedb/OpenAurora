@@ -29,7 +29,8 @@ SUBDIRS = \
 	makefiles \
 	test/regress \
 	test/isolation \
-	test/perl
+	test/perl \
+	# test/GroundDB
 
 ifeq ($(with_llvm), yes)
 SUBDIRS += backend/jit/llvm

@@ -20,6 +20,7 @@
  */
 #include "postgres.h"
 #include "tcop/storage_server.h"
+#include "storage/GroundDB/mempool_server.h"
 #include <unistd.h>
 
 #if defined(__NetBSD__)
@@ -210,7 +211,10 @@ main(int argc, char *argv[])
         RpcServerMain(argc, argv,
                       NULL,              /* no dbname */
                       strdup(get_user_name_or_exit(progname)));  /* does not return */
-
+	else if (argc > 1 && strcmp(argv[1], "--mempool") == 0)
+		MemPoolMain(argc, argv,
+					 NULL,		/* no dbname */
+					 strdup(get_user_name_or_exit(progname)));	/* does not return */
     else
 		PostmasterMain(argc, argv); /* does not return */
 	abort();					/* should not get here */

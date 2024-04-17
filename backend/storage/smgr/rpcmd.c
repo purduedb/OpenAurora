@@ -330,8 +330,8 @@ rpcmdnblocks(SMgrRelation reln, ForkNumber forknum)
     RelSizeSharedLock(relKey);
     if(GetRelSizeCache(relKey, &result)) { //After extend, blkNum increased
         RelSizeReleaseLock(relKey);
-//        printf("%s %d\n", __func__ , __LINE__);
-//        fflush(stdout);
+        // printf("%s %d\n", __func__ , __LINE__);
+        // fflush(stdout);
         return result;
     }
     RelSizeReleaseLock(relKey);

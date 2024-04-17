@@ -74,6 +74,7 @@
 #include "storage/shmem.h"
 #include "storage/spin.h"
 #include "utils/builtins.h"
+#include "utils/version_map.h"
 
 static void *ShmemAllocRaw(Size size, Size *allocated_size);
 
@@ -370,6 +371,47 @@ ShmemInitHash(const char *name,		/* table string name for shmem index */
 	infoP->hctl = (HASHHDR *) location;
 
 	return hash_create(name, init_size, infoP, hash_flags);
+}
+
+HTAB_VM *
+ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
+			  long hashtable_cnt,
+			  long segment_cnt)
+{
+	HASHCTL_VM infoP;
+	bool		found;
+	void	   *location;
+
+	/*
+	 * Hash tables allocated in shared memory have a fixed directory; it can't
+	 * grow or other backends wouldn't be able to find it. So, make sure we
+	 * make it big enough to start with.
+	 *
+	 * The shared memory allocator must be specified too.
+	 */
+	infoP.alloc = ShmemAllocNoError;
+    infoP.keysize = sizeof(KeyType);
+    infoP.entrysize = sizeof(SEGMENT_ITEM_VM);
+	infoP.hashtable_cnt = hashtable_cnt;
+	infoP.segment_cnt = segment_cnt;
+	int hash_flags = HASH_ELEM | HASH_BLOBS | HASH_SHARED_MEM | HASH_ALLOC;
+
+	/* look it up in the shmem index */
+	location = ShmemInitStruct(name,
+							   hash_get_shared_size_vm(&infoP, hash_flags),
+							   &found);
+
+	/*
+	 * if it already exists, attach to it rather than allocate and initialize
+	 * new space
+	 */
+	if (found)
+		hash_flags |= HASH_ATTACH;
+
+	/* Pass location of hashtable header to hash_create */
+	infoP.hctl = (HASHHDR_VM *) location;
+
+	return hash_create_vm(name, infoP.segment_cnt, &infoP, hash_flags);
 }
 
 /*

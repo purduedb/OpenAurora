@@ -48,6 +48,7 @@
 #include "storage/builtin_shmht.h"
 #include "utils/snapmgr.h"
 #include "access/polar_logindex.h"
+#include "storage/GroundDB/mempool_shmem.h"
 
 /* GUCs */
 int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
@@ -120,6 +121,7 @@ CreateSharedMemoryAndSemaphores(void)
 		 * need to be so careful during the actual allocation phase.
 		 */
 		size = 100000;
+		size = add_size(size, MemPoolClientShmemSize());
 		size = add_size(size, PGSemaphoreShmemSize(numSemas));
 		size = add_size(size, SpinlockSemaSize());
 		size = add_size(size, hash_estimate_size(SHMEM_INDEX_SIZE,
@@ -227,6 +229,7 @@ CreateSharedMemoryAndSemaphores(void)
 	CommitTsShmemInit();
 	SUBTRANSShmemInit();
 	MultiXactShmemInit();
+	MemPoolClientShmemInit();
 	InitBufferPool();
 
     polar_logindex_shmem_init(24, 0);
