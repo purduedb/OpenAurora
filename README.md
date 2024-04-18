@@ -1,6 +1,8 @@
 # OpenAurora
 
-OpenAurora is a cloud-native OLTP database system prototype developed at Purdue University, based on PostgreSQL v13.0. It is an open-source version of Amazon Aurora. It is designed to enable more research in cloud-native database systems for our database community. Currently, OpenAurora supports storage disaggregation. We are investigating memory disaggregation and multi-masters within OpenAurora.
+OpenAurora is a cloud-native OLTP database system prototype developed at Purdue University, based on PostgreSQL v13.0. It is an open-source version of Amazon Aurora. It is designed to enable more research in cloud-native database systems for our database community.
+
+Currently, OpenAurora supports storage disaggregation. We are investigating memory disaggregation and multi-masters within OpenAurora.
 
 # Architecture Overview
 
@@ -159,25 +161,6 @@ export RPC_CLIENT=1
 ./$YOUR_INSTALL_LOCATION/bin/psql postgres
 > postgres=# 
 ```
-# Performance 
-
-
-
-**100GB SysBench Performance**
-
- <img src="pictures/A6_PERF_1.png" width="600">
-
-**GetPage@LSN Performance Analysis**
-
- <img src="pictures/A6_PERF_2.png" width="500">
-
-**Performance on bulk Insertion and Index creation workload**
-
- <img src="pictures/A6_PERF_3.png" width="400">
-
-**Performance on TPC-C**
-
- <img src="pictures/A6_PERF_4.png" width="500">
 
 # Citation
 
@@ -194,3 +177,8 @@ booktitle = {Proceedings of ACM Conference on Management of Data (SIGMOD)},
 year = {2024},
 
 }
+
+# Contact
+
+If you have any questions, you are more than welcome to contact Dr. <a href="https://cs.purdue.edu/homes/csjgwang/">Jianguo Wang</a>.
+
