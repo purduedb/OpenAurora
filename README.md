@@ -1,4 +1,4 @@
-# Disaggregated DBMS
+# OpenAurora
 
 Storage-compute disaggregation has recently emerged as a novel architecture in modern data centers, particularly in the cloud. However, little is known about the effectiveness of the design choices in these databases since they are typically developed by industry giants, and only the overall performance results are presented without detailing the impact of individual design principles.
 
