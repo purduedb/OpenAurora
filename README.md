@@ -1,24 +1,6 @@
 # OpenAurora
 
-Storage-compute disaggregation has recently emerged as a novel architecture in modern data centers, particularly in the cloud. However, little is known about the effectiveness of the design choices in these databases since they are typically developed by industry giants, and only the overall performance results are presented without detailing the impact of individual design principles.
-
-In this project, we  implemented  **five** different storage-compute disaggregation architecutres based on PostgreSQL. We aim to investigate the performance implications of the design choices that widely adopted in storage-disaggregated databases.
-
-# Other Architectures' Link
-
-This is **LogDB-MV-SR**'s source code repository.
-You can find other architecture's source code from the following links:
-
-Monolithic: [PostgreSQL v13.0 ](https://www.postgresql.org/ftp/source/v13.0/)
-
-Remote Disk: [Link for Remote Disk](https://anonymous.4open.science/r/Disaggregated-DBMS-Remote-Disk)
-
-LogDB: [Link for LogDB](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB)
-
-LogDB-MV: [Link for LogDB-MV](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV)
-
-LogDB-MV-FR: [Link for LogDB-MV-FR](https://anonymous.4open.science/r/Disaggregated-DBMS-LogDB-MV-FR)
-
+OpenAurora is a cloud-native OLTP database system prototype developed at Purdue University, based on PostgreSQL v13.0. It is an open-source version of Amazon Aurora. It is designed to enable more research in cloud-native database systems for our database community. Currently, OpenAurora supports storage disaggregation. We are investigating memory disaggregation and multi-masters within OpenAurora.
 
 # Architecture Overview
 
