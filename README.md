@@ -170,7 +170,7 @@ If you'd like to cite OpenAurora, you may use the following:
 
 author = {Xi Pang and Jianguo Wang},
 
-title = {{Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases}},
+title = {{<a href="https://www.cs.purdue.edu/homes/csjgwang/pubs/SIGMOD24_OpenAurora.pdf">Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases</a>}},
 
 booktitle = {Proceedings of ACM Conference on Management of Data (SIGMOD)},
 
