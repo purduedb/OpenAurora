@@ -16,7 +16,6 @@ public:
 	void FlushPageToMemoryPool(char* src, KeyType PageID);
 
     std::shared_ptr<DSMEngine::RDMA_Manager> rdma_mg;
-    std::vector<std::thread> threads;
     PageAddressTable pat;
     DSMEngine::ThreadPool* thrd_pool;
 };
@@ -42,18 +41,6 @@ MemPoolClient::MemPoolClient(){
     	AppendToPAT(0);
 	}
 	LWLockRelease(mempool_client_connection_lock);
-
-	// todo (te): switch to another process instead of thread.
-	threads.emplace_back([this]{
-		while(true){
-			std::function<void(void *args)> handler = [this](void *args){
-				if(whetherSyncPAT())
-					this->GetNewestPageAddressTable();
-			};
-			thrd_pool->Schedule(std::move(handler), (void*)nullptr);
-			usleep(SyncPAT_Interval_ms);
-		}
-	});
 }
 
 void MemPoolClient::AppendToPAT(size_t pa_idx){
@@ -110,7 +97,7 @@ bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_r
 	ibv_mr pa_mr, pida_mr;
 	rdma_mg->Allocate_Local_RDMA_Slot(pa_mr, DSMEngine::PageArray);
 	rdma_mg->Allocate_Local_RDMA_Slot(pida_mr, DSMEngine::PageIDArray);
-	rdma_mg->RDMA_Read(&rdma_read_info->remote_pa_mr, &pa_mr, rdma_read_info->pa_ofs * sizeof(BLCKSZ), sizeof(BLCKSZ), IBV_SEND_SIGNALED, 1, 1, "main");
+	rdma_mg->RDMA_Read(&rdma_read_info->remote_pa_mr, &pa_mr, rdma_read_info->pa_ofs * BLCKSZ, BLCKSZ, IBV_SEND_SIGNALED, 1, 1, "main");
 	rdma_mg->RDMA_Read(&rdma_read_info->remote_pida_mr, &pida_mr, rdma_read_info->pa_ofs * sizeof(KeyType), sizeof(KeyType), IBV_SEND_SIGNALED, 1, 1, "main");
 	
 	auto res_page = (uint8_t*)pa_mr.addr;
@@ -124,14 +111,121 @@ bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_r
 	return true;
 }
 
-bool LsnIsSatisfied(PageXLogRecPtr PageLSN){
-	uint64_t pagelsn = PageXLogRecPtrGet(PageLSN);
+bool LsnIsSatisfied(XLogRecPtr PageLSN){
 	return true;
 	// todo (te): consider secondary compute nodes
 }
 
-void ReplayXLog(){
-	// todo (te):
+void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr target_lsn, std::vector<XLogRecPtr>& lsn_list){
+	lsn_list.clear();
+	bool found, head;
+	auto result = 
+		hash_search_vm(version_map, &PageID, HASH_FIND, &found, &head);
+	if(!found)
+		return;
+	while(result != NULL){
+		if(head){
+			auto item_head = (ITEMHEAD_VM*)result;
+			for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
+				if(item_head->lsn[i] == InvalidXLogRecPtr)
+					return;
+				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
+					lsn_list.push_back(item_head->lsn[i]);
+			result = item_head->next_seg;
+			head = false;
+		}
+		else{
+			auto item_head = (ITEMSEG_VM*)result;
+			for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
+				if(item_head->lsn[i] == InvalidXLogRecPtr)
+					return;
+				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
+					lsn_list.push_back(item_head->lsn[i]);
+			result = item_head->next_seg;
+		}
+	}
+	return;
+}
+
+void ApplyLSNListToPage(KeyType PageID, char* block, std::vector<XLogRecPtr>& lsn_list){
+	static XLogReaderState *reader_state = NULL;
+	if(reader_state == NULL){
+		static void* xlog_reader_private;
+		reader_state = XLogReaderAllocateForMemPool(&xlog_reader_private);
+		XLogBeginRead(reader_state, InvalidXLogRecPtr);
+	}
+
+	Buffer buf;
+    BufferTag bufferTag;
+	XLogRecord* record;
+    INIT_BUFFERTAG(bufferTag, ((RelFileNode){PageID.SpcID, PageID.DbID, PageID.RelID}), (ForkNumber)PageID.ForkNum, PageID.BlkNum);
+    for(int i = 0; i < lsn_list.size(); i++) {
+		char* err_msg;
+        XLogBeginRead(reader_state, lsn_list[i]);
+        record = XLogReadRecord(reader_state, &err_msg);
+        buf = InvalidBuffer;
+
+        XLogRedoAction action = BLK_NOTFOUND;
+        switch (record->xl_rmid) {
+            case RM_XLOG_ID:
+                action = polar_xlog_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HEAP2_ID:
+                action = polar_heap2_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HEAP_ID:
+                action = polar_heap_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_BTREE_ID:
+                action = polar_btree_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_HASH_ID:
+                action = polar_hash_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GIN_ID:
+                action = polar_gin_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GIST_ID:
+                action = polar_gist_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_SEQ_ID:
+                action = polar_seq_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_SPGIST_ID:
+                action = polar_spg_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_BRIN_ID:
+                action = polar_brin_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            case RM_GENERIC_ID:
+                action = polar_generic_idx_redo(reader_state, &bufferTag, &buf);
+                break;
+            default:
+                printf("%s  didn't find any corresponding polar redo function\n", __func__);
+                break;
+        }
+        if(action == BLK_NOTFOUND) {
+            RmgrTable[record->xl_rmid].rm_redo(reader_state);
+        } else {
+            UnlockReleaseBuffer(buf);
+        }
+	}
+}
+
+bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr current_lsn, XLogRecPtr target_lsn){
+	std::vector<XLogRecPtr> lsn_list;
+	LWLockAcquire(mempool_client_version_map_lock, LW_SHARED);
+	GetLSNListfromVersionMap(PageID, current_lsn, target_lsn, lsn_list);
+	LWLockRelease(mempool_client_version_map_lock);
+	if(lsn_list.size() > 0){
+		bool already_locked = LWLockHeldByMeInMode(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
+		if(!already_locked) LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
+		ApplyLSNListToPage(PageID, block, lsn_list);
+		if(!already_locked) LWLockRelease(BufferDescriptorGetContentLock(bufHdr));
+		return true;
+	}
+	else
+		return false;
 }
 
 void mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
@@ -155,8 +249,11 @@ void AsyncAccessPageOnMemoryPool(KeyType PageID){
 	std::function<void(void *args)> handler = [](void *args){
 		auto PageID = (KeyType*)args;
 		mempool::MemPoolClient::Get_Instance()->AccessPageOnMemoryPool(*PageID);
+		delete (KeyType*)args;
 	};
-	mempool::MemPoolClient::Get_Instance()->thrd_pool->Schedule(std::move(handler), (void*)&PageID);
+	auto a = new KeyType;
+	*a = PageID;
+	mempool::MemPoolClient::Get_Instance()->thrd_pool->Schedule(std::move(handler), (void*)a);
 }
 
 void mempool::MemPoolClient::GetNewestPageAddressTable(){
@@ -190,12 +287,6 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 			rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 		}
 }
-void AsyncGetNewestPageAddressTable(){
-	std::function<void(void *args)> handler = [](void *args){
-		mempool::MemPoolClient::Get_Instance()->GetNewestPageAddressTable();
-	};
-	mempool::MemPoolClient::Get_Instance()->thrd_pool->Schedule(std::move(handler), (void*)nullptr);
-}
 
 void mempool::MemPoolClient::FlushPageToMemoryPool(char* src, KeyType PageID){
 	auto rdma_mg = this->rdma_mg;
@@ -215,30 +306,23 @@ void mempool::MemPoolClient::FlushPageToMemoryPool(char* src, KeyType PageID){
 	
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 }
-void AsyncFlushPageToMemoryPool(char* src, KeyType PageID){
-	struct Args{char src[BLCKSZ]; KeyType PageID;};
-	std::function<void(void *args)> handler = [](void *args){
-		auto a = (struct Args*)args;
-		mempool::MemPoolClient::Get_Instance()->FlushPageToMemoryPool(a->src, a->PageID);
-	};
-	struct Args a = {.PageID = PageID};
-	memcpy(a.src, src, BLCKSZ);
-	mempool::MemPoolClient::Get_Instance()->thrd_pool->Schedule(std::move(handler), (void*)&a);
+void SyncFlushPageToMemoryPool(char* src, KeyType PageID){
+	mempool::MemPoolClient::Get_Instance()->FlushPageToMemoryPool(src, PageID);
 }
 
 void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
-	return; // todo (te): debug
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define COPY_HEADER_FIELD(_dst, _size)								\
 	do {															\
 		Assert (remaining >= _size);								\
-		for(size_t size = _size; size > 0;){						\
+		for(size_t size = _size, ofs = 0; size > 0;){				\
 			while(ptr == rdata->data + rdata->len){					\
 				rdata = rdata->next;								\
 				ptr = rdata->data;									\
 			}														\
 			size_t s = MIN(size, rdata->data + rdata->len - ptr);	\
-			memcpy(_dst, ptr, s);									\
+			memcpy(_dst + ofs, ptr, s);								\
+			ofs += s; 												\
 			ptr += s;												\
 			size -= s;												\
 		}															\
@@ -265,7 +349,7 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 	RelFileNode *rnode = NULL;
 	uint8		block_id;
 	int max_block_id = -1;
-	DecodedBkpBlock blk[0];
+	DecodedBkpBlock blk[1];
 
 	/* we assume that all of the record header is in the first chunk */
 	remaining = ((XLogRecord*)rdata->data)->xl_tot_len;
@@ -371,17 +455,17 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 				hash_search_vm(version_map, &page_id, HASH_ENTER, &found, &head);
 			if(head){
 				auto item_head = (ITEMHEAD_VM*)result;
-				for(int i = 0; i < SLOT_CNT_VM; i++)
+				for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
 					if(item_head->lsn[i] == InvalidXLogRecPtr){
 						item_head->lsn[i] = lsn;
 						break;
 					}
 			}
 			else{
-				auto item_head = (ITEMSEG_VM*)result;
-				for(int i = 0; i < SLOT_CNT_VM; i++)
-					if(item_head->lsn[i] == InvalidXLogRecPtr){
-						item_head->lsn[i] = lsn;
+				auto item_seg = (ITEMSEG_VM*)result;
+				for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
+					if(item_seg->lsn[i] == InvalidXLogRecPtr){
+						item_seg->lsn[i] = lsn;
 						break;
 					}
 			}
@@ -392,4 +476,13 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 			Assert(false);
 	}
 	Assert(remaining == datatotal);
+}
+
+void MemPoolSyncMain(){
+	auto client = mempool::MemPoolClient::Get_Instance();
+	while(true){
+		if(whetherSyncPAT())
+			client->GetNewestPageAddressTable();
+		usleep(SyncPAT_Interval_ms / 100);
+	}
 }

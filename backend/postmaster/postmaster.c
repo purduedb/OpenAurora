@@ -255,6 +255,7 @@ static pid_t StartupPID = 0,
 			AutoVacPID = 0,
 			PgArchPID = 0,
 			PgStatPID = 0,
+			MPSyncPID = 0,
 			SysLoggerPID = 0;
 
 /* Startup process's status */
@@ -556,6 +557,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
 #define StartCheckpointer()		StartChildProcess(CheckpointerProcess)
 #define StartWalWriter()		StartChildProcess(WalWriterProcess)
 #define StartWalReceiver()		StartChildProcess(WalReceiverProcess)
+#define StartMemPoolSynchronizer()	StartChildProcess(MemPoolSyncProcess)
 
 /* Macros to check exit status of a child process */
 #define EXIT_STATUS_0(st)  ((st) == 0)
@@ -583,7 +585,7 @@ PostmasterMain(int argc, char *argv[])
     char *pgRpcClient = getenv("RPC_CLIENT");
 
     if(pgRpcClient != NULL) {
-        IsRpcClient = 1;
+        IsRpcClient = strtol(pgRpcClient, NULL, 10);
     }
 
 	int			opt;
@@ -1416,6 +1418,8 @@ PostmasterMain(int argc, char *argv[])
 
 	/* Some workers may be scheduled to start now */
 	maybe_start_bgworkers();
+	if(IsRpcClient > 1)
+		MPSyncPID = StartMemPoolSynchronizer();
 
 	status = ServerLoop();
 

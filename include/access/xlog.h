@@ -327,6 +327,7 @@ extern Size XLOGShmemSize(void);
 extern void XLOGShmemInit(void);
 extern void BootStrapXLOG(void);
 extern void LocalProcessControlFile(bool reset);
+extern XLogReaderState *XLogReaderAllocateForMemPool(void **private_data);
 extern void StartupXLOG(void);
 extern void ShutdownXLOG(int code, Datum arg);
 extern void InitXLOGAccess(void);

@@ -326,6 +326,7 @@ typedef enum BackendType
 	B_ARCHIVER,
 	B_STATS_COLLECTOR,
 	B_LOGGER,
+	B_MP_SYNC,
 } BackendType;
 
 extern BackendType MyBackendType;
@@ -424,6 +425,7 @@ typedef enum
 	CheckpointerProcess,
 	WalWriterProcess,
 	WalReceiverProcess,
+	MemPoolSyncProcess,
 
 	NUM_AUXPROCTYPES			/* Must be last! */
 } AuxProcType;

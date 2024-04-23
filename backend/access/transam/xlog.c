@@ -1301,7 +1301,7 @@ XLogInsertRecord(XLogRecData *rdata,
 		FIN_CRC32C(rdata_crc);
 		rechdr->xl_crc = rdata_crc;
 
-		if(IsRpcClient)
+		if(IsRpcClient > 1)
 			UpdateVersionMap(rdata, EndPos);
 
 		/*
@@ -6697,6 +6697,15 @@ ReadControlFileTimeLine(void) {
 	printf("%s set recoveryTargetTLI to %u\n", __func__ , recoveryTargetTLI);
 	fflush(stdout);
 #endif
+}
+
+XLogReaderState *
+XLogReaderAllocateForMemPool(void **private_data){
+	*private_data = malloc(sizeof(XLogPageReadPrivate));
+	MemSet(*private_data, 0, sizeof(XLogPageReadPrivate));
+	return XLogReaderAllocate(wal_segment_size, NULL,
+		XL_ROUTINE(.page_read = &XLogPageRead, .segment_open = NULL, .segment_close = wal_segment_close),
+		*private_data);
 }
 
 /*
