@@ -8,19 +8,16 @@ extern "C" {
 #include <infiniband/verbs.h>
 #include "postgres.h"
 #include "storage/lwlock.h"
-#include "storage/spin.h"
 #include "storage/shmem.h"
 #include "storage/GroundDB/mempool_client.h"
 
-#define NUMBER_OF_mempool_client_lw_lock 3
+#define NUMBER_OF_mempool_client_lw_lock 4
 #define mempool_client_connection_lock (&mempool_client_lw_lock[0])
 #define mempool_client_version_map_lock (&mempool_client_lw_lock[1])
 #define mempool_client_pat_lock (&mempool_client_lw_lock[2])
-// #define mempool_client_sync_pat_lock (&mempool_client_lw_lock[3])
-#define NUMBER_OF_mempool_client_s_lock 1
+#define mempool_client_sync_pat_lock (&mempool_client_lw_lock[3])
 
 extern PGDLLIMPORT LWLock* mempool_client_lw_lock;
-extern PGDLLIMPORT slock_t* mempool_client_s_lock;
 
 #define MAX_PAGE_ARRAY_COUNT 20ull
 #define MAX_TOTAL_PAGE_ARRAY_SIZE (1ull << 20)

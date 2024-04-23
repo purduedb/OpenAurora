@@ -9,9 +9,13 @@ extern "C" {
 #include <infiniband/verbs.h>
 #include "c.h"
 #include "access/logindex_hashmap.h"
+#include "access/logindex_func.h"
 #include "access/xlogrecord.h"
 #include "access/xlog_internal.h"
 #include "access/xlogreader.h"
+#include "access/xlog.h"
+#include "access/xlogutils.h"
+#include "storage/buf_internals.h"
 #include "storage/bufpage.h"
 #include "storage/GroundDB/mempool_shmem.h"
 
@@ -27,17 +31,19 @@ extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info
 
 extern bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 
-extern bool LsnIsSatisfied(PageXLogRecPtr PageLSN);
+extern bool LsnIsSatisfied(XLogRecPtr PageLSN);
 
-extern void ReplayXLog();
+extern bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr current_lsn, XLogRecPtr target_lsn);
 
 extern void AsyncAccessPageOnMemoryPool(KeyType PageID);
 
 extern void AsyncGetNewestPageAddressTable();
 
-extern void AsyncFlushPageToMemoryPool(char* src, KeyType PageID);
+extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 
 extern void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn);
+
+extern void MemPoolSyncMain();
 
 
 #ifdef __cplusplus

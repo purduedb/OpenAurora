@@ -1,5 +1,8 @@
 #include <fstream>
 #include <thread>
+#include "c.h"
+#include "storage/checksum_impl.h"
+#include "storage/bufpage.h"
 #include "storage/GroundDB/mempool_server.h"
 #include "storage/GroundDB/rdma_server.hh"
 #include "storage/DSMEngine/ThreadPool.h"
@@ -309,7 +312,7 @@ void MemPoolManager::access_page_handler(void* args){
     auto req = &request->content.access_page;
 
 
-    auto e = lru->Lookup(req->page_id);
+    auto e = lru->LookupInsert(req->page_id, nullptr, 1, nullptr);
     lru->Release(e);
 
     delete Args;

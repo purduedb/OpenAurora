@@ -20,18 +20,21 @@ typedef struct INDEX_ORDER_ITEM_VM{
 	uint8_t slot;
 } INDEX_ORDER_ITEM_VM;
 
-#define SLOT_CNT_VM 16
+#define ITEMHEAD_SLOT_CNT_VM 12
+#define ITEMSEG_SLOT_CNT_VM 16
+#define SLOT_CNT_VM (ITEMHEAD_SLOT_CNT_VM >= ITEMSEG_SLOT_CNT_VM ? ITEMHEAD_SLOT_CNT_VM: ITEMSEG_SLOT_CNT_VM)
 
 typedef struct ITEMSEG_VM{
 	HASHELEMENT_VM* next_seg;
-	XLogRecPtr lsn[SLOT_CNT_VM];
+	XLogRecPtr lsn[ITEMSEG_SLOT_CNT_VM];
 } ITEMSEG_VM;
 
 typedef struct ITEMHEAD_VM{
 	KeyType PageID;
 	HASHELEMENT_VM* next_item;
 	HASHELEMENT_VM* next_seg;
-	XLogRecPtr lsn[SLOT_CNT_VM];
+	HASHELEMENT_VM* tail_seg;
+	XLogRecPtr lsn[ITEMHEAD_SLOT_CNT_VM];
 } ITEMHEAD_VM;
 
 typedef union SEGMENT_ITEM_VM{

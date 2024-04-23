@@ -133,7 +133,7 @@ smgrinit(void)
     char *pgRpcClient = getenv("RPC_CLIENT");
 
     if(pgRpcClient != NULL) {
-        IsRpcClient = 1;
+        IsRpcClient = strtol(pgRpcClient, NULL, 10);
     }
 
 	int			i;

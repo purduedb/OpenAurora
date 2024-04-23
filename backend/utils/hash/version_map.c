@@ -817,7 +817,7 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 		if (currBucket->hashvalue == hashvalue &&
 			match(&((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->PageID, keyPtr, keysize) == 0)
 			break;
-		prevBucketPtr = &(((ITEMHEAD_VM*)currBucket)->next_item);
+		prevBucketPtr = &(((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_item);
 		currBucket = *prevBucketPtr;
 	}
 
@@ -877,13 +877,13 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			prevSegPtr = prevBucketPtr;
 			currSeg = currBucket;
 			while(currSeg != NULL && (*head
-				? (((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->lsn[SLOT_CNT_VM - 1] != InvalidXLogRecPtr)
-				: (((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[SLOT_CNT_VM - 1] != InvalidXLogRecPtr))){
-				*head = false;
+				? (((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->lsn[ITEMHEAD_SLOT_CNT_VM - 1] != InvalidXLogRecPtr)
+				: (((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[ITEMSEG_SLOT_CNT_VM - 1] != InvalidXLogRecPtr))){
 				prevSegPtr = *head
 					? (&((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_seg)
 					: (&((ITEMSEG_VM*)ELEMENTKEY(currSeg))->next_seg);
 				currSeg = *prevSegPtr;
+				*head = false;
 			}
 			if (currSeg != NULL)
 				return (void *) ELEMENTKEY(currSeg);
@@ -911,13 +911,24 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			}
 
 			/* link into hashbucket chain */
-			*prevSegPtr = currSeg;
-			currSeg->link = NULL;
+			*prevBucketPtr = currBucket;
+			currBucket->link = NULL;
 
 			/* copy key into record */
 			currBucket->hashvalue = hashvalue;
-			if(*head)
+			if(*head){
 				hashp->keycopy(&((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->PageID, keyPtr, keysize);
+				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_item = NULL;
+				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_seg = NULL;
+				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->tail_seg = currBucket;
+				for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
+					((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->lsn[i] = InvalidXLogRecPtr;
+			}
+			else{
+				((ITEMSEG_VM*)ELEMENTKEY(currBucket))->next_seg = NULL;
+				for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
+					((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->lsn[i] = InvalidXLogRecPtr;
+			}
 
 			/*
 			 * Caller is expected to fill the data field on return.  DO NOT
