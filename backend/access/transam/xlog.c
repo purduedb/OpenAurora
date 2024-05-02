@@ -193,6 +193,8 @@ extern bool	am_wal_redo_postgres;
 extern HashMap pageVersionHashMap;
 
 extern uint64_t RpcXLogFlushedLsn;
+
+extern bool MempoolClientReplaying;
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
 #define RECOVERY_COMMAND_DONE	"recovery.done"
@@ -1302,7 +1304,7 @@ XLogInsertRecord(XLogRecData *rdata,
 		rechdr->xl_crc = rdata_crc;
 
 		if(IsRpcClient > 1)
-			UpdateVersionMap(rdata, EndPos);
+			UpdateVersionMap(rdata, StartPos);
 
 		/*
 		 * All the record data, including the header, is now ready to be
@@ -4062,8 +4064,14 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 	 */
 	if (expectedTLEs)
 		tles = expectedTLEs;
-	else
+	else{
+		MemoryContext original_ctx;
+		if(MempoolClientReplaying)
+			original_ctx = MemoryContextSwitchTo(TopMemoryContext);
 		tles = readTimeLineHistory(recoveryTargetTLI);
+		if(MempoolClientReplaying)
+			MemoryContextSwitchTo(original_ctx);
+	}
 
 #ifdef ENABLE_DEBUG_INFO
     printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
@@ -4839,9 +4847,14 @@ rescanLatestTimeLine(void)
 	/*
 	 * Determine the list of expected TLIs for the new TLI
 	 */
+	MemoryContext original_ctx;
+	if(MempoolClientReplaying)
+		original_ctx = MemoryContextSwitchTo(TopMemoryContext);
 
 	newExpectedTLEs = readTimeLineHistory(newtarget);
 
+	if(MempoolClientReplaying)
+		MemoryContextSwitchTo(original_ctx);
 	/*
 	 * If the current timeline is not part of the history of the new timeline,
 	 * we cannot proceed to it.
@@ -12721,6 +12734,8 @@ retry:
          ( (currentSource == XLOG_FROM_RPC||readSource == XLOG_FROM_RPC) &&
          RpcXLogFlushedLsn < targetPagePtr + reqLen))
 	{
+		if(IsRpcClient > 1)
+			ReadControlFileTimeLine();
 		if (!WaitForWALToBecomeAvailable(targetPagePtr + reqLen,
 										 private->randAccess,
 										 private->fetching_ckpt,
@@ -13463,8 +13478,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						 */
 						if (readFile < 0)
 						{
-							if (!expectedTLEs)
+							if (!expectedTLEs){
+								MemoryContext original_ctx;
+								if(MempoolClientReplaying)
+									original_ctx = MemoryContextSwitchTo(TopMemoryContext);
 								expectedTLEs = readTimeLineHistory(receiveTLI);
+								if(MempoolClientReplaying)
+									MemoryContextSwitchTo(original_ctx);
+							}
 							readFile = XLogFileRead(readSegNo, PANIC,
 													receiveTLI,
 													XLOG_FROM_STREAM, false);

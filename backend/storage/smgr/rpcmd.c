@@ -184,7 +184,7 @@ rpcmdexists(SMgrRelation reln, ForkNumber forkNum)
     //! TODO After add these locks, sysbench will crash
     RelSizeSharedLock(relKey);
     if(GetRelSizeCache(relKey, &result)) {
-        printf("%s %d\n", __func__ , __LINE__);
+        // printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
         RelSizeReleaseLock(relKey);
         return result >= 0;

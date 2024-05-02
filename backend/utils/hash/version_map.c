@@ -672,8 +672,7 @@ hash_estimate_size_vm(long hashtable_cnt, long segment_cnt)
 	elementAllocCnt = choose_nelem_alloc(entrysize);
 	nElementAllocs = (segment_cnt - 1) / elementAllocCnt + 1;
 	elementSize = MAXALIGN(sizeof(HASHELEMENT_VM)) + MAXALIGN(entrysize);
-	size = add_size(size, mul_size(nElementAllocs, mul_size(elementAllocCnt, elementSize)));
-
+	size = add_size(size, mul_size(nElementAllocs, CACHELINEALIGN(mul_size(elementAllocCnt, elementSize))));
 	return size;
 }
 
