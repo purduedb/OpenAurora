@@ -1,5 +1,4 @@
 #include "storage/GroundDB/rdma.hh"
-#include "storage/GroundDB/util.h"
 #include "storage/GroundDB/mempool_shmem.h"
 
 namespace mempool

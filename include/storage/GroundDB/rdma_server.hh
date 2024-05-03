@@ -38,7 +38,6 @@ public:
     int server_sock_connect(const char* servername, int port);
     void server_communication_thread(std::string client_ip, int socket_fd);
 
-    void init_resources(const int tcp_port, const char *ib_devname, const int ib_port);
     void init_thread_pool(size_t thrd_num);
     void allocate_page_array(size_t pa_size);
 

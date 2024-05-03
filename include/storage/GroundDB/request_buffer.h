@@ -1,7 +1,7 @@
 #pragma once
 #include <functional>
 #include <mutex>
-#include "storage/GroundDB/util.h"
+#include "storage/GroundDB/rdma.hh"
 #include "storage/DSMEngine/ThreadPool.h"
 
 namespace DSMEngine{
