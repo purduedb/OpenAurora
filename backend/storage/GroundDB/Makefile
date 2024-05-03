@@ -16,7 +16,6 @@ OBJS = \
 	mempool_client.o \
 	mempool_server.o \
 	pat.o \
-	rdma_server.o \
-	util.o
+	rdma_server.o
 
 include $(top_srcdir)/src/backend/common.mk

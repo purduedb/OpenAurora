@@ -69,7 +69,7 @@ void MemPoolClientShmemInit(){
 						&info, HASH_ELEM | HASH_BLOBS | HASH_PARTITION);
 	version_map =
 		ShmemInitVersionMap("MemPool Client VersionMap",
-						1 << 12, 1 << 13);
+						1 << 18, 1 << 20);
 
 	if (found_any){
 		/* should find all of these, or none of them */
@@ -108,7 +108,7 @@ Size MemPoolClientShmemSize(void)
 
 	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(PATLookupEntry)));
 	
-	size = add_size(size, hash_estimate_size_vm(1 << 12, 1 << 13));
+	size = add_size(size, hash_estimate_size_vm(1 << 18, 1 << 22));
 
 	return size;
 }

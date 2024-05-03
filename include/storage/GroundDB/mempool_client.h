@@ -8,13 +8,25 @@ extern "C" {
 #include <stdint.h>
 #include <infiniband/verbs.h>
 #include "c.h"
+#include "access/brin_xlog.h"
+#include "access/generic_xlog.h"
+#include "access/ginxlog.h"
+#include "access/gistxlog.h"
+#include "access/hash_xlog.h"
+#include "access/heapam_xlog.h"
 #include "access/logindex_hashmap.h"
 #include "access/logindex_func.h"
+#include "access/nbtxlog.h"
+#include "access/polar_logindex.h"
+#include "access/spgxlog.h"
 #include "access/xlogrecord.h"
 #include "access/xlog_internal.h"
 #include "access/xlogreader.h"
 #include "access/xlog.h"
 #include "access/xlogutils.h"
+#include "catalog/pg_control.h"
+#include "commands/sequence.h"
+#include "replication/origin.h"
 #include "storage/buf_internals.h"
 #include "storage/bufpage.h"
 #include "storage/GroundDB/mempool_shmem.h"
@@ -26,6 +38,8 @@ struct RDMAReadPageInfo{
 	size_t pa_ofs;
 };
 typedef struct RDMAReadPageInfo RDMAReadPageInfo;
+
+extern bool MempoolClientReplaying;
 
 extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 

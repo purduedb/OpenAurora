@@ -42,43 +42,6 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #error __BYTE_ORDER is neither __LITTLE_ENDIAN nor __BIG_ENDIAN
 #endif
 
-/* structure to exchange data which is needed to connect the QPs */
-struct cm_con_data_t
-{
-    uint64_t addr;   /* Buffer address */
-    uint32_t rkey;   /* Remote key */
-    uint32_t qp_num; /* QP number */
-    uint16_t lid;    /* LID of the IB port */
-    uint8_t gid[16]; /* gid */
-} __attribute__((packed));
-
-struct connection{
-    struct ibv_qp *qp;                 /* QP handle */
-    int sock{-1};                      /* TCP socket file descriptor */
-};
-struct memory_region{
-    std::vector<connection> conns;
-    struct ibv_mr *mr;                 /* MR handle for buf */
-    char *buf;                         /* memory buffer pointer, used for RDMA and send ops */
-    bool isBufDeletableFlag;                /* whether buf is exclusive or not */
-    struct ibv_cq *cq;                 /* CQ handle */
-    std::map<uint64_t, struct ibv_wc> polled_wc;
-	std::unique_ptr<std::mutex> wr_id_mtx, poll_cq_mtx;
-	uint64_t wr_id_cnt;
-};
-/* structure of system resources */
-struct resources
-{
-    struct ibv_device_attr
-        device_attr;
-    /* Device attributes */
-    struct ibv_port_attr port_attr;    /* IB port attributes */
-    struct cm_con_data_t remote_props; /* values to connect to remote side */
-    struct ibv_context *ib_ctx;        /* device handle */
-    struct ibv_pd *pd;                 /* PD handle */
-    std::vector<struct memory_region> memregs;
-};
-
 } // namespace mempool
 #include "lru.hh"
 #include "pat.hh"

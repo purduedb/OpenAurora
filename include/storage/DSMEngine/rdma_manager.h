@@ -345,23 +345,6 @@ public:
     void Initialize_threadlocal_map();
     // Set up the socket connection to remote shared memory.
     bool Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id);
-    void Cross_Computes_RPC_Threads_Creator(uint16_t target_node_id);
-
-    void Put_qp_info_into_RemoteM(uint16_t target_compute_node_id,
-        std::array<ibv_cq *, NUM_QP_ACCROSS_COMPUTE * 2> *cq_arr,
-        std::array<ibv_qp *, NUM_QP_ACCROSS_COMPUTE> *qp_arr);
-    Registered_qp_config_xcompute Get_qp_info_from_RemoteM(uint16_t target_compute_node_id);
-    //Computes node sync compute sides (block function)
-    void sync_with_computes_Cside();
-    // For the non-cached page only.
-    ibv_mr* Get_local_read_mr();
-    ibv_mr* Get_local_send_message_mr();
-    ibv_mr* Get_local_receive_message_mr();
-    ibv_mr* Get_local_CAS_mr();
-    //Computes node sync memory sides (block function)
-
-    ibv_mr* create_index_table();
-    ibv_mr* create_lock_table();
 
     void compute_message_handling_thread(std::string q_id, uint16_t shard_target_node_id);
     void ConnectQPThroughSocket(std::string qp_type, int socket_fd,
@@ -383,11 +366,6 @@ public:
 
     //TODO: Make it register not per 1GB, allocate and register the memory all at once.
     ibv_mr * Preregister_Memory(size_t gb_number); //Pre register the memroy do not allocate bit map
-    bool Exclusive_lock_invalidate_RPC(GlobalAddress global_ptr, uint16_t target_node_id);
-    bool Shared_lock_invalidate_RPC(GlobalAddress g_ptr, uint16_t target_node_id);
-    bool Send_heart_beat();
-    bool Send_heart_beat_xcompute(uint16_t target_memory_node_id);
-    int Remote_Memory_Deregister();
     // new query pair creation and connection to remote Memory by RDMA send and receive
     bool Remote_Query_Pair_Connection(std::string& qp_type, uint16_t target_node_id);    // Only called by client.
     int RDMA_Read(GlobalAddress remote_ptr, ibv_mr *local_mr, size_t msg_size, size_t send_flag, int poll_num,
@@ -402,30 +380,7 @@ public:
     int RDMA_Write(void* addr, uint32_t rkey, ibv_mr* local_mr, size_t msg_size,
         std::string qp_type, size_t send_flag, int poll_num,
         uint16_t target_node_id);
-    int RDMA_Write_Batch(void* addr, uint32_t rkey, ibv_mr* local_mr, size_t msg_size,
-        std::string qp_type, size_t send_flag, int poll_num,
-        uint16_t target_node_id);
-    int RDMA_Write_Imme(void* addr, uint32_t rkey, ibv_mr* local_mr,
-        size_t msg_size, std::string qp_type, size_t send_flag,
-        int poll_num, unsigned int imme, uint16_t target_node_id);
-    // Return 0 mean success
-    int RDMA_CAS(GlobalAddress remote_ptr, ibv_mr *local_mr, uint64_t compare,
-        uint64_t swap, size_t send_flag, int poll_num,
-        Chunk_type pool_name, std::string qp_type = "default");
-    int RDMA_FAA(GlobalAddress remote_ptr, ibv_mr *local_mr, uint64_t add, size_t send_flag, int poll_num,
-        Chunk_type pool_name, std::string qp_type = "default");
-    int RDMA_CAS(ibv_mr *remote_mr, ibv_mr *local_mr, uint64_t compare, uint64_t swap, size_t send_flag, int poll_num,
-        uint16_t target_node_id, std::string qp_type = "default");
 
-    void Prepare_WR_CAS(ibv_send_wr &sr, ibv_sge &sge, GlobalAddress remote_ptr, ibv_mr *local_mr, uint64_t compare,
-        uint64_t swap, size_t send_flag, Chunk_type pool_name);
-    void Prepare_WR_FAA(ibv_send_wr &sr, ibv_sge &sge, GlobalAddress remote_ptr, ibv_mr *local_mr, uint64_t add,
-        size_t send_flag, Chunk_type pool_name);
-    void Prepare_WR_Read(ibv_send_wr &sr, ibv_sge &sge, GlobalAddress remote_ptr, ibv_mr *local_mr, size_t msg_size,
-        size_t send_flag, Chunk_type pool_name);
-    void Prepare_WR_Write(ibv_send_wr &sr, ibv_sge &sge, GlobalAddress remote_ptr, ibv_mr *local_mr, size_t msg_size,
-        size_t send_flag, Chunk_type pool_name);
-    int Batch_Submit_WRs(ibv_send_wr *sr, int poll_num, uint16_t target_node_id, std::string qp_type = "default");
     // the coder need to figure out whether the queue pair has two seperated queue,
     // if not, only send_cq==true is a valid option.
     // For a thread-local queue pair, the send_cq does not matter.
