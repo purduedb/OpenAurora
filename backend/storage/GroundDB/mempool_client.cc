@@ -13,9 +13,10 @@ public:
     MemPoolClient();
     static MemPoolClient* Get_Instance();
     void AppendToPAT(size_t pa_idx);
-	void AccessPageOnMemoryPool(KeyType PageID);
+	int AccessPageOnMemoryPool(KeyType PageID);
 	void GetNewestPageAddressTable();
-	void FlushPageToMemoryPool(char* src, KeyType PageID);
+	int FlushPageToMemoryPool(char* src, KeyType PageID);
+    static void Restart();
 
     std::shared_ptr<DSMEngine::RDMA_Manager> rdma_mg;
     PageAddressTable pat;
@@ -71,17 +72,26 @@ void MemPoolClient::AppendToPAT(size_t pa_idx){
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
 
+static pid_t pid = -1;
+static MemPoolClient* client = nullptr;
+static std::mutex get_instance_lock;
 MemPoolClient* MemPoolClient::Get_Instance(){
-	static pid_t pid = -1;
-    static MemPoolClient* client = nullptr;
-    static std::mutex lock;
-    lock.lock();
+    get_instance_lock.lock();
     if (client == nullptr || pid != getpid()){
         client = new MemPoolClient();
 		pid = getpid();
 	}
-    lock.unlock();
+    get_instance_lock.unlock();
     return client;
+}
+void MemPoolClient::Restart(){
+    get_instance_lock.lock();
+    if (client != nullptr && pid == getpid()){
+        DSMEngine::RDMA_Manager::Delete_Instance();
+        delete client;
+        client = nullptr;
+	}
+    get_instance_lock.unlock();
 }
 
 } // namespace mempool
@@ -245,7 +255,8 @@ bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr curr
     }
 }
 
-void mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
+int mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
+    int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
 
@@ -254,18 +265,20 @@ void mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
 	auto req = &send_pointer->content.access_page;
 	send_pointer->command = DSMEngine::access_page_;
 	req->page_id = PageID;
-	rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+	rc = rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
 
 	ibv_wc wc[3] = {};
 	std::string qp_type("main");
-	rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+	rc = rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
 	
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    return rc;
 }
 void AsyncAccessPageOnMemoryPool(KeyType PageID){
 	std::function<void(void *args)> handler = [](void *args){
 		auto PageID = (KeyType*)args;
-		mempool::MemPoolClient::Get_Instance()->AccessPageOnMemoryPool(*PageID);
+		while(mempool::MemPoolClient::Get_Instance()->AccessPageOnMemoryPool(*PageID))
+            mempool::MemPoolClient::Restart();
 		delete (KeyType*)args;
 	};
 	auto a = new KeyType;
@@ -305,7 +318,8 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 		}
 }
 
-void mempool::MemPoolClient::FlushPageToMemoryPool(char* src, KeyType PageID){
+int mempool::MemPoolClient::FlushPageToMemoryPool(char* src, KeyType PageID){
+    int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
 
@@ -315,16 +329,18 @@ void mempool::MemPoolClient::FlushPageToMemoryPool(char* src, KeyType PageID){
 	send_pointer->command = DSMEngine::flush_page_;
 	req->page_id = PageID;
 	memcpy(req->page_data, src, BLCKSZ);
-	rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+	rc = rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
 
 	ibv_wc wc[3] = {};
 	std::string qp_type("main");
-	rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+	rc = rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
 	
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    return rc;
 }
 void SyncFlushPageToMemoryPool(char* src, KeyType PageID){
-	mempool::MemPoolClient::Get_Instance()->FlushPageToMemoryPool(src, PageID);
+	while(mempool::MemPoolClient::Get_Instance()->FlushPageToMemoryPool(src, PageID))
+        mempool::MemPoolClient::Restart();
 }
 
 void ParseXLogBlocksLsn_vm(XLogReaderState *record, int recordBlockId, XLogRecPtr lsn){
