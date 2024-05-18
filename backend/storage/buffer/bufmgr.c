@@ -893,7 +893,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * doing so defeats the 'delayed allocation' mechanism, leading to
 		 * increased file fragmentation.
 		 */
-		toMarkDirty = true;
+		if(IsRpcClient > 1) toMarkDirty = true;
 	}
 	else
 	{

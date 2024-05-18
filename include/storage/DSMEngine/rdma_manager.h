@@ -336,6 +336,7 @@ public:
     RDMA_Manager(config_t config);
     ~RDMA_Manager();
     static RDMA_Manager *Get_Instance(config_t* config);
+    static void Delete_Instance();
     size_t GetMemoryNodeNum();
     size_t GetComputeNodeNum();
     /**

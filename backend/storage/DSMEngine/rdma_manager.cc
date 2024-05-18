@@ -179,9 +179,9 @@ RDMA_Manager::~RDMA_Manager() {
     }
 }
 
+static RDMA_Manager * rdma_mg = nullptr;
+static std::mutex lock;
 RDMA_Manager *RDMA_Manager::Get_Instance(config_t* config) {
-    static RDMA_Manager * rdma_mg = nullptr;
-    static std::mutex lock;
     if (config == nullptr){
         assert(rdma_mg!= nullptr);
         return rdma_mg;
@@ -196,6 +196,17 @@ RDMA_Manager *RDMA_Manager::Get_Instance(config_t* config) {
     lock.unlock();
     // while(rdma_mg->main_comm_thread_ready_num.load() != rdma_mg->memory_nodes.size());
     return rdma_mg;
+}
+void RDMA_Manager::Delete_Instance() {
+    fprintf(stderr, "%s %d\n", __func__, __LINE__);
+    lock.lock();
+    if (rdma_mg){
+    fprintf(stderr, "%s %d\n", __func__, __LINE__);
+        delete rdma_mg;
+    fprintf(stderr, "%s %d\n", __func__, __LINE__);
+        rdma_mg = nullptr;
+    }
+    lock.unlock();
 }
 
 size_t RDMA_Manager::GetMemoryNodeNum() {
