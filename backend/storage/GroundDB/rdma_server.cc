@@ -195,6 +195,8 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::mr_info_) {
             std::function<void(void *args)> handler = [this](void *args){this->mr_info_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::disconnect_) {
+            break;
         } else {
             printf("corrupt message from client (node %d). %d\n", compute_node_id, receive_msg_buf.command);
             assert(false);
@@ -206,6 +208,21 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         else
             buffer_position++;
     }
+    if (!rdma_mg->res->sock_map.count(compute_node_id)){
+        close(rdma_mg->res->sock_map[compute_node_id]);
+        rdma_mg->res->sock_map.erase(compute_node_id);
+    }
+    if (!rdma_mg->res->cq_map.count(compute_node_id)){
+        ibv_destroy_cq(rdma_mg->res->cq_map[compute_node_id].first);
+        if(rdma_mg->res->cq_map[compute_node_id].second != nullptr)
+            ibv_destroy_cq(rdma_mg->res->cq_map[compute_node_id].second);
+        rdma_mg->res->cq_map.erase(compute_node_id);
+    }
+    if (!rdma_mg->res->qp_map.count(compute_node_id)){
+        ibv_destroy_qp(rdma_mg->res->qp_map[compute_node_id]);
+        rdma_mg->res->qp_map.erase(compute_node_id);
+    }
+    return;
     assert(false);
     // TODO: Build up a exit method for shared memory side, don't forget to destroy all the RDMA resourses.
 }

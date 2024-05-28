@@ -81,12 +81,12 @@ RDMA_Manager::~RDMA_Manager() {
                 fprintf(stderr, "failed to destroy QP\n");
             }
         }
-    printf("RDMA Manager get destroyed\n");
+    // printf("RDMA Manager get destroyed\n");
     if (!local_mem_regions.empty()) {
         for (ibv_mr* p : local_mem_regions) {
             size_t size = p->length;
             ibv_dereg_mr(p);
-            hugePageDealloc(p,size);
+            hugePageDealloc(p->addr,size);
         }
     }
 
@@ -103,23 +103,10 @@ RDMA_Manager::~RDMA_Manager() {
         for (auto it = res->cq_map.begin(); it != res->cq_map.end(); it++) {
             if (ibv_destroy_cq(it->second.first)) {
                 fprintf(stderr, "failed to destroy CQ\n");
-            }else{
-                delete it->second.first;
             }
             if (it->second.second!= nullptr && ibv_destroy_cq(it->second.second)){
                 fprintf(stderr, "failed to destroy CQ\n");
-            }else{
-                delete it->second.second;
             }
-        }
-    if (!res->qp_map.empty())
-        for (auto it = res->qp_map.begin(); it != res->qp_map.end(); it++) {
-            if (ibv_destroy_qp(it->second)) {
-                fprintf(stderr, "failed to destroy QP\n");
-            }else{
-                delete it->second;
-            }
-
         }
     if (!res->qp_main_connection_info.empty()){
         for(auto it = res->qp_main_connection_info.begin(); it != res->qp_main_connection_info.end(); it++){
@@ -198,12 +185,9 @@ RDMA_Manager *RDMA_Manager::Get_Instance(config_t* config) {
     return rdma_mg;
 }
 void RDMA_Manager::Delete_Instance() {
-    fprintf(stderr, "%s %d\n", __func__, __LINE__);
     lock.lock();
     if (rdma_mg){
-    fprintf(stderr, "%s %d\n", __func__, __LINE__);
         delete rdma_mg;
-    fprintf(stderr, "%s %d\n", __func__, __LINE__);
         rdma_mg = nullptr;
     }
     lock.unlock();
