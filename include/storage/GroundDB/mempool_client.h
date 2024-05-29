@@ -41,6 +41,8 @@ typedef struct RDMAReadPageInfo RDMAReadPageInfo;
 
 extern bool MempoolClientReplaying;
 
+extern void DisconnectFromMemPool();
+
 extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 
 extern bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_read_info);

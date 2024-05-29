@@ -123,6 +123,7 @@ enum RDMA_Command_Type {
     access_page_,
     sync_pat_,
     mr_info_,
+    disconnect_,
 /*******/
     create_qp_,
     create_mr_,

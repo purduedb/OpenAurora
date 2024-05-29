@@ -50,7 +50,7 @@ namespace DSMEngine{
             int ret = munmap(ptr, size);
         }else{
 
-            printf("mmap is not enabled from the beginning\n");
+            // printf("mmap is not enabled from the beginning\n");
         }
         free(ptr);
 
