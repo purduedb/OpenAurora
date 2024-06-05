@@ -63,10 +63,18 @@ void MemPoolClientShmemInit(){
     info.keysize = sizeof(KeyType);
     info.entrysize = sizeof(PATLookupEntry);
     info.num_partitions = PAGE_ARRAY_TABLE_PARTITION_NUM;
+	info.hash = [](const void *key, Size keysize)->uint32 { 
+		auto k = *(KeyType*)key;
+		return k.SpcID * 13 + k.DbID * 17 + k.RelID * 11 + k.ForkNum * 3 + k.BlkNum * 7;
+	};
+	info.match = [](const void *key1, const void *key2, Size keysize)->int {
+		auto k1 = *(KeyType*)key1, k2 = *(KeyType*)key2;
+		return k1.SpcID != k2.SpcID || k1.DbID != k2.DbID || k1.RelID != k2.RelID || k1.ForkNum != k2.ForkNum || k1.BlkNum != k2.BlkNum;
+	};
 	mpc_pid_to_idx = 
 		ShmemInitHash("MemPool Client PageID-to-index map",
 						MAX_TOTAL_PAGE_ARRAY_SIZE, MAX_TOTAL_PAGE_ARRAY_SIZE,
-						&info, HASH_ELEM | HASH_BLOBS | HASH_PARTITION);
+						&info, HASH_ELEM | HASH_BLOBS | HASH_PARTITION | HASH_FUNCTION | HASH_COMPARE);
 	version_map =
 		ShmemInitVersionMap("MemPool Client VersionMap",
 						1 << 18, 1 << 20);
