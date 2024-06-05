@@ -11,10 +11,6 @@
 
 namespace mempool{
 
-class KeyTypeHashFunction{
-public:
-    uint32_t operator() (const KeyType &key) const;
-};
 class KeyTypeEqualFunction{
 public:
     bool operator() (const KeyType &key1, const KeyType &key2) const;
