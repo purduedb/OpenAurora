@@ -252,6 +252,7 @@ void MemPoolManager::allocate_page_array(size_t pa_size){
             .page_id_addr = pida_buf + i * sizeof(KeyType)
         };
         freelist.push_back(pagemeta);
+        *(KeyType*)(pagemeta->page_id_addr) = nullKeyType;
     }
     // todo (te): multiple page_array
 }

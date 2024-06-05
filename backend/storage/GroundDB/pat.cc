@@ -81,14 +81,16 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 		Assert(result != NULL);
 	}
 	page_id = pid;
-    auto result = (PATLookupEntry*)
-		hash_search_with_hash_value(mpc_pid_to_idx,
-									&pid,
-									get_hash_value(mpc_pid_to_idx, &pid),
-									HASH_ENTER,
-									NULL);
-	result->pa_idx = pa_idx;
-	result->pa_ofs = pa_ofs;
+	if(!KeyTypeEqualFunction()(pid, nullKeyType)){
+		auto result = (PATLookupEntry*)
+			hash_search_with_hash_value(mpc_pid_to_idx,
+										&pid,
+										get_hash_value(mpc_pid_to_idx, &pid),
+										HASH_ENTER,
+										NULL);
+		result->pa_idx = pa_idx;
+		result->pa_ofs = pa_ofs;
+	}
 	LWLockRelease(mempool_client_pat_lock);
 }
 

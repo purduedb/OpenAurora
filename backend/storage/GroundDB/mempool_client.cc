@@ -332,7 +332,7 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 			rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
 			
 			auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.sync_pat;
-			for(size_t k = 0; j + k < pat.page_array_size(i) && k < SYNC_PAT_SIZE; k++)
+			for(size_t k = 0; j + k < max_j && k < SYNC_PAT_SIZE; k++)
 				pat.update(i, j + k, res->page_id_array[k]);
 
 			rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
