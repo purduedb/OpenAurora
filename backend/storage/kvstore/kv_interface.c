@@ -16,7 +16,9 @@
 #include "postgres.h"
 #include "storage/buf_internals.h"
 #include "access/xlogreader.h"
+#ifdef USE_LIGHT_KV
 #include "storage/light_weighted_kvstore_api.h"
+#endif
 
 #define USE_ROCKSDB 1
 //#define USE_LIGHT_KV 1
