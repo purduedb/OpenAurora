@@ -183,8 +183,11 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         // copy the pointer of receive buf to a new place because
         // it is the same with send buff pointer.
         rdma_mg->post_receive<DSMEngine::RDMA_Request>(&recv_mr[buffer_position], compute_node_id, client_ip);
-        if (receive_msg_buf.command == DSMEngine::flush_page_) {
-            std::function<void(void *args)> handler = [this](void *args){this->flush_page_handler(args);};
+        if (receive_msg_buf.command == DSMEngine::async_flush_page_) {
+            std::function<void(void *args)> handler = [this](void *args){this->async_flush_page_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::sync_flush_page_) {
+            std::function<void(void *args)> handler = [this](void *args){this->sync_flush_page_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
         } else if (receive_msg_buf.command == DSMEngine::access_page_) {
             std::function<void(void *args)> handler = [this](void *args){this->access_page_handler(args);};
@@ -257,7 +260,7 @@ void MemPoolManager::allocate_page_array(size_t pa_size){
     // todo (te): multiple page_array
 }
 
-void MemPoolManager::flush_page_handler(void* args){
+void MemPoolManager::async_flush_page_handler(void* args){
     auto Args = (request_handler_args*)args;
     auto request = &Args->request;
     auto client_ip = Args->client_ip;
@@ -273,6 +276,33 @@ void MemPoolManager::flush_page_handler(void* args){
     lk.unlock();
     lru->Release(e);
 
+    delete Args;
+}
+
+void MemPoolManager::sync_flush_page_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.flush_page;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+
+    auto e = lru->LookupInsert(req->page_id, nullptr, 1, nullptr);
+    auto pagemeta = (PageMeta*)e->value;
+    std::unique_lock<std::shared_mutex> lk(e->rw_mtx);
+    memcpy(pagemeta->page_addr, req->page_data, BLCKSZ);
+    memcpy(pagemeta->page_id_addr, &req->page_id, sizeof(KeyType));
+    lk.unlock();
+    lru->Release(e);
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
     delete Args;
 }
 

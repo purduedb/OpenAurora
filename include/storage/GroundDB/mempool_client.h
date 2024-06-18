@@ -55,6 +55,8 @@ extern void AsyncAccessPageOnMemoryPool(KeyType PageID);
 
 extern void AsyncGetNewestPageAddressTable();
 
+extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync);
+extern void ASyncFlushPageToMemoryPool(char* src, KeyType PageID);;
 extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 
 extern void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn);

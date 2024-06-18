@@ -119,7 +119,8 @@ struct New_Root {
 } __attribute__((packed));
 enum RDMA_Command_Type {
     invalid_command_ = 0,
-    flush_page_,
+    sync_flush_page_,
+    async_flush_page_,
     access_page_,
     sync_pat_,
     mr_info_,
