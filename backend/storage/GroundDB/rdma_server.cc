@@ -73,14 +73,15 @@ int MemPoolManager::server_sock_connect(const char* servername, int port) {
             sockfd = -1;
             if (bind(listenfd, iterator->ai_addr, iterator->ai_addrlen))
                 goto sock_connect_exit;
+            fprintf(stderr, "MemPool Server is ready...\n");
             listen(listenfd, 20);
             while (!exit_all_threads_) {
                 sockfd = accept(listenfd, &address, &len);
                 std::string client_id = std::string(inet_ntoa(((struct sockaddr_in*)(&address))->sin_addr))
                     + ":" + std::to_string(((struct sockaddr_in*)(&address))->sin_port);
                 // Client id must be composed of ip address and port number.
-                std::cout << "connection built up from " << client_id << std::endl;
-                std::cout << "connection family is " << address.sa_family << std::endl;
+                std::cout << std::endl << "connection built up from " << client_id << std::endl;
+                // std::cout << "connection family is " << address.sa_family << std::endl;
                 if (sockfd < 0) {
                     fprintf(stderr, "Connection accept error, erron: %d\n", errno);
                     break;

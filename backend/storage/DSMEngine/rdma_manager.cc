@@ -332,7 +332,7 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     local_con_data.qp_num = htonl(qp->qp_num);
     local_con_data.lid = htons(res->port_attr.lid);
     memcpy(local_con_data.gid, &res->my_gid, 16);
-    fprintf(stdout, "\nLocal LID = 0x%x\n", res->port_attr.lid);
+    fprintf(stdout, "Local LID = 0x%x\n", res->port_attr.lid);
 
     if (sock_sync_data(socket_fd, sizeof(struct Registered_qp_config),
             (char*)&local_con_data, (char*)&tmp_con_data) < 0) {

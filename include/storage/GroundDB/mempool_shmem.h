@@ -20,7 +20,7 @@ extern "C" {
 extern PGDLLIMPORT LWLock* mempool_client_lw_lock;
 
 #define MAX_PAGE_ARRAY_COUNT 20ull
-#define MAX_TOTAL_PAGE_ARRAY_SIZE (1ull << 20)
+#define MAX_TOTAL_PAGE_ARRAY_SIZE (1ull << 24)
 #define PAGE_ARRAY_TABLE_PARTITION_NUM 128
 
 extern PGDLLIMPORT size_t *mpc_pa_cnt, *mpc_pa_size;
