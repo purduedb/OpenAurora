@@ -95,7 +95,7 @@ void MemPoolClientShmemInit(){
 		*mpc_pa_cnt = 0;
 		*mpc_pa_size = 0;
 		*is_first_mpc = true;
-		*mpLocalCnt=*mpMemCnt=*mpStoCnt=0;
+		*mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
 	}
 }
 
