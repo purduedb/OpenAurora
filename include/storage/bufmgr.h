@@ -283,7 +283,7 @@ extern void FreeAccessStrategy(BufferAccessStrategy strategy);
 extern Buffer
 ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
                   BlockNumber blockNum, ReadBufferMode mode,
-                  BufferAccessStrategy strategy, bool *hit);
+                  BufferAccessStrategy strategy, char *hit);
 
 extern Buffer
 FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumber);

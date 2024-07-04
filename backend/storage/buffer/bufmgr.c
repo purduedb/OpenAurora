@@ -655,7 +655,7 @@ Buffer
 ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 				   ReadBufferMode mode, BufferAccessStrategy strategy)
 {
-	bool		hit;
+	char		hit;
 	Buffer		buf;
 
 	/* Open it at the smgr level if not already done */
@@ -678,8 +678,18 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	pgstat_count_buffer_read(reln);
 	buf = ReadBuffer_common(reln->rd_smgr, reln->rd_rel->relpersistence,
 							forkNum, blockNum, mode, strategy, &hit);
-	if (hit)
+	if (hit == 1)
 		pgstat_count_buffer_hit(reln);
+#ifdef USE_MEMPOOL_STAT
+	if (reln->rd_rel->relkind == RELKIND_RELATION || reln->rd_rel->relkind == RELKIND_MATVIEW || reln->rd_rel->relkind == RELKIND_TOASTVALUE){
+		if (hit == 1)
+			(*mpLocalCnt)++;
+		else if (hit == 2)
+			(*mpMemCnt)++;
+		else
+			(*mpStoCnt)++;
+	}
+#endif
 	return buf;
 }
 
@@ -717,7 +727,7 @@ ReadBufferWithoutRelcache(RelFileNode rnode, ForkNumber forkNum,
 Buffer
 ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				  BlockNumber blockNum, ReadBufferMode mode,
-				  BufferAccessStrategy strategy, bool *hit)
+				  BufferAccessStrategy strategy, char *hit)
 {
 	BufferDesc *bufHdr;
 	Block		bufBlock;
@@ -928,6 +938,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
 							if(LsnIsSatisfied(cur_lsn)){
 								read_from_mempool = true;
+								*hit = 2;
 								expected_pin_count_when_xlog_replay = 2;
 								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
 								expected_pin_count_when_xlog_replay = 1;

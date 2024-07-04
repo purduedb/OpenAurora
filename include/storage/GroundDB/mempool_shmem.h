@@ -11,11 +11,14 @@ extern "C" {
 #include "storage/shmem.h"
 #include "storage/GroundDB/mempool_client.h"
 
-#define NUMBER_OF_mempool_client_lw_lock 4
+extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
+
+#define NUMBER_OF_mempool_client_lw_lock 5
 #define mempool_client_connection_lock (&mempool_client_lw_lock[0])
 #define mempool_client_version_map_lock (&mempool_client_lw_lock[1])
 #define mempool_client_pat_lock (&mempool_client_lw_lock[2])
 #define mempool_client_sync_pat_lock (&mempool_client_lw_lock[3])
+#define mempool_client_stat_lock (&mempool_client_lw_lock[4])
 
 extern PGDLLIMPORT LWLock* mempool_client_lw_lock;
 
