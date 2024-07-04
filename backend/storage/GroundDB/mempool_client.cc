@@ -100,8 +100,30 @@ void MemPoolClient::Clear_Instance(bool disconnect){
 
 } // namespace mempool
 
-void DisconnectFromMemPool(){
+void proc_exit_MemPool(){
     mempool::MemPoolClient::Clear_Instance(true);
+#ifdef USE_MEMPOOL_STAT
+    ReportStatForMemPool();
+#endif
+}
+
+void ReportStatForMemPool(){
+    LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
+    int64_t tmpLocalCnt = *mpLocalCnt, tmpMemCnt = *mpMemCnt, tmpStoCnt = *mpStoCnt;
+    int64_t totalCnt = tmpLocalCnt + tmpMemCnt + tmpStoCnt;
+    if(totalCnt != 0)
+        fprintf(stderr, "pg_stat: %lld | %lld | %lld | %lld | %.3lf | %.3lf | %.3lf\n",
+            totalCnt, tmpLocalCnt, tmpMemCnt, tmpStoCnt,
+            (double)tmpLocalCnt / totalCnt,
+            (double)tmpMemCnt / totalCnt,
+            (double)tmpStoCnt / totalCnt
+        );
+    LWLockRelease(mempool_client_stat_lock);
+}
+void ResetStatForMemPool(){
+    LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
+    *mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
+    LWLockRelease(mempool_client_stat_lock);
 }
 
 bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info) {

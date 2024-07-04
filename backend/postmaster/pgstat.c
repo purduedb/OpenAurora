@@ -68,6 +68,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "storage/GroundDB/mempool_client.h"
 
 /* ----------
  * Timer definitions.
@@ -1347,6 +1348,9 @@ pgstat_reset_counters(void)
 	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_RESETCOUNTER);
 	msg.m_databaseid = MyDatabaseId;
 	pgstat_send(&msg, sizeof(msg));
+#ifdef USE_MEMPOOL_STAT
+	ResetStatForMemPool();
+#endif
 }
 
 /* ----------

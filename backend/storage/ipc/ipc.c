@@ -105,7 +105,7 @@ static int	on_proc_exit_index,
 void
 proc_exit(int code)
 {
-	DisconnectFromMemPool();
+	proc_exit_MemPool();
     printf("%s Start, pid = %d\n", __func__ , getpid());
     fflush(stdout);
     RpcTransportClose();

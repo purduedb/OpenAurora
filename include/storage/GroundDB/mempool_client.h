@@ -31,6 +31,7 @@ extern "C" {
 #include "storage/bufpage.h"
 #include "storage/GroundDB/mempool_shmem.h"
 
+// #define USE_MEMPOOL_STAT
 #define SyncPAT_Interval_ms 1000
 
 struct RDMAReadPageInfo{
@@ -41,7 +42,10 @@ typedef struct RDMAReadPageInfo RDMAReadPageInfo;
 
 extern bool MempoolClientReplaying;
 
-extern void DisconnectFromMemPool();
+extern void proc_exit_MemPool();
+
+extern void ReportStatForMemPool();
+extern void ResetStatForMemPool();
 
 extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 
