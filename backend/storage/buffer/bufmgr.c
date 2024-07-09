@@ -37,6 +37,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/storage.h"
+#include "catalog/pg_namespace.h"
 #include "executor/instrument.h"
 #include "lib/binaryheap.h"
 #include "miscadmin.h"
@@ -681,13 +682,21 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	if (hit == 1)
 		pgstat_count_buffer_hit(reln);
 #ifdef USE_MEMPOOL_STAT
-	if (reln->rd_rel->relkind == RELKIND_RELATION || reln->rd_rel->relkind == RELKIND_MATVIEW || reln->rd_rel->relkind == RELKIND_TOASTVALUE){
+	if ((reln->rd_rel->relkind == RELKIND_RELATION
+		|| reln->rd_rel->relkind == RELKIND_MATVIEW
+		|| reln->rd_rel->relkind == RELKIND_TOASTVALUE)
+		&& RelationGetNamespace(reln) != PG_CATALOG_NAMESPACE
+		&& RelationGetNamespace(reln) != PG_TOAST_NAMESPACE
+		// && RelationGetNamespace(reln) != get_namespace_oid("information_schema", true)
+	){
+    	LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
 		if (hit == 1)
 			(*mpLocalCnt)++;
 		else if (hit == 2)
 			(*mpMemCnt)++;
 		else
 			(*mpStoCnt)++;
+    	LWLockRelease(mempool_client_stat_lock);
 	}
 #endif
 	return buf;
