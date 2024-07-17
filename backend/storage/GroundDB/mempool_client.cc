@@ -144,13 +144,13 @@ bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_r
 	
 	auto res_page = (uint8_t*)pa_mr.addr;
 	auto res_id = (KeyType*)pida_mr.addr;
-	if(!mempool::KeyTypeEqualFunction()(*res_id, PageID))
-		return false;
-	memcpy(des, res_page, BLCKSZ);
+    bool ret = mempool::KeyTypeEqualFunction()(*res_id, PageID);
+	if (ret)
+	    memcpy(des, res_page, BLCKSZ);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(pa_mr.addr, DSMEngine::PageArray);
 	rdma_mg->Deallocate_Local_RDMA_Slot(pida_mr.addr, DSMEngine::PageIDArray);
-	return true;
+	return ret;
 }
 
 bool LsnIsSatisfied(XLogRecPtr PageLSN){
