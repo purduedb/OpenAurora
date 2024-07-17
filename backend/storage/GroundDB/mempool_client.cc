@@ -15,6 +15,7 @@ public:
     void AppendToPAT(size_t pa_idx);
     void Disconnect();
 	int AccessPageOnMemoryPool(KeyType PageID);
+	int RemovePageOnMemoryPool(KeyType PageID);
 	void GetNewestPageAddressTable();
 	int AsyncFlushPageToMemoryPool(char* src, KeyType PageID);
 	int SyncFlushPageToMemoryPool(char* src, KeyType PageID);
@@ -309,6 +310,25 @@ int mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
 	auto req = &send_pointer->content.access_page;
 	send_pointer->command = DSMEngine::access_page_;
+	req->page_id = PageID;
+	rc = rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+
+	ibv_wc wc[3] = {};
+	std::string qp_type("main");
+	rc = rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+	
+	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    return rc;
+}
+int mempool::MemPoolClient::RemovePageOnMemoryPool(KeyType PageID){
+    int rc = 0;
+	auto rdma_mg = this->rdma_mg;
+	ibv_mr send_mr;
+
+	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
+	auto req = &send_pointer->content.remove_page;
+	send_pointer->command = DSMEngine::async_remove_page_;
 	req->page_id = PageID;
 	rc = rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
 
