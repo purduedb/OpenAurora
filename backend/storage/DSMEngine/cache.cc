@@ -351,7 +351,7 @@ class ShardedLRUCache : public Cache {
   mempool::FreeList* freelist_;
 
   static inline uint32_t HashKeyType(const KeyType& s) {
-    return Hash((char*)&s, sizeof(KeyType), 0);
+    return Hash(&s, 0);
   }
 
   static uint32_t Shard(uint32_t hash) { return hash >> (32 - kNumShardBits); }

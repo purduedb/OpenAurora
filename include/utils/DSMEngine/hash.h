@@ -9,10 +9,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "c.h"
+#include "access/logindex_hashmap.h"
 
 namespace DSMEngine {
 
 uint32_t Hash(const char* data, size_t n, uint32_t seed);
+uint32_t Hash(const KeyType* key, uint32_t seed);
 
 }  // namespace DSMEngine
 
