@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "utils/DSMEngine/coding.h"
+#include "access/logindex_hashmap.h"
 
 // The FALLTHROUGH_INTENDED macro can be used to annotate implicit fall-through
 // between switch labels. The real definition should be provided externally.
@@ -57,6 +58,20 @@ uint32_t Hash(const char* data, size_t n, uint32_t seed) {
       h *= m;
       h ^= (h >> r);
       break;
+  }
+  return h;
+}
+
+uint32_t Hash(const KeyType* key, uint32_t seed) {
+  const uint32_t m = 0xc6a4a793;
+  uint32_t h = static_cast<uint32_t>(seed ^ (9 * m));
+  uint32_t data[9] = {key->SpcID >> 32, key->SpcID, key->DbID >> 32, key->DbID, key->RelID >> 32, key->RelID, key->ForkNum, key->BlkNum >> 32, key->BlkNum};
+  uint32_t* limit = data + 9;
+  for(uint32_t* p = data; p < limit; p++) {
+    uint32_t w = DecodeFixed32((char*)p);
+    h += w;
+    h *= m;
+    h ^= (h >> 16);
   }
   return h;
 }

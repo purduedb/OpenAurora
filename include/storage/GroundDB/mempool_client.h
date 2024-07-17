@@ -32,6 +32,8 @@ extern "C" {
 #include "storage/GroundDB/mempool_shmem.h"
 
 // #define USE_MEMPOOL_STAT
+// #define MEMPOOL_CACHE_POLICY_COVERING
+// #define MEMPOOL_CACHE_POLICY_DISJOINT
 #define SyncPAT_Interval_ms 1000
 
 struct RDMAReadPageInfo{
@@ -56,6 +58,8 @@ extern bool LsnIsSatisfied(XLogRecPtr PageLSN);
 extern bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr current_lsn, XLogRecPtr target_lsn);
 
 extern void AsyncAccessPageOnMemoryPool(KeyType PageID);
+
+extern void AsyncRemovePageOnMemoryPool(KeyType PageID);
 
 extern void AsyncGetNewestPageAddressTable();
 

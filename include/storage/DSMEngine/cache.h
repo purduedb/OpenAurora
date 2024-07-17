@@ -117,6 +117,7 @@ class DSMEngine_EXPORT Cache {
   virtual Handle* LookupInsert(const KeyType& key, void* value,
                                 size_t charge,
                                 void (*deleter)(Cache::Handle* handle)) = 0;
+  virtual Handle* LookupErase(const KeyType& key) = 0;
   // Release a mapping returned by a previous Lookup().
   // REQUIRES: handle must not have been released yet.
   // REQUIRES: handle must have been returned by a method on *this.
@@ -297,6 +298,7 @@ public:
     Cache::Handle* LookupInsert(const KeyType& key, uint32_t hash, void* value,
                                 size_t charge,
                                 void (*deleter)(Cache::Handle* handle));
+    Cache::Handle* LookupErase(const KeyType& key, uint32_t hash);
     //TODO: make the release not acquire the cache lock.
     void Release(Cache::Handle* handle);
     void Erase(const KeyType& key, uint32_t hash);
