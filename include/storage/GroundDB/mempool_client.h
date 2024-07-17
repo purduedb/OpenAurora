@@ -32,6 +32,8 @@ extern "C" {
 #include "storage/GroundDB/mempool_shmem.h"
 
 // #define USE_MEMPOOL_STAT
+// #define MEMPOOL_CACHE_POLICY_COVERING
+// #define MEMPOOL_CACHE_POLICY_DISJOINT
 #define SyncPAT_Interval_ms 1000
 
 struct RDMAReadPageInfo{

@@ -449,6 +449,7 @@ void SyncFlushPageToMemoryPool(char* src, KeyType PageID){
         mempool::MemPoolClient::Clear_Instance(false);
 }
 void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync){
+#ifndef MEMPOOL_CACHE_POLICY_DISJOINT
     SyncFlushPageToMemoryPool(buffer, (KeyType){
         reln->smgr_rnode.node.spcNode,
         reln->smgr_rnode.node.dbNode,
@@ -456,6 +457,7 @@ void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         forknum,
         blocknum,
     });
+#endif
 }
 
 void ParseXLogBlocksLsn_vm(XLogReaderState *record, int recordBlockId, XLogRecPtr lsn){
