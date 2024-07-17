@@ -1,6 +1,7 @@
 #include <chrono>
 #include "postgres.h"
 #include "storage/GroundDB/mempool_shmem.h"
+#include "utils/DSMEngine/hash.h"
 
 LWLock *mempool_client_lw_lock;
 size_t *node_id_cnt;
@@ -67,9 +68,8 @@ void MemPoolClientShmemInit(){
     info.keysize = sizeof(KeyType);
     info.entrysize = sizeof(PATLookupEntry);
     info.num_partitions = PAGE_ARRAY_TABLE_PARTITION_NUM;
-	info.hash = [](const void *key, Size keysize)->uint32 { 
-		auto k = *(KeyType*)key;
-		return k.SpcID * 13 + k.DbID * 17 + k.RelID * 11 + k.ForkNum * 3 + k.BlkNum * 7;
+	info.hash = [](const void *key, Size keysize)->uint32 {
+		return DSMEngine::Hash((KeyType*)key, 0);
 	};
 	info.match = [](const void *key1, const void *key2, Size keysize)->int {
 		auto k1 = *(KeyType*)key1, k2 = *(KeyType*)key2;
