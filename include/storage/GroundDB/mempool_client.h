@@ -57,6 +57,8 @@ extern bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecP
 
 extern void AsyncAccessPageOnMemoryPool(KeyType PageID);
 
+extern void AsyncRemovePageOnMemoryPool(KeyType PageID);
+
 extern void AsyncGetNewestPageAddressTable();
 
 extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync);

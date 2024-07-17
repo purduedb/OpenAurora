@@ -19,6 +19,10 @@ struct access_page_request{
 	KeyType page_id;
 };
 
+struct remove_page_request{
+	KeyType page_id;
+};
+
 struct sync_pat_request{
 	size_t pa_idx;
 	size_t pa_ofs;

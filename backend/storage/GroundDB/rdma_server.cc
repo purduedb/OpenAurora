@@ -193,6 +193,9 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::access_page_) {
             std::function<void(void *args)> handler = [this](void *args){this->access_page_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::async_remove_page_) {
+            std::function<void(void *args)> handler = [this](void *args){this->async_remove_page_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
         } else if (receive_msg_buf.command == DSMEngine::sync_pat_) {
             std::function<void(void *args)> handler = [this](void *args){this->sync_pat_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
@@ -315,8 +318,27 @@ void MemPoolManager::access_page_handler(void* args){
     auto req = &request->content.access_page;
 
 
-    auto e = lru->LookupInsert(req->page_id, nullptr, 1, nullptr);
+    auto e = lru->Lookup(req->page_id);
     lru->Release(e);
+
+    delete Args;
+}
+
+void MemPoolManager::async_remove_page_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.remove_page;
+
+    auto e = lru->LookupErase(req->page_id);
+    if (e != nullptr){
+        auto pagemeta = (PageMeta*)e->value;
+        std::unique_lock<std::shared_mutex> lk(e->rw_mtx);
+        *(KeyType*)(pagemeta->page_id_addr) = nullKeyType;
+        lk.unlock();
+        lru->Release(e);
+    }
 
     delete Args;
 }

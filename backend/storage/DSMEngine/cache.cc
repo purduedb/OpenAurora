@@ -209,6 +209,17 @@ Cache::Handle *DSMEngine::LRUCache::LookupInsert(const KeyType &key, uint32_t ha
         return reinterpret_cast<Cache::Handle*>(e);
     }
 }
+Cache::Handle* LRUCache::LookupErase(const KeyType& key, uint32_t hash) {
+    SpinLock l(&mutex_);
+    LRUHandle* e = table_.Remove(key, hash);
+    if (e != nullptr) {
+        assert(e->refs >= 1);
+        Ref(e);
+        FinishErase(e, &l);
+        freelist_->push_back((mempool::PageMeta*)(e->value));
+    }
+    return reinterpret_cast<Cache::Handle*>(e);
+}
 void LRUCache::Release(Cache::Handle* handle) {
   SpinLock l(&mutex_);
     Unref(reinterpret_cast<LRUHandle *>(handle), &l);
@@ -319,7 +330,10 @@ void LRUCache::Erase(const KeyType& key, uint32_t hash) {
 //  MutexLock l(&mutex_);
 //  WriteLock l(&mutex_);
   SpinLock l(&mutex_);
-    FinishErase(table_.Remove(key, hash), &l);
+  LRUHandle* e = table_.Remove(key, hash);
+  auto page_meta = (mempool::PageMeta*)(e->value);
+  FinishErase(e, &l);
+  freelist_->push_back(page_meta);
 }
 
 void LRUCache::Prune() {
@@ -409,6 +423,10 @@ class ShardedLRUCache : public Cache {
                 const uint32_t hash = HashKeyType(key);
                 return shard_[Shard(hash)].LookupInsert(key, hash, value, charge, deleter);
   };
+  Handle* LookupErase(const KeyType& key) override {
+    const uint32_t hash = HashKeyType(key);
+    return shard_[Shard(hash)].LookupErase(key, hash);
+  }
   void Release(Handle* handle) override {
     LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);
 //      printf("release handle %p\n", handle);

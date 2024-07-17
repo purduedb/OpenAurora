@@ -328,7 +328,18 @@ void AsyncAccessPageOnMemoryPool(KeyType PageID){
 	};
 	auto a = new KeyType;
 	*a = PageID;
-	mempool::MemPoolClient::Get_Instance()->thrd_pool->Schedule(std::move(handler), (void*)a);
+    handler((void*)a); // todo (te): asyncly do it with multiprocessing
+}
+void AsyncRemovePageOnMemoryPool(KeyType PageID){
+	std::function<void(void *args)> handler = [](void *args){
+		auto PageID = (KeyType*)args;
+		while(mempool::MemPoolClient::Get_Instance()->RemovePageOnMemoryPool(*PageID))
+            mempool::MemPoolClient::Clear_Instance(false);
+		delete (KeyType*)args;
+	};
+	auto a = new KeyType;
+	*a = PageID;
+    handler((void*)a); // todo (te): asyncly do it with multiprocessing
 }
 
 void mempool::MemPoolClient::GetNewestPageAddressTable(){
