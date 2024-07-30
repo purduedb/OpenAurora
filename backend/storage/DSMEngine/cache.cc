@@ -90,6 +90,7 @@ void LRUCache::Unref(LRUHandle *e, SpinLock *spin_l) {
           spin_l->Unlock();
       }
 #endif
+    LRU_Remove(e);
     assert(!e->in_cache);
     if(e->deleter != nullptr)
       (*e->deleter)(e);
@@ -314,7 +315,6 @@ bool LRUCache::FinishErase(LRUHandle *e, SpinLock *spin_l) {
 //      }
 //#endif
     assert(e->in_cache);
-    LRU_Remove(e);
     e->in_cache = false;
     usage_ -= e->charge;
   // decrease the reference of cache, making it not pinned by cache, but it
