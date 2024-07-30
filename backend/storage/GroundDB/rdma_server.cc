@@ -319,7 +319,8 @@ void MemPoolManager::access_page_handler(void* args){
 
 
     auto e = lru->Lookup(req->page_id);
-    lru->Release(e);
+    if (e != nullptr)
+        lru->Release(e);
 
     delete Args;
 }
