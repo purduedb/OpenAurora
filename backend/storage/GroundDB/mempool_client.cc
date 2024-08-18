@@ -23,7 +23,8 @@ public:
 
     DSMEngine::RDMA_Manager* rdma_mg;
     PageAddressTable pat;
-    DSMEngine::ThreadPool* thrd_pool;
+    // todo (te): asyncly do it with multiprocessing
+    // DSMEngine::ThreadPool* thrd_pool;
 };
 
 MemPoolClient::MemPoolClient(){
@@ -39,8 +40,9 @@ MemPoolClient::MemPoolClient(){
     rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
     rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
 
-	thrd_pool = new DSMEngine::ThreadPool();
-    thrd_pool->SetBackgroundThreads(5);
+    // todo (te): asyncly do it with multiprocessing
+	// thrd_pool = new DSMEngine::ThreadPool();
+    // thrd_pool->SetBackgroundThreads(5);
 
 	if(*is_first_mpc){
 		*is_first_mpc = false;
