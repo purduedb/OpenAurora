@@ -512,6 +512,17 @@ ResetDecoder(XLogReaderState *state)
 	}
 	state->max_block_id = -1;
 }
+bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_seq_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define COPY_HEADER_FIELD(_dst, _size)								\
