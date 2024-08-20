@@ -172,7 +172,7 @@ void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr
 			auto item_head = (ITEMHEAD_VM*)result;
 			for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
 				if(item_head->lsn[i] == InvalidXLogRecPtr)
-					return;
+					break;
 				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
 					lsn_list.push_back(item_head->lsn[i]);
 			result = item_head->next_seg;
@@ -182,7 +182,7 @@ void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr
 			auto item_head = (ITEMSEG_VM*)result;
 			for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
 				if(item_head->lsn[i] == InvalidXLogRecPtr)
-					return;
+					break;
 				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
 					lsn_list.push_back(item_head->lsn[i]);
 			result = item_head->next_seg;
@@ -654,13 +654,13 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 				blk->rnode = *rnode;
 			}
 			COPY_HEADER_FIELD(&blk->blkno, sizeof(BlockNumber));
-			ParseXLogBlocksLsn_vm(state, block_id, lsn);
+			// ParseXLogBlocksLsn_vm(state, block_id, lsn); // todo (te): remove
 		}
 		else
 			Assert(false);
 	}
 	Assert(remaining == datatotal);
-	return;
+	// return; // todo (te): remove
 
 	for (block_id = 0; block_id <= state->max_block_id; block_id++)
 	{
@@ -681,13 +681,13 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 			if (!blk->data || blk->data_len > blk->data_bufsz)
 			{
 				if (blk->data)
-					pfree(blk->data);
+					delete blk->data;
 				blk->data_bufsz = MAXALIGN(Max(blk->data_len, BLCKSZ));
-				blk->data = (char*)palloc(blk->data_bufsz);
+				blk->data = new char[blk->data_bufsz]();
 			}
 			COPY_HEADER_FIELD(blk->data, blk->data_len);
 		}
-		ParseXLogBlocksLsn_vm(state, block_id, lsn);
+		// ParseXLogBlocksLsn_vm(state, block_id, lsn);
 	}
 
 	if (state->main_data_len > 0)
@@ -695,53 +695,92 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 		if (!state->main_data || state->main_data_len > state->main_data_bufsz)
 		{
 			if (state->main_data)
-				pfree(state->main_data);
+				delete state->main_data;
 			state->main_data_bufsz = MAXALIGN(Max(state->main_data_len,
 												  BLCKSZ / 2));
-			state->main_data = (char*)palloc(state->main_data_bufsz);
+			state->main_data = new char[state->main_data_bufsz]();
 		}
 		COPY_HEADER_FIELD(state->main_data, state->main_data_len);
 	}
 
-
-	// bool parsed = false;
-	// switch (record->xl_rmid) {
-	// 	case RM_XLOG_ID:
-	// 		parsed = vm_xlog_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_HEAP2_ID:
-	// 		parsed = vm_heap2_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_HEAP_ID:
-	// 		parsed = vm_heap_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_BTREE_ID:
-	// 		parsed = vm_btree_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_HASH_ID:
-	// 		parsed = vm_hash_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_GIN_ID:
-	// 		parsed = vm_gin_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_GIST_ID:
-	// 		parsed = vm_gist_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_SEQ_ID:
-	// 		parsed = vm_seq_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_SPGIST_ID:
-	// 		parsed = vm_spg_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_BRIN_ID:
-	// 		parsed = vm_brin_idx_save(state, lsn);
-	// 		break;
-	// 	case RM_GENERIC_ID:
-	// 		parsed = vm_generic_idx_save(state, lsn);
-	// 		break;
-	// 	default:
-	// 		break;
-	// }
+    polar_xlog_decode_data(state);
+    // switch (record->xl_rmid) {
+    //     case RM_XLOG_ID:
+    //     case RM_SMGR_ID:
+    //     case RM_HEAP2_ID:
+    //     case RM_HEAP_ID:
+    //     case RM_BTREE_ID:
+    //     case RM_HASH_ID:
+    //     case RM_GIN_ID:
+    //     case RM_GIST_ID:
+    //     case RM_SEQ_ID:
+    //     case RM_SPGIST_ID:
+    //     case RM_BRIN_ID:
+    //     case RM_GENERIC_ID:
+    //         if(state->max_block_id >= 0) {
+    //             for(int i = 0; i <= state->max_block_id; i++) {
+    //                 if(!state->blocks[i].in_use)
+    //                     continue;
+    //                 RelKey relKey;
+    //                 TransRelNode2RelKey(state->blocks[i].rnode, &relKey, state->blocks[i].forknum);
+    //                 uint64_t foundLsn;
+    //                 int foundPageNum;
+    //                 uint32_t result = -1;
+    //                 bool found = GetRelSizeCache(relKey, &result);
+    //                 if(found && result<state->blocks[i].blkno+1) {
+    //                     InsertRelSizeCache(relKey, state->blocks[i].blkno+1);
+    //                 } else if(!found) {
+    //                     int baseRelSize = SyncGetRelSize(state->blocks[i].rnode, state->blocks[i].forknum, state->ReadRecPtr);
+    //                     if(baseRelSize > state->blocks[i].blkno+1) {
+    //                         InsertRelSizeCache(relKey, baseRelSize);
+    //                     } else {
+    //                         InsertRelSizeCache(relKey, state->blocks[i].blkno+1);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         break;
+    //     default:
+    //         break;
+    // }
+	bool parsed = false;
+	switch (record.xl_rmid) {
+		case RM_XLOG_ID:
+			parsed = vm_xlog_idx_save(state, lsn);
+			break;
+		case RM_HEAP2_ID:
+			parsed = vm_heap2_idx_save(state, lsn);
+			break;
+		case RM_HEAP_ID:
+			parsed = vm_heap_idx_save(state, lsn);
+			break;
+		case RM_BTREE_ID:
+			parsed = vm_btree_idx_save(state, lsn);
+			break;
+		case RM_HASH_ID:
+			parsed = vm_hash_idx_save(state, lsn);
+			break;
+		case RM_GIN_ID:
+			parsed = vm_gin_idx_save(state, lsn);
+			break;
+		case RM_GIST_ID:
+			parsed = vm_gist_idx_save(state, lsn);
+			break;
+		case RM_SEQ_ID:
+			parsed = vm_seq_idx_save(state, lsn);
+			break;
+		case RM_SPGIST_ID:
+			parsed = vm_spg_idx_save(state, lsn);
+			break;
+		case RM_BRIN_ID:
+			parsed = vm_brin_idx_save(state, lsn);
+			break;
+		case RM_GENERIC_ID:
+			parsed = vm_generic_idx_save(state, lsn);
+			break;
+		default:
+			break;
+	}
 }
 bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {

@@ -79,9 +79,14 @@ void MemPoolClientShmemInit(){
 		ShmemInitHash("MemPool Client PageID-to-index map",
 						MAX_TOTAL_PAGE_ARRAY_SIZE, MAX_TOTAL_PAGE_ARRAY_SIZE,
 						&info, HASH_ELEM | HASH_BLOBS | HASH_PARTITION | HASH_FUNCTION | HASH_COMPARE);
+    HASHCTL_VM info_vm;
+    MemSet(&info_vm, 0, sizeof(info_vm));
+	info_vm.hash = info.hash;
+	info_vm.match = info.match;
 	version_map =
 		ShmemInitVersionMap("MemPool Client VersionMap",
-						1 << 18, 1 << 20);
+						1 << 18, 1 << 20,
+						&info_vm, HASH_ELEM | HASH_BLOBS | HASH_FUNCTION | HASH_COMPARE);
 
 	if (found_any){
 		/* should find all of these, or none of them */
