@@ -892,8 +892,8 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 				elog(ERROR, "cannot insert into frozen hashtable \"%s\"",
 					 hashp->tabname);
 
-			currBucket = get_hash_entry(hashp, freelist_idx);
-			if (currBucket == NULL)
+			currSeg = get_hash_entry(hashp, freelist_idx);
+			if (currSeg == NULL)
 			{
 				/* out of memory */
 				if (action == HASH_ENTER_NULL)
@@ -910,23 +910,23 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			}
 
 			/* link into hashbucket chain */
-			*prevBucketPtr = currBucket;
-			currBucket->link = NULL;
+			*prevSegPtr = currSeg;
+			currSeg->link = NULL;
 
 			/* copy key into record */
-			currBucket->hashvalue = hashvalue;
+			currSeg->hashvalue = hashvalue;
 			if(*head){
-				hashp->keycopy(&((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->PageID, keyPtr, keysize);
-				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_item = NULL;
-				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_seg = NULL;
-				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->tail_seg = currBucket;
+				hashp->keycopy(&((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->PageID, keyPtr, keysize);
+				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_item = NULL;
+				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_seg = NULL;
+				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->tail_seg = currSeg;
 				for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
-					((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->lsn[i] = InvalidXLogRecPtr;
+					((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
 			}
 			else{
-				((ITEMSEG_VM*)ELEMENTKEY(currBucket))->next_seg = NULL;
+				((ITEMSEG_VM*)ELEMENTKEY(currSeg))->next_seg = NULL;
 				for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
-					((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->lsn[i] = InvalidXLogRecPtr;
+					((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
 			}
 
 			/*
@@ -936,7 +936,7 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			 * caller's data structure.
 			 */
 
-			return (void *) ELEMENTKEY(currBucket);
+			return (void *) ELEMENTKEY(currSeg);
 	}
 
 	elog(ERROR, "unrecognized hash action code: %d", (int) action);

@@ -376,9 +376,10 @@ ShmemInitHash(const char *name,		/* table string name for shmem index */
 HTAB_VM *
 ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
 			  long hashtable_cnt,
-			  long segment_cnt)
+			  long segment_cnt,
+			  HASHCTL_VM *infoP,	/* info about key and bucket size */
+			  int hash_flags)	/* info about infoP */
 {
-	HASHCTL_VM infoP;
 	bool		found;
 	void	   *location;
 
@@ -389,16 +390,16 @@ ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
 	 *
 	 * The shared memory allocator must be specified too.
 	 */
-	infoP.alloc = ShmemAllocNoError;
-    infoP.keysize = sizeof(KeyType);
-    infoP.entrysize = sizeof(SEGMENT_ITEM_VM);
-	infoP.hashtable_cnt = hashtable_cnt;
-	infoP.segment_cnt = segment_cnt;
-	int hash_flags = HASH_ELEM | HASH_BLOBS | HASH_SHARED_MEM | HASH_ALLOC;
+	infoP->alloc = ShmemAllocNoError;
+    infoP->keysize = sizeof(KeyType);
+    infoP->entrysize = sizeof(SEGMENT_ITEM_VM);
+	infoP->hashtable_cnt = hashtable_cnt;
+	infoP->segment_cnt = segment_cnt;
+	hash_flags |= HASH_SHARED_MEM | HASH_ALLOC;
 
 	/* look it up in the shmem index */
 	location = ShmemInitStruct(name,
-							   hash_get_shared_size_vm(&infoP, hash_flags),
+							   hash_get_shared_size_vm(infoP, hash_flags),
 							   &found);
 
 	/*
@@ -409,9 +410,9 @@ ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
 		hash_flags |= HASH_ATTACH;
 
 	/* Pass location of hashtable header to hash_create */
-	infoP.hctl = (HASHHDR_VM *) location;
+	infoP->hctl = (HASHHDR_VM *) location;
 
-	return hash_create_vm(name, infoP.segment_cnt, &infoP, hash_flags);
+	return hash_create_vm(name, infoP->segment_cnt, infoP, hash_flags);
 }
 
 /*
