@@ -927,6 +927,7 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 				((ITEMSEG_VM*)ELEMENTKEY(currSeg))->next_seg = NULL;
 				for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
 					((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
+				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->tail_seg = currSeg;
 			}
 
 			/*
@@ -969,6 +970,11 @@ hash_update_hash_key_vm(HTAB_VM *hashp,
 					 const void *newKeyPtr)
 {
 	Assert(false);
+}
+
+void* hash_next_segment_vm(void* item, bool head){
+	HASHELEMENT_VM* next_seg = head ? ((ITEMHEAD_VM*)item)->next_seg : ((ITEMSEG_VM*)item)->next_seg;
+	return next_seg != NULL ? (char *)next_seg + MAXALIGN(sizeof(HASHELEMENT_VM)) : NULL;
 }
 
 /*
