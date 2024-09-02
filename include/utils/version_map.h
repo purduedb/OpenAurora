@@ -92,6 +92,8 @@ extern Size hash_estimate_size_vm(long hashtable_cnt, long segment_cnt);
 
 extern Size hash_get_shared_size_vm(HASHCTL_VM *info, int flags);
 
+extern void* hash_next_segment_vm(void* item, bool head);
+
 #ifdef __cplusplus
 }
 #endif

@@ -175,17 +175,17 @@ void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr
 					break;
 				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
 					lsn_list.push_back(item_head->lsn[i]);
-			result = item_head->next_seg;
+			result = hash_next_segment_vm(item_head, true);
 			head = false;
 		}
 		else{
-			auto item_head = (ITEMSEG_VM*)result;
+			auto item_seg = (ITEMSEG_VM*)result;
 			for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
-				if(item_head->lsn[i] == InvalidXLogRecPtr)
+				if(item_seg->lsn[i] == InvalidXLogRecPtr)
 					break;
-				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
-					lsn_list.push_back(item_head->lsn[i]);
-			result = item_head->next_seg;
+				else if(current_lsn < item_seg->lsn[i] && item_seg->lsn[i] <= target_lsn)
+					lsn_list.push_back(item_seg->lsn[i]);
+			result = hash_next_segment_vm(item_seg, false);
 		}
 	}
 	sort(lsn_list.begin(), lsn_list.end());
@@ -512,6 +512,17 @@ ResetDecoder(XLogReaderState *state)
 	}
 	state->max_block_id = -1;
 }
+bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_seq_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define COPY_HEADER_FIELD(_dst, _size)								\

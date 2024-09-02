@@ -55,25 +55,27 @@ void PageAddressTable::at(KeyType pid, RDMAReadPageInfo& info){
 void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
 	auto& page_id = mpc_idx_to_pid[mpc_pa_size[pa_idx] + pa_ofs];
-	if(!KeyTypeEqualFunction()(page_id, nullKeyType)){
-    	auto *result = (PATLookupEntry*)
-			hash_search_with_hash_value(mpc_pid_to_idx,
-										&page_id,
-										get_hash_value(mpc_pid_to_idx, &page_id),
-										HASH_REMOVE,
-										NULL);
-		Assert(result != NULL);
-	}
-	page_id = pid;
-	if(!KeyTypeEqualFunction()(pid, nullKeyType)){
-		auto result = (PATLookupEntry*)
-			hash_search_with_hash_value(mpc_pid_to_idx,
-										&pid,
-										get_hash_value(mpc_pid_to_idx, &pid),
-										HASH_ENTER,
-										NULL);
-		result->pa_idx = pa_idx;
-		result->pa_ofs = pa_ofs;
+	if(KeyTypeEqualFunction()(page_id, pid)){
+		if(!KeyTypeEqualFunction()(page_id, nullKeyType)){
+			auto *result = (PATLookupEntry*)
+				hash_search_with_hash_value(mpc_pid_to_idx,
+											&page_id,
+											get_hash_value(mpc_pid_to_idx, &page_id),
+											HASH_REMOVE,
+											NULL);
+			Assert(result != NULL);
+		}
+		page_id = pid;
+		if(!KeyTypeEqualFunction()(pid, nullKeyType)){
+			auto result = (PATLookupEntry*)
+				hash_search_with_hash_value(mpc_pid_to_idx,
+											&pid,
+											get_hash_value(mpc_pid_to_idx, &pid),
+											HASH_ENTER,
+											NULL);
+			result->pa_idx = pa_idx;
+			result->pa_ofs = pa_ofs;
+		}
 	}
 	LWLockRelease(mempool_client_pat_lock);
 }
