@@ -610,7 +610,7 @@ void ParseXLogBlocksLsn_vm(XLogReaderState *record, int recordBlockId, XLogRecPt
 	};
     InsertIntoVersionMap(page_id, lsn);
     mempool::MemPoolClient::Get_Instance()->FlushUpdateVersionMapInfoToMemoryPool(page_id, lsn);
-
+}
 void
 ResetDecoder(XLogReaderState *state)
 {

@@ -38,7 +38,6 @@
 #include <vector>
 #include <list>
 #include <cstdint>
-#include "storage/GroundDB/rdma_server.hh"
 #define _mm_clflush(addr)\
 	asm volatile("clflush %0" : "+m" (*(volatile char *)(addr)))
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -57,15 +56,15 @@ namespace mempool{
 
 class MemPoolManager;
 
-struct XLogInfo{
+typedef struct{
     uint64_t RpcXLogFlushedLsn;
     XLogRecPtr ProcLastRecPtr, XactLastRecEnd, XactLastCommitEnd;
     XLogRecPtr LogwrtResult_Write, LogwrtResult_Flush;
-};
-struct UpdateVersionMapInfo{
+} XLogInfo;
+typedef struct{
     KeyType page_id;
     XLogRecPtr lsn;
-};
+} UpdateVersionMapInfo;
 
 struct flush_page_request{
 	uint8_t page_data[BLCKSZ];
