@@ -945,7 +945,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 						if(FetchPageFromMemoryPool((char*)bufBlock, page_id, &rdma_read_info)
 						&& PageFromMemPoolIsVerified((Page)bufBlock, blockNum)){
 							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
-							if(LsnIsSatisfied(cur_lsn)){
+							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
 								read_from_mempool = true;
 								*hit = 2;
 								expected_pin_count_when_xlog_replay = 2;

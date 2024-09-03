@@ -13806,6 +13806,19 @@ uint64_t GetLogWrtResultLsn(void)
     else
         return XLogCtl->LogwrtResult.Flush;
 }
+extern void GetLogWrtResult(XLogRecPtr* Write, XLogRecPtr* Flush){
+	*Write = XLogCtl->LogwrtResult.Write;
+	*Flush = XLogCtl->LogwrtResult.Flush;
+}
+extern void UpdateLogWrtResult(XLogRecPtr Write, XLogRecPtr Flush){
+	SpinLockAcquire(&XLogCtl->info_lck);
+	XLogCtl->LogwrtResult = LogwrtResult = (XLogwrtResult){Write, Flush};
+	if (XLogCtl->LogwrtRqst.Write < LogwrtResult.Write)
+		XLogCtl->LogwrtRqst.Write = LogwrtResult.Write;
+	if (XLogCtl->LogwrtRqst.Flush < LogwrtResult.Flush)
+		XLogCtl->LogwrtRqst.Flush = LogwrtResult.Flush;
+	SpinLockRelease(&XLogCtl->info_lck);
+}
 
 void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
 #ifdef ENABLE_DEBUG_INFO

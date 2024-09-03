@@ -32,6 +32,15 @@ public:
     size_t pr_size;
     bool exit_all_threads_ = false;
     std::vector<std::thread> main_comm_threads;
+
+    XLogInfo xlog_info;
+    struct UpdateVersionMapInfoRing{
+        UpdateVersionMapInfo* ring;
+        size_t size;
+        size_t ptr;
+        LWLock mtx;
+    };
+    UpdateVersionMapInfoRing vminfo_ring;
     
     void init_rdma_manager(int pr_s, DSMEngine::config_t &config);
     void Server_to_Client_Communication();
@@ -40,6 +49,7 @@ public:
 
     void init_thread_pool(size_t thrd_num);
     void allocate_page_array(size_t pa_size);
+    void init_vminfo_ring(size_t ring_size);
 
     void async_flush_page_handler(void* args);
     void sync_flush_page_handler(void* args);
@@ -47,6 +57,10 @@ public:
     void async_remove_page_handler(void* args);
     void sync_pat_handler(void* args);
     void mr_info_handler(void* args);
+    void flush_xlog_info_handler(void* args);
+    void fetch_xlog_info_handler(void* args);
+    void flush_update_vm_info_handler(void* args);
+    void fetch_update_vm_info_handler(void* args);
 };
 
 
