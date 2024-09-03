@@ -141,15 +141,15 @@ size_t get_MemPoolClient_node_id(){
 
 void AsyncGetNewestPageAddressTable(){
 	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
-	*last_sync_pat = std::chrono::steady_clock::now() - std::chrono::duration<int, std::milli>(SyncPAT_Interval_ms);
+	*last_sync_pat = std::chrono::steady_clock::now() - std::chrono::duration<int, std::micro>(SyncPAT_Interval_us);
 	LWLockRelease(mempool_client_sync_pat_lock);
 }
 bool whetherSyncPAT(){
 	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 	std::chrono::steady_clock::duration elapsed = now - *last_sync_pat;
-	long long elapsed_seconds = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-	if(elapsed_seconds >= SyncPAT_Interval_ms * 0.95){
+	long long elapsed_seconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+	if(elapsed_seconds >= SyncPAT_Interval_us * 0.95){
 		*last_sync_pat = now;
 		LWLockRelease(mempool_client_sync_pat_lock);
 		return true;

@@ -34,7 +34,7 @@ extern "C" {
 // #define USE_MEMPOOL_STAT
 // #define MEMPOOL_CACHE_POLICY_COVERING
 // #define MEMPOOL_CACHE_POLICY_DISJOINT
-#define SyncPAT_Interval_us 3000
+#define SyncPAT_Interval_us 1000000
 #define SyncXLogInfo_Interval_us 100
 #define SyncUpdateVersionMapInfo_Interval_us 50
 

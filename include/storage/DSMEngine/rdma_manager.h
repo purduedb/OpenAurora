@@ -38,6 +38,7 @@
 #include <vector>
 #include <list>
 #include <cstdint>
+#include "storage/GroundDB/rdma_server.hh"
 #define _mm_clflush(addr)\
 	asm volatile("clflush %0" : "+m" (*(volatile char *)(addr)))
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -53,66 +54,7 @@
 #define NUM_QP_ACCROSS_COMPUTE 1
 
 namespace mempool{
-
 class MemPoolManager;
-
-typedef struct{
-    uint64_t RpcXLogFlushedLsn;
-    XLogRecPtr ProcLastRecPtr, XactLastRecEnd, XactLastCommitEnd;
-    XLogRecPtr LogwrtResult_Write, LogwrtResult_Flush;
-} XLogInfo;
-typedef struct{
-    KeyType page_id;
-    XLogRecPtr lsn;
-} UpdateVersionMapInfo;
-
-struct flush_page_request{
-	uint8_t page_data[BLCKSZ];
-	KeyType page_id;
-};
-
-struct access_page_request{
-	KeyType page_id;
-};
-
-struct remove_page_request{
-	KeyType page_id;
-};
-
-struct sync_pat_request{
-	size_t pa_idx;
-	size_t pa_ofs;
-};
-// Now only support fixed size
-#define SYNC_PAT_SIZE 256
-struct sync_pat_response{
-	KeyType page_id_array[SYNC_PAT_SIZE];
-};
-
-struct mr_info_request{
-	size_t pa_idx;
-};
-struct mr_info_response{
-	ibv_mr pa_mr;
-	ibv_mr pida_mr;
-};
-
-struct flush_xlog_info_request{
-    XLogInfo xlog_info;
-};
-struct fetch_xlog_info_response{
-    XLogInfo xlog_info;
-};
-
-struct flush_update_vm_info_request{
-    UpdateVersionMapInfo info;
-};
-struct fetch_update_vm_info_request{
-    size_t ptr;
-};
-struct fetch_update_vm_info_response{
-    UpdateVersionMapInfo info;
-};
 }
 
 namespace DSMEngine {

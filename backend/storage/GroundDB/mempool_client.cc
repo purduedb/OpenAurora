@@ -1640,11 +1640,11 @@ void MemPoolSyncMain(){
 	auto client = mempool::MemPoolClient::Get_Instance();
     std::vector<std::thread*> threads;
     threads.emplace_back(new std::thread([client](){
-	while(true){
-		if(whetherSyncPAT())
-			client->GetNewestPageAddressTable();
+        while(true){
+            if(whetherSyncPAT())
+                client->GetNewestPageAddressTable();
             usleep(SyncPAT_Interval_us / 100);
-	}
+        }
     }));
     if(IsRpcClient == 2){
         threads.emplace_back(new std::thread([client](){
