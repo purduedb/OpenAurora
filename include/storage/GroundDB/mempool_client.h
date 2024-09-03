@@ -34,7 +34,9 @@ extern "C" {
 // #define USE_MEMPOOL_STAT
 // #define MEMPOOL_CACHE_POLICY_COVERING
 // #define MEMPOOL_CACHE_POLICY_DISJOINT
-#define SyncPAT_Interval_ms 1000
+#define SyncPAT_Interval_us 3000
+#define SyncXLogInfo_Interval_us 100
+#define SyncUpdateVersionMapInfo_Interval_us 50
 
 struct RDMAReadPageInfo{
 	struct ibv_mr remote_pa_mr, remote_pida_mr;
@@ -53,7 +55,7 @@ extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info
 
 extern bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 
-extern bool LsnIsSatisfied(XLogRecPtr PageLSN);
+extern bool LsnIsSatisfied(XLogRecPtr PageLSN, XLogRecPtr TargetLSN);
 
 extern bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr current_lsn, XLogRecPtr target_lsn);
 

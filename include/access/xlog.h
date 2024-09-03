@@ -363,6 +363,8 @@ extern int	XLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 extern void ReadControlFileTimeLine(void);
 
 extern uint64_t GetLogWrtResultLsn(void);
+extern void GetLogWrtResult(XLogRecPtr* Write, XLogRecPtr* Flush);
+extern void UpdateLogWrtResult(XLogRecPtr Write, XLogRecPtr Flush);
 extern void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId);
 
 #ifdef __cplusplus

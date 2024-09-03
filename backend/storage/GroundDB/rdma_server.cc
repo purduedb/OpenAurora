@@ -202,6 +202,18 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::mr_info_) {
             std::function<void(void *args)> handler = [this](void *args){this->mr_info_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::flush_xlog_info_) {
+            std::function<void(void *args)> handler = [this](void *args){this->flush_xlog_info_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::fetch_xlog_info_) {
+            std::function<void(void *args)> handler = [this](void *args){this->fetch_xlog_info_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::flush_update_vm_info_) {
+            std::function<void(void *args)> handler = [this](void *args){this->flush_update_vm_info_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::fetch_update_vm_info_) {
+            std::function<void(void *args)> handler = [this](void *args){this->fetch_update_vm_info_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
         } else if (receive_msg_buf.command == DSMEngine::disconnect_) {
             break;
         } else {
@@ -262,6 +274,15 @@ void MemPoolManager::allocate_page_array(size_t pa_size){
         *(KeyType*)(pagemeta->page_id_addr) = nullKeyType;
     }
     // todo (te): multiple page_array
+}
+
+void MemPoolManager::init_vminfo_ring(size_t ring_size){
+    vminfo_ring.ring = new UpdateVersionMapInfo[ring_size]();
+    for(size_t i = 0; i < ring_size; i++)
+        vminfo_ring.ring[i].page_id = nullKeyType;
+    vminfo_ring.size = ring_size;
+    vminfo_ring.ptr = 0;
+    LWLockInitialize(&vminfo_ring.mtx, LWTRANCHE_MEMPOOL_SERVER);
 }
 
 void MemPoolManager::async_flush_page_handler(void* args){
@@ -382,6 +403,99 @@ void MemPoolManager::mr_info_handler(void* args){
 
     memcpy(&res->pa_mr, page_arrays[req->pa_idx].pa_mr, sizeof(ibv_mr));
     memcpy(&res->pida_mr, page_arrays[req->pa_idx].pida_mr, sizeof(ibv_mr));
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::flush_xlog_info_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.flush_xlog_info;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+
+    xlog_info = req->xlog_info;
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::fetch_xlog_info_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+    auto res = &send_pointer->content.fetch_xlog_info;
+
+    res->xlog_info = xlog_info;
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::flush_update_vm_info_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.flush_update_vm_info;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+
+    LWLockAcquire(&vminfo_ring.mtx, LW_EXCLUSIVE);
+    auto ptr = (vminfo_ring.ptr++) % vminfo_ring.size;
+    LWLockRelease(&vminfo_ring.mtx);
+    vminfo_ring.ring[ptr] = req->info;
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::fetch_update_vm_info_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.fetch_update_vm_info;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+    auto res = &send_pointer->content.fetch_update_vm_info;
+
+    if(req->ptr < vminfo_ring.ptr)
+        res->info = vminfo_ring.ring[req->ptr % vminfo_ring.size];
+    else
+        res->info.page_id = nullKeyType;
+    if(vminfo_ring.ptr > req->ptr + vminfo_ring.size)
+        res->info.page_id = nullKeyType;
 
     send_pointer->received = true;
     rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);

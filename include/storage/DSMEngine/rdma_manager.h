@@ -54,7 +54,66 @@
 #define NUM_QP_ACCROSS_COMPUTE 1
 
 namespace mempool{
+
 class MemPoolManager;
+
+struct XLogInfo{
+    uint64_t RpcXLogFlushedLsn;
+    XLogRecPtr ProcLastRecPtr, XactLastRecEnd, XactLastCommitEnd;
+    XLogRecPtr LogwrtResult_Write, LogwrtResult_Flush;
+};
+struct UpdateVersionMapInfo{
+    KeyType page_id;
+    XLogRecPtr lsn;
+};
+
+struct flush_page_request{
+	uint8_t page_data[BLCKSZ];
+	KeyType page_id;
+};
+
+struct access_page_request{
+	KeyType page_id;
+};
+
+struct remove_page_request{
+	KeyType page_id;
+};
+
+struct sync_pat_request{
+	size_t pa_idx;
+	size_t pa_ofs;
+};
+// Now only support fixed size
+#define SYNC_PAT_SIZE 256
+struct sync_pat_response{
+	KeyType page_id_array[SYNC_PAT_SIZE];
+};
+
+struct mr_info_request{
+	size_t pa_idx;
+};
+struct mr_info_response{
+	ibv_mr pa_mr;
+	ibv_mr pida_mr;
+};
+
+struct flush_xlog_info_request{
+    XLogInfo xlog_info;
+};
+struct fetch_xlog_info_response{
+    XLogInfo xlog_info;
+};
+
+struct flush_update_vm_info_request{
+    UpdateVersionMapInfo info;
+};
+struct fetch_update_vm_info_request{
+    size_t ptr;
+};
+struct fetch_update_vm_info_response{
+    UpdateVersionMapInfo info;
+};
 }
 
 namespace DSMEngine {
@@ -126,6 +185,10 @@ enum RDMA_Command_Type {
     sync_pat_,
     mr_info_,
     disconnect_,
+    flush_xlog_info_,
+    fetch_xlog_info_,
+    flush_update_vm_info_,
+    fetch_update_vm_info_,
 /*******/
     create_qp_,
     create_mr_,
@@ -165,29 +228,19 @@ union RDMA_Request_Content {
     mempool::remove_page_request remove_page;
     mempool::sync_pat_request sync_pat;
     mempool::mr_info_request mr_info;
+    mempool::flush_xlog_info_request flush_xlog_info;
+    mempool::flush_update_vm_info_request flush_update_vm_info;
+    mempool::fetch_update_vm_info_request fetch_update_vm_info;
 /******/
-    size_t mem_size;
     Registered_qp_config qp_config;
-    Registered_qp_config_xcompute qp_config_xcompute;
-    fs_sync_command fs_sync_cmd;
-    install_versionedit ive;
-    sst_gc gc;
-    sst_compaction sstCompact;
-    sst_unpin psu;
-    size_t unpinned_version_id;
-    New_Root root_broadcast;
-    uint32_t target_id_pair;
-    RUnlock_message R_message;
-    WUnlock_message W_message;
 };
 union RDMA_Reply_Content {
     mempool::sync_pat_response sync_pat;
     mempool::mr_info_response mr_info;
+    mempool::fetch_xlog_info_response fetch_xlog_info;
+    mempool::fetch_update_vm_info_response fetch_update_vm_info;
 /********/
-    ibv_mr mr;
     Registered_qp_config qp_config;
-    Registered_qp_config_xcompute qp_config_xcompute;
-    install_versionedit ive;
 };
 struct RDMA_Request {
     RDMA_Command_Type command;
