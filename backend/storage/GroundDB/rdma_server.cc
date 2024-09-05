@@ -282,7 +282,6 @@ void MemPoolManager::init_vminfo_ring(size_t ring_size){
         vminfo_ring.ring[i].page_id = nullKeyType;
     vminfo_ring.size = ring_size;
     vminfo_ring.ptr = 0;
-    LWLockInitialize(&vminfo_ring.mtx, LWTRANCHE_MEMPOOL_SERVER);
 }
 
 void MemPoolManager::async_flush_page_handler(void* args){
@@ -465,10 +464,11 @@ void MemPoolManager::flush_update_vm_info_handler(void* args){
     rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
     auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
 
-    LWLockAcquire(&vminfo_ring.mtx, LW_EXCLUSIVE);
-    auto ptr = (vminfo_ring.ptr++) % vminfo_ring.size;
-    LWLockRelease(&vminfo_ring.mtx);
-    vminfo_ring.ring[ptr] = req->info;
+    {
+        std::unique_lock<std::mutex> lk(vminfo_ring.mtx);
+        auto ptr = (vminfo_ring.ptr++) % vminfo_ring.size;
+        vminfo_ring.ring[ptr] = req->info;
+    }
 
     send_pointer->received = true;
     rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);

@@ -15,6 +15,6 @@ void MemPoolMain(int argc, char *argv[], const char *dbname, const char *usernam
     mempool->init_rdma_manager(88, config);
     mempool->init_thread_pool(10);
     mempool->allocate_page_array(1 << 20);
-    mempool->init_vminfo_ring(1<<15);
+    mempool->init_vminfo_ring(1 << 15);
     mempool->Server_to_Client_Communication();
 }

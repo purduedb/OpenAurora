@@ -38,7 +38,7 @@ public:
         UpdateVersionMapInfo* ring;
         size_t size;
         size_t ptr;
-        LWLock mtx;
+        std::mutex mtx;
     };
     UpdateVersionMapInfoRing vminfo_ring;
     
