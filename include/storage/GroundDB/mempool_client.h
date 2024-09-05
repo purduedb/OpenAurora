@@ -35,8 +35,9 @@ extern "C" {
 // #define MEMPOOL_CACHE_POLICY_COVERING
 // #define MEMPOOL_CACHE_POLICY_DISJOINT
 #define SyncPAT_Interval_us 1000000
-#define SyncXLogInfo_Interval_us 100
-#define SyncUpdateVersionMapInfo_Interval_us 50
+#define CheckSyncPAT_Interval_us (SyncPAT_Interval_us / 100)
+#define SyncXLogInfo_Interval_us 1000
+#define SyncUpdateVersionMapInfo_Interval_us 500
 
 struct RDMAReadPageInfo{
 	struct ibv_mr remote_pa_mr, remote_pida_mr;

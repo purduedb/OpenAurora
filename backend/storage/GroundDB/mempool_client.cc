@@ -21,9 +21,9 @@ public:
 	void GetNewestPageAddressTable();
 	int AsyncFlushPageToMemoryPool(char* src, KeyType PageID);
 	int SyncFlushPageToMemoryPool(char* src, KeyType PageID);
-	int FlushXLogInfoToMemoryPool();
-	int FetchXLogInfoFromMemoryPool();
-    int FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
+	void FlushXLogInfoToMemoryPool();
+	void FetchXLogInfoFromMemoryPool();
+    void FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
     int FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx);
     static void Clear_Instance(bool disconnect);
 
@@ -456,7 +456,7 @@ void SyncFlushPageToMemoryPool(char* src, KeyType PageID){
 	while(mempool::MemPoolClient::Get_Instance()->SyncFlushPageToMemoryPool(src, PageID))
         mempool::MemPoolClient::Clear_Instance(false);
 }
-int mempool::MemPoolClient::FlushXLogInfoToMemoryPool(){
+void mempool::MemPoolClient::FlushXLogInfoToMemoryPool(){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
@@ -482,7 +482,7 @@ int mempool::MemPoolClient::FlushXLogInfoToMemoryPool(){
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
-int mempool::MemPoolClient::FetchXLogInfoFromMemoryPool(){
+void mempool::MemPoolClient::FetchXLogInfoFromMemoryPool(){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
@@ -509,7 +509,7 @@ int mempool::MemPoolClient::FetchXLogInfoFromMemoryPool(){
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
-int mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn){
+void mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
@@ -1638,37 +1638,51 @@ vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 
 void MemPoolSyncMain(){
 	auto client = mempool::MemPoolClient::Get_Instance();
-    std::vector<std::thread*> threads;
-    threads.emplace_back(new std::thread([client](){
-        while(true){
+
+    size_t interval_us[3] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us};
+    size_t min_interval_us = interval_us[0];
+    for(int i = 0; i < 3; i++)
+        min_interval_us = std::min(min_interval_us, interval_us[i]);
+	std::chrono::steady_clock::duration interval[3];
+    for(int i = 0; i < 3; i++)
+        interval[i] = std::chrono::duration<int, std::micro>(interval_us[i]);
+
+    std::chrono::steady_clock::time_point last[3];
+    for(int i = 0; i < 3; i++)
+        last[i] = std::chrono::steady_clock::now() - interval[i];
+        
+    std::chrono::steady_clock::time_point now;
+    while(true){
+        now = std::chrono::steady_clock::now();
+        if(now - last[0] >= interval[0]){
+            last[0] = now;
             if(whetherSyncPAT())
                 client->GetNewestPageAddressTable();
-            usleep(SyncPAT_Interval_us / 100);
         }
-    }));
-    if(IsRpcClient == 2){
-        threads.emplace_back(new std::thread([client](){
-            while(true){
+
+        if(IsRpcClient == 2){
+            now = std::chrono::steady_clock::now();
+            if(now - last[1] >= interval[1]){
+                last[1] = now;
                 client->FlushXLogInfoToMemoryPool();
-                usleep(SyncXLogInfo_Interval_us);
             }
-        }));
-    }
-    else if(IsRpcClient == 3){
-        threads.emplace_back(new std::thread([client](){
-            while(true){
+        }
+
+        if(IsRpcClient == 3){
+            now = std::chrono::steady_clock::now();
+            if(now - last[1] >= interval[1]){
+                last[1] = now;
                 client->FetchXLogInfoFromMemoryPool();
-                usleep(SyncXLogInfo_Interval_us);
             }
-        }));
-        threads.emplace_back(new std::thread([client](){
-            while(true){
+
+            now = std::chrono::steady_clock::now();
+            if(now - last[2] >= interval[2]){
+                last[2] = now;
                 while(client->FetchUpdateVersionMapInfoFromMemoryPool(client->update_vm_info_ptr))
                     client->update_vm_info_ptr++;
-                usleep(SyncUpdateVersionMapInfo_Interval_us);
             }
-        }));
+        }
+
+        usleep(min_interval_us);
     }
-    for(auto thd: threads)
-        thd->join();
 }
