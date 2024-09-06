@@ -4696,7 +4696,7 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			 * StandbyMode that only happens if we have been triggered, so we
 			 * shouldn't loop anymore in that case.
 			 */
-			if (!IsRpcServer && errormsg)
+			if (!IsRpcServer && IsRpcClient <= 2 && errormsg)
 				ereport(emode_for_corrupt_record(emode, EndRecPtr),
 						(errmsg_internal("%s", errormsg) /* already translated */ ));
 #ifdef ENABLE_DEBUG_INFO
@@ -4812,7 +4812,7 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			/* In standby mode, loop back to retry. Otherwise, give up. */
 			if (StandbyMode && !CheckForStandbyTrigger())
 				continue;
-            if (IsRpcServer) // Rpc Server will retry to read via RPC messages
+            if (IsRpcServer || IsRpcClient > 2) // Rpc Server will retry to read via RPC messages
                 continue;
 			else
 				return NULL;
@@ -8825,10 +8825,11 @@ CheckRecoveryConsistency(void)
 		XLogCheckInvalidPages();
 
 		reachedConsistency = true;
-		ereport(LOG,
-				(errmsg("consistent recovery state reached at %X/%X",
-						(uint32) (lastReplayedEndRecPtr >> 32),
-						(uint32) lastReplayedEndRecPtr)));
+		if(IsRpcClient <= 2)
+			ereport(LOG,
+					(errmsg("consistent recovery state reached at %X/%X",
+							(uint32) (lastReplayedEndRecPtr >> 32),
+							(uint32) lastReplayedEndRecPtr)));
 	}
 
 	/*
