@@ -700,7 +700,7 @@ bool RDMA_Manager::Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id) {
     remote_con_data->qp_num = ntohl(tmp_con_data.qp_num);
     remote_con_data->lid = ntohs(tmp_con_data.lid);
     memcpy(remote_con_data->gid, tmp_con_data.gid, 16);
-    node_id = remote_con_data->node_id;
+    node_id = tmp_con_data.node_id;
     std::cout << "local node id is " << node_id
                         << std::endl;
 

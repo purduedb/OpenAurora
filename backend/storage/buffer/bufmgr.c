@@ -962,7 +962,9 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 							AsyncGetNewestPageAddressTable();
 					}
 					if(!read_from_mempool){
-						RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+						do{
+							RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+						} while(!PageIsVerified((Page) bufBlock, blockNum));
 						toMarkDirty = true;
 					}
 #ifdef MEMPOOL_CACHE_POLICY_COVERING
