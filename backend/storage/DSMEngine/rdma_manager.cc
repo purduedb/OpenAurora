@@ -7,6 +7,7 @@
 
 namespace DSMEngine {
 uint16_t RDMA_Manager::node_id = 0;
+uint16_t allocated_compute_node_id = 0;
 
 thread_local int RDMA_Manager::thread_id = 0;
 thread_local int RDMA_Manager::qp_inc_ticket = 0;
@@ -308,6 +309,9 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     if (!cq1)
         fprintf(stderr, "failed to create CQ with %u entries\n", cq_size);
 
+    target_node_id = allocated_compute_node_id;
+    allocated_compute_node_id += 2;
+
     /* create the Queue Pair */
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_type = IBV_QPT_RC;
@@ -332,6 +336,7 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     local_con_data.qp_num = htonl(qp->qp_num);
     local_con_data.lid = htons(res->port_attr.lid);
     memcpy(local_con_data.gid, &res->my_gid, 16);
+    local_con_data.node_id = target_node_id;
     fprintf(stdout, "Local LID = 0x%x\n", res->port_attr.lid);
 
     if (sock_sync_data(socket_fd, sizeof(struct Registered_qp_config),
@@ -343,8 +348,7 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     memcpy(remote_con_data->gid, tmp_con_data.gid, 16);
     fprintf(stdout, "Remote QP number = 0x%x\n", remote_con_data->qp_num);
     fprintf(stdout, "Remote LID = 0x%x\n", remote_con_data->lid);
-    remote_con_data->node_id = tmp_con_data.node_id;
-    target_node_id = tmp_con_data.node_id;
+    remote_con_data->node_id = target_node_id;
     std::unique_lock<std::shared_mutex> l(qp_cq_map_mutex);
     res->qp_map[target_node_id] = qp;
     res->cq_map.insert({target_node_id, std::make_pair(cq1, cq2)});
@@ -658,8 +662,8 @@ int RDMA_Manager::resources_create() {
     //                     << std::endl;
     // std::cout << "maximum memory region size is" << res->device_attr.max_mr_size
     //                     << std::endl;
-    std::cout << "local node id is " << node_id
-                        << std::endl;
+    // std::cout << "local node id is " << node_id
+    //                     << std::endl;
     return rc;
 }
 
@@ -687,7 +691,6 @@ bool RDMA_Manager::Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id) {
     local_con_data.qp_num = htonl(res->qp_map[target_node_id]->qp_num);
     local_con_data.lid = htons(res->port_attr.lid);
     memcpy(local_con_data.gid, &my_gid, 16);
-    local_con_data.node_id = node_id;
     // fprintf(stdout, "Local LID = 0x%x\n", res->port_attr.lid);
     if (sock_sync_data(res->sock_map[target_node_id], sizeof(struct Registered_qp_config),
                                          (char*)&local_con_data, (char*)&tmp_con_data) < 0) {
@@ -697,6 +700,9 @@ bool RDMA_Manager::Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id) {
     remote_con_data->qp_num = ntohl(tmp_con_data.qp_num);
     remote_con_data->lid = ntohs(tmp_con_data.lid);
     memcpy(remote_con_data->gid, tmp_con_data.gid, 16);
+    node_id = remote_con_data->node_id;
+    std::cout << "local node id is " << node_id
+                        << std::endl;
 
     // fprintf(stdout, "Remote QP number = 0x%x\n", remote_con_data->qp_num);
     // fprintf(stdout, "Remote LID = 0x%x\n", remote_con_data->lid);
