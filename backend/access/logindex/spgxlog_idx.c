@@ -1154,7 +1154,7 @@ polar_spg_redo_add_node_get_bufftag_list(XLogReaderState *record, BufferTag** bu
     if (!XLogRecHasBlockRef(record, 1)) {
 //        ParseXLogBlocksLsn(record, 0);
         XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
     else
@@ -1162,16 +1162,16 @@ polar_spg_redo_add_node_get_bufftag_list(XLogReaderState *record, BufferTag** bu
 //        ParseXLogBlocksLsn(record, 1);
 //        ParseXLogBlocksLsn(record, 0);
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
         XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 
         if (XLogRecHasBlockRef(record, 2)) {
             XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
             tagCount++;
 
 //            ParseXLogBlocksLsn(record, 2);
@@ -1209,14 +1209,14 @@ polar_spg_redo_pick_split_get_bufftag_list(XLogReaderState *record, BufferTag** 
 
     if (XLogRecHasBlockRef(record, 0)) {
         XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 //        ParseXLogBlocksLsn(record, 0);
     }
 
     if (XLogRecHasBlockRef(record, 1)) {
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 1);
@@ -1224,12 +1224,12 @@ polar_spg_redo_pick_split_get_bufftag_list(XLogReaderState *record, BufferTag** 
 
 //    ParseXLogBlocksLsn(record, 2);
     XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     if (XLogRecHasBlockRef(record, 3)) {
         XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 3);
@@ -1316,13 +1316,13 @@ polar_spg_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
             tagCount++;
 
 //            ParseXLogBlocksLsn(record, 0);
             if (XLogRecHasBlockRef(record, 1)) {
                 XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-                INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+                INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
                 tagCount++;
 
 //                ParseXLogBlocksLsn(record, 1);
@@ -1335,13 +1335,13 @@ polar_spg_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
 
             XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[1], rnode, forkNumber, blockNumber);
 
             XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[2], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[2], rnode, forkNumber, blockNumber);
             *tagNum = 3;
             break;
 
@@ -1354,7 +1354,7 @@ polar_spg_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
 
             if (XLogRecHasBlockRef(record, 1)) {
                 XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-                INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+                INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
                 tagCount++;
 
 //                ParseXLogBlocksLsn(record, 1);
@@ -1362,7 +1362,7 @@ polar_spg_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
 
 //            ParseXLogBlocksLsn(record, 0);
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
             tagCount++;
 
             *tagNum = tagCount;
@@ -1378,7 +1378,7 @@ polar_spg_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
 //            ParseXLogBlocksLsn(record, 0);
             break;
