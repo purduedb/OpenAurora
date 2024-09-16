@@ -102,10 +102,8 @@ typedef struct HashMapStruct* HashMap;
 extern void HashMapInit(HashMap* hashMap, int bucketNum);
 extern void HashMapDestroy(HashMap hashMap);
 extern bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, bool noEmptyFirstSlot);
-extern bool HashMapFindLowerBoundEntry(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t* foundLsn, int* foundPageNum);
 
 extern bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t *replayedLsn, uint64_t **toReplayList, int *listLen);
-extern bool HashMapUpdateFirstEmptySlot(HashMap hashMap, KeyType key, uint64_t lsn);
 extern bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock);
 
 #ifdef __cplusplus
