@@ -37,11 +37,11 @@ public:
     bool has_failed = false;
 };
 
-static bool mempool_server_is_failed = false;
+static bool first_time_to_connect_to_mempool_server = true;
 static std::chrono::steady_clock::time_point last_time_try_connecting_to_mempool_server;
-// todo (te): allow failure at the beginning
+
 bool time_to_reconnect(){
-    return std::chrono::steady_clock::now() - last_time_try_connecting_to_mempool_server > std::chrono::duration<int, std::micro>((int)1e6);
+    return std::chrono::steady_clock::now() - last_time_try_connecting_to_mempool_server > std::chrono::duration<int, std::micro>(TryReconnectionToMemPool_Interval_us);
 }
 
 MemPoolClient::MemPoolClient(){
@@ -104,15 +104,14 @@ static MemPoolClient* client = nullptr;
 static std::mutex get_instance_lock;
 MemPoolClient* MemPoolClient::Get_Instance(){
     get_instance_lock.lock();
-    if (client == nullptr && (!mempool_server_is_failed || time_to_reconnect()) || pid != getpid()){
-        mempool_server_is_failed = false;
+    if (client == nullptr && (first_time_to_connect_to_mempool_server || time_to_reconnect()) || pid != getpid()){
+        first_time_to_connect_to_mempool_server = false;
         last_time_try_connecting_to_mempool_server = std::chrono::steady_clock::now();
         client = new MemPoolClient();
 		pid = getpid();
         if(client->has_failed){
             delete client;
             client = nullptr;
-            mempool_server_is_failed = true;
         }
 	}
     get_instance_lock.unlock();
@@ -124,7 +123,6 @@ void MemPoolClient::Clear_Instance(bool disconnect){
         if(disconnect)
             client->Disconnect();
         else{
-            mempool_server_is_failed = true;
             last_time_try_connecting_to_mempool_server = std::chrono::steady_clock::now();
         }
         DSMEngine::RDMA_Manager::Delete_Instance();
