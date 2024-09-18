@@ -2376,8 +2376,8 @@ void RDMA_Manager::Allocate_Local_RDMA_Slot(ibv_mr& mr_input, Chunk_type pool_na
         return;
     }
     else{
-        ibv_mr* mr_to_allocate = new ibv_mr();
-        char* buff = new char[chunk_size];
+        ibv_mr* mr_to_allocate;
+        char* buff;
         Local_Memory_Register(&buff, &mr_to_allocate,
                         name_to_allocated_size.at(pool_name) == 0 ?
                         1024*1024*1024 : name_to_allocated_size.at(pool_name),
