@@ -125,7 +125,7 @@ RDMA_Manager::~RDMA_Manager() {
         }
     if (!res->sock_map.empty())
         for (auto it = res->sock_map.begin(); it != res->sock_map.end(); it++) {
-            if (close(it->second)) {
+            if (it->second >= 0 && close(it->second)) {
                 fprintf(stderr, "failed to close socket\n");
             }
         }
@@ -177,21 +177,20 @@ RDMA_Manager *RDMA_Manager::Get_Instance(config_t* config) {
     lock.lock();
     if (!rdma_mg) {
         rdma_mg = new RDMA_Manager(*config);
-        rdma_mg->Client_Set_Up_Resources();
-    } else {
-
+        bool successful = rdma_mg->Client_Set_Up_Resources();
+        if(!successful) RDMA_Manager::Delete_Instance(true);
     }
     lock.unlock();
     // while(rdma_mg->main_comm_thread_ready_num.load() != rdma_mg->memory_nodes.size());
     return rdma_mg;
 }
-void RDMA_Manager::Delete_Instance() {
-    lock.lock();
+void RDMA_Manager::Delete_Instance(bool holdLock) {
+    if(!holdLock) lock.lock();
     if (rdma_mg){
         delete rdma_mg;
         rdma_mg = nullptr;
     }
-    lock.unlock();
+    if(!holdLock) lock.unlock();
 }
 
 size_t RDMA_Manager::GetMemoryNodeNum() {
@@ -268,14 +267,12 @@ int RDMA_Manager::client_sock_connect(const char* servername, int port) {
                     close(sockfd);
                     sockfd = -1;
                 }
-                printf("Success to connect to %s\n", servername);
-            } else {
-                assert(false);
-
+                else
+                    printf("Success to connect to %s\n", servername);
             }
+            else
+                assert(false);
         }
-
-        fprintf(stdout, "TCP connection was established\n");
     }
 sock_connect_exit:
     if (listenfd) close(listenfd);
@@ -470,7 +467,7 @@ ibv_mr * RDMA_Manager::Preregister_Memory(size_t gb_number) {
 * set up the connection to shared memroy.
 * memory node ids are even, compute node ids are odd.
 ******************************************************************************/
-void RDMA_Manager::Client_Set_Up_Resources() {
+bool RDMA_Manager::Client_Set_Up_Resources() {
     char temp_char;
 
     std::string connection_conf;
@@ -503,18 +500,19 @@ void RDMA_Manager::Client_Set_Up_Resources() {
     /* if client side */
     if (resources_create()) {
         fprintf(stderr, "failed to create resources\n");
-        return;
+        return false;
     }
     std::vector<std::thread> memory_handler_threads;
     std::vector<std::thread> compute_handler_threads;
     for(int i = 0; i < memory_nodes.size(); i++){
         uint16_t target_node_id = 2*i+1;
         res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
-        printf("connect to node id %d\n", target_node_id);
         if (res->sock_map[target_node_id] < 0) {
             fprintf(stderr, "failed to establish TCP connection to server %s, port %d\n",
                 memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+            return false;
         }
+        printf("connect to node id %d\n", target_node_id);
         //TODO: use mulitple thread to initialize the queue pairs.
         memory_handler_threads.emplace_back(&RDMA_Manager::Get_Remote_qp_Info_Then_Connect, this, target_node_id);
 //        Get_Remote_qp_Info_Then_Connect(shard_target_node_id);
@@ -540,6 +538,7 @@ void RDMA_Manager::Client_Set_Up_Resources() {
 //    for (auto & thread : threads) {
 //        thread.join();
 //    }
+    return true;
 }
 void RDMA_Manager::Initialize_threadlocal_map(){
     uint16_t target_node_id;
@@ -2019,6 +2018,7 @@ int RDMA_Manager::poll_completion(ibv_wc* wc_p, int num_entries,
     int poll_result;
     int poll_num = 0;
     int rc = 0;
+    int poll_cnt = 0;
     ibv_cq* cq;
     /* poll the completion for a while before giving up of doing it .. */
     std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
@@ -2045,12 +2045,25 @@ int RDMA_Manager::poll_completion(ibv_wc* wc_p, int num_entries,
         assert(cq != nullptr);
     }
     l.unlock();
+    unsigned long start_time_msec;
+    unsigned long cur_time_msec;
+    struct timeval cur_time;
+    gettimeofday(&cur_time, NULL);
+    start_time_msec = (cur_time.tv_sec * 1000000ul) + cur_time.tv_usec;
     do {
         poll_result = ibv_poll_cq(cq, num_entries, &wc_p[poll_num]);
         if (poll_result < 0)
             break;
         else
             poll_num = poll_num + poll_result;
+        if(++poll_cnt % 1000 == 0){
+            gettimeofday(&cur_time, NULL);
+            cur_time_msec = (cur_time.tv_sec * 1000000ul) + cur_time.tv_usec;
+            if(cur_time_msec - start_time_msec > MAX_POLL_CQ_TIMEOUT * 1000ul){
+                fprintf(stderr, "Timeout: poll_completion\n");
+                return rc = 1;
+            }
+        }
     } while (poll_num < num_entries);
     assert(poll_num == num_entries);
     if (poll_result < 0) {
@@ -2071,7 +2084,7 @@ int RDMA_Manager::poll_completion(ibv_wc* wc_p, int num_entries,
                 fprintf(stderr,
                                 "number %d got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
                                 i, wc_p[i].status, wc_p[i].vendor_err);
-                assert(false);
+                // assert(false);
                 rc = 1;
             }
         }

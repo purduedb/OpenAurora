@@ -334,13 +334,13 @@ public:
     RDMA_Manager(config_t config);
     ~RDMA_Manager();
     static RDMA_Manager *Get_Instance(config_t* config);
-    static void Delete_Instance();
+    static void Delete_Instance(bool holdLock = false);
     size_t GetMemoryNodeNum();
     size_t GetComputeNodeNum();
     /**
      * RDMA set up create all the resources, and create one query pair for RDMA send & Receive.
      */
-    void Client_Set_Up_Resources();
+    bool Client_Set_Up_Resources();
     void Initialize_threadlocal_map();
     // Set up the socket connection to remote shared memory.
     bool Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id);

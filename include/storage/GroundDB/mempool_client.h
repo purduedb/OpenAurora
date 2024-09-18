@@ -39,6 +39,8 @@ extern "C" {
 #define SyncXLogInfo_Interval_us 1000
 #define SyncUpdateVersionMapInfo_Interval_us 500
 
+#define TryReconnectionToMemPool_Interval_us 1000000
+
 struct RDMAReadPageInfo{
 	struct ibv_mr remote_pa_mr, remote_pida_mr;
 	size_t pa_ofs;
