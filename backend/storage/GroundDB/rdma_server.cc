@@ -276,6 +276,10 @@ void MemPoolManager::allocate_page_array(size_t pa_size){
     // todo (te): multiple page_array
 }
 
+void MemPoolManager::init_xlog_info(){
+    xlog_info.valid = false;
+}
+
 void MemPoolManager::init_vminfo_ring(size_t ring_size){
     vminfo_ring.ring = new UpdateVersionMapInfo[ring_size]();
     for(size_t i = 0; i < ring_size; i++)

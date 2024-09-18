@@ -13,6 +13,7 @@ void MemPoolMain(int argc, char *argv[], const char *dbname, const char *usernam
             1};
     // mempool->init_resources(config.tcp_port, config.dev_name, config.ib_port);
     mempool->init_rdma_manager(88, config);
+    mempool->init_xlog_info();
     mempool->init_thread_pool(10);
     mempool->allocate_page_array(1 << 20);
     mempool->init_vminfo_ring(1 << 15);

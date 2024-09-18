@@ -530,6 +530,7 @@ void mempool::MemPoolClient::FlushXLogInfoToMemoryPool(){
 	send_pointer->command = DSMEngine::flush_xlog_info_;
 	send_pointer->buffer = recv_mr.addr;
 	send_pointer->rkey = recv_mr.rkey;
+    req->xlog_info.valid = true;
 	req->xlog_info.RpcXLogFlushedLsn = RpcXLogFlushedLsn;
 	req->xlog_info.ProcLastRecPtr = ProcLastRecPtr;
 	req->xlog_info.XactLastRecEnd = XactLastRecEnd;
@@ -570,11 +571,13 @@ void mempool::MemPoolClient::FetchXLogInfoFromMemoryPool(){
     if(has_failed) return;
 
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.fetch_xlog_info;
-	RpcXLogFlushedLsn = res->xlog_info.RpcXLogFlushedLsn;
-	ProcLastRecPtr = res->xlog_info.ProcLastRecPtr;
-	XactLastRecEnd = res->xlog_info.XactLastRecEnd;
-	XactLastCommitEnd = res->xlog_info.XactLastCommitEnd;
-    UpdateLogWrtResult(res->xlog_info.LogwrtResult_Write, res->xlog_info.LogwrtResult_Flush);
+    if(res->xlog_info.valid){
+        RpcXLogFlushedLsn = res->xlog_info.RpcXLogFlushedLsn;
+        ProcLastRecPtr = res->xlog_info.ProcLastRecPtr;
+        XactLastRecEnd = res->xlog_info.XactLastRecEnd;
+        XactLastCommitEnd = res->xlog_info.XactLastCommitEnd;
+        UpdateLogWrtResult(res->xlog_info.LogwrtResult_Write, res->xlog_info.LogwrtResult_Flush);
+    }
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);

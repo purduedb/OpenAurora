@@ -49,6 +49,7 @@ public:
 
     void init_thread_pool(size_t thrd_num);
     void allocate_page_array(size_t pa_size);
+    void init_xlog_info();
     void init_vminfo_ring(size_t ring_size);
 
     void async_flush_page_handler(void* args);
