@@ -12,6 +12,7 @@ struct RDMA_Request;
 namespace mempool{
 
 struct XLogInfo{
+    bool valid;
     uint64_t RpcXLogFlushedLsn;
     XLogRecPtr ProcLastRecPtr, XactLastRecEnd, XactLastCommitEnd;
     XLogRecPtr LogwrtResult_Write, LogwrtResult_Flush;
