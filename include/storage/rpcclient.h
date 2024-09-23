@@ -28,6 +28,9 @@ extern "C" {
     void RpcMdTruncate(SMgrRelation reln, int32_t forknum, int32_t blknum);
 
 
+    int32_t RpcRegisterSecondaryNode(bool primary, int64_t lsn);
+    void RpcSecondaryNodeUpdatesLsn(int32_t node_id, int64_t lsn);
+
     void RpcShutdown(void);
     void RpcFileClose(const int _fd);
     void RpcTablespaceCreateDbspace(const int64_t _spcnode, const int64_t _dbnode, const bool isRedo);

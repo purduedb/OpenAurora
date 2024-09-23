@@ -339,6 +339,16 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
 #endif
 }
 
+int32_t RpcRegisterSecondaryNode(bool primary, int64_t lsn){
+    RpcInit();
+    return client->RpcRegisterSecondaryNode(primary, lsn);
+}
+
+void RpcSecondaryNodeUpdatesLsn(int32_t node_id, int64_t lsn){
+    RpcInit();
+    client->RpcSecondaryNodeUpdatesLsn(node_id, lsn);
+}
+
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));

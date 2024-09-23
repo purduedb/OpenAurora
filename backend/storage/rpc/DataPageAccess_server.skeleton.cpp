@@ -38,6 +38,16 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("ReadBufferCommon\n");
   }
 
+  int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn) {
+    // Your implementation goes here
+    printf("RpcRegisterSecondaryNode\n");
+  }
+
+  void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn) {
+    // Your implementation goes here
+    printf("RpcSecondaryNodeUpdatesLsn\n");
+  }
+
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdRead\n");

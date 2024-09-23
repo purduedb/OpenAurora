@@ -37,6 +37,7 @@ typedef struct KeyTypeStruct KeyType;
 struct LsnEntry {
     uint64_t lsn;
     int pageNum;
+    bool materialized;
 };
 typedef struct LsnEntry LsnEntry;
 
@@ -86,9 +87,22 @@ struct HashNodeEle {
     HashNodeEle *prevEle;
 };
 
+struct ComputeNodeInfo {
+    uint32_t id;
+    bool primary;
+    bool active;
+    uint64_t lsn;
+    struct timeval activeTime;
+};
+
 struct HashMapStruct {
     HashBucket* bucketList;
     int bucketNum;
+
+    ComputeNodeInfo* computeNodeList;
+    int computeNodeNum;
+    pthread_rwlock_t computeNodeLock;
+    uint64_t minComputeLsn;
 } ;
 
 typedef struct HashMapStruct* HashMap;
@@ -105,6 +119,17 @@ extern bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pag
 
 extern bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn, uint64_t *replayedLsn, uint64_t **toReplayList, int *listLen);
 extern bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock);
+extern bool HashMapUpdateMaterializedStatus(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock, bool status);
+extern bool HashMapGarbageCollectKey(HashMap hashMap, KeyType key);
+extern void HashMapGarbageCollectNode(HashMap hashMap, HashNodeHead *head);
+
+
+#define HashMapComputeNodeHearbeatInterval_us 1000000ul
+#define HashMapComputeNodeInactiveTimeout_us (10ul * HashMapComputeNodeHearbeatInterval_us)
+extern int32_t HashMapRegisterSecondaryNode(HashMap hashMap, bool primary, uint64_t lsn);
+extern void HashMapSecondaryNodeUpdatesLsn(HashMap hashMap, int32_t node_id, int64_t lsn);
+extern uint64_t HashMapGetMinComputeLsn(HashMap hashMap);
+extern void HashMapClearInactiveComputeNode(HashMap hashMap);
 
 #ifdef __cplusplus
 }
