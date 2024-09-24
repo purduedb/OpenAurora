@@ -725,7 +725,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
                 pthread_rwlock_unlock(&iter->headLock);
 
-                printf("Error, %s can't find any match lsn\n", __func__ );
+                ereport(WARNING, (errmsg("Error, %s can't find any match lsn\n", __func__)));
                 return false;
             } else {
 #ifdef ENABLE_DEBUG_INFO
