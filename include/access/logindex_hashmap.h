@@ -94,6 +94,7 @@ struct ComputeNodeInfo {
     uint64_t lsn;
     struct timeval activeTime;
 };
+typedef struct ComputeNodeInfo ComputeNodeInfo;
 
 struct HashMapStruct {
     HashBucket* bucketList;
