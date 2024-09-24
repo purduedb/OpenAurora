@@ -736,6 +736,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                 if(iter->lsnEntry[resultIndex].materialized){
                     *listLen = 0;
                     *replayedLsn = iter->lsnEntry[resultIndex].lsn;
+                    pthread_rwlock_unlock(&iter->headLock);
                 }
                 else{
                     int mallocSize = 16;
@@ -756,7 +757,6 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                     *listLen = toReplayCount;
                     iter->lsnEntry[resultIndex].materialized = true; // todo (te): Here we assume the caller will always materialize this version, but it needs to be changed.
                 }
-                pthread_rwlock_unlock(&iter->headLock);
                 return true;
             }
 
@@ -796,6 +796,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
         if(currentEntry->materialized){
             *listLen = 0;
             *replayedLsn = currentEntry->lsn;
+            pthread_rwlock_unlock(&iter->headLock);
         }
         else{
             int mallocSize = 16;
@@ -834,7 +835,6 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
         printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
         fflush(stdout);
 #endif
-        pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
 
