@@ -318,7 +318,7 @@ public:
         int found = HashMapGetBlockReplayList(pageVersionHashMap, key, _lsn, &replayedLsn, &toReplayList, &listSize);
 
 
-        if (!found || replayedLsn <= 0 && listSize == 0) {
+        if (!found || replayedLsn <= 0ull && listSize == 0) {
 
             BufferTag bufferTag;
             INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber) _forknum, (BlockNumber) _blknum);
@@ -394,9 +394,7 @@ public:
 #endif
         }
 
-        if(replayedLsn && listSize>0) {
-            DeletePageFromRocksdb(bufferTag, replayedLsn);
-        }
+        HashMapGarbageCollectKey(pageVersionHashMap, key);
 
 //        printf("%s %d end, targetPageLsn = %lu, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d\n", __func__ , __LINE__,
 //               PageGetLSN(page2), _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid());
@@ -418,6 +416,13 @@ public:
 
     }
 
+    int32_t RpcRegisterSecondaryNode(bool _primary, int64_t _lsn){
+        return HashMapRegisterSecondaryNode(pageVersionHashMap, _primary, _lsn);
+    }
+
+    void RpcSecondaryNodeUpdatesLsn(int32_t _node_id, int64_t _lsn){
+        HashMapSecondaryNodeUpdatesLsn(pageVersionHashMap, _node_id, _lsn);
+    }
 
     void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
 #ifdef ENABLE_FUNCTION_TIMING

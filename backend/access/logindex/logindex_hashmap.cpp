@@ -1,7 +1,11 @@
 #include <boost/thread/locks.hpp>
 #include <boost/thread/shared_mutex.hpp>
 #include <iostream>
+#include "c.h"
 #include "access/logindex_hashmap.h"
+#include "access/xlogdefs.h"
+#include "storage/buf_internals.h"
+#include "storage/kv_interface.h"
 #include <atomic>
 
 //#define DEBUG_TIMING
@@ -121,6 +125,11 @@ void HashMapInit(HashMap *hashMap_p, int bucketNum) {
         (*hashMap_p)->bucketList[i].lastReplayTime.tv_sec = 0;
         (*hashMap_p)->bucketList[i].lastReplayTime.tv_usec = 0;
     }
+
+    (*hashMap_p)->computeNodeNum = 0;
+    (*hashMap_p)->computeNodeList = NULL;
+    (*hashMap_p)->minComputeLsn = InvalidXLogRecPtr;
+    pthread_rwlock_init(&(*hashMap_p)->computeNodeLock, NULL);
 #ifdef ENABLE_DEBUG_INFO
     printf("Hashmap Address = %p\n", (*hashMap_p));
     printf("%s finished \n", __func__ );
@@ -240,6 +249,54 @@ bool HashMapUpdateReplayedLsn(HashMap hashMap, KeyType key, uint64_t lsn, bool h
     }
 }
 
+bool HashMapUpdateMaterializedStatus(HashMap hashMap, KeyType key, uint64_t lsn, bool holdHeadLock, bool status) {
+    uint32_t hashValue = HashKey(key);
+    uint32_t bucketPos = hashValue % hashMap->bucketNum;
+
+    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
+
+    HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
+    bool foundHead = false;
+    while(iter != NULL) {
+        if(iter->hashValue == hashValue
+           && KeyMatch(iter->key, key)) {
+            foundHead = true;
+            break;
+        }
+        iter = iter->nextHead;
+    }
+
+    if (!foundHead) {
+        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+        return false;
+    }
+
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+    if(!holdHeadLock) {
+        pthread_rwlock_wrlock(&iter->headLock);
+    }
+    for(int i = 0; i < iter->entryNum; i++){
+        if(iter->lsnEntry[i].lsn == lsn){
+            iter->lsnEntry[i].materialized = status;
+            pthread_rwlock_unlock(&iter->headLock);
+            return true;
+        }
+    }
+    auto eleIter = iter->nextEle;
+    while(eleIter != NULL){
+        for(int i = 0; i < eleIter->entryNum; i++){
+            if(eleIter->lsnEntry[i].lsn == lsn){
+                eleIter->lsnEntry[i].materialized = status;
+                pthread_rwlock_unlock(&iter->headLock);
+                return true;
+            }
+        }
+        eleIter = eleIter->nextEle;
+    }
+    pthread_rwlock_unlock(&iter->headLock);
+    return false;
+}
+
 bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, bool noEmptyFirstSlot) {
 #ifdef ENABLE_DEBUG_INFO3
     printf("%s start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %ld, lsn = %lu\n", __func__ ,
@@ -307,6 +364,8 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 
             head->lsnEntry[0].lsn = 0;
             head->lsnEntry[1].lsn = lsn;
+            head->lsnEntry[0].materialized = false;
+            head->lsnEntry[1].materialized = false;
             head->entryNum = 2;
         } else{ // this is for rel nblocks
 //            printf("%s %d, insertLsn = %lu\n", __func__ , __LINE__, lsn);
@@ -314,6 +373,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 
             head->lsnEntry[0].lsn = lsn;
             head->lsnEntry[0].pageNum = pageNum;
+            head->lsnEntry[0].materialized = false;
             head->entryNum = 1;
         };
         head->maxLsn = lsn;
@@ -439,6 +499,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 #endif
         iter->lsnEntry[iter->entryNum].pageNum = pageNum;
         iter->lsnEntry[iter->entryNum].lsn = lsn;
+        iter->lsnEntry[iter->entryNum].materialized = false;
         iter->entryNum++;
 
         iter->maxLsn = lsn;
@@ -468,6 +529,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
         HashNodeEle *nodeEle = iter->tailEle;
         nodeEle->lsnEntry[nodeEle->entryNum].pageNum = pageNum;
         nodeEle->lsnEntry[nodeEle->entryNum].lsn = lsn;
+        nodeEle->lsnEntry[nodeEle->entryNum].materialized = false;
 
         nodeEle->entryNum++;
 
@@ -496,6 +558,7 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
     eleNode->maxLsn = lsn;
     eleNode->lsnEntry[0].pageNum = pageNum;
     eleNode->lsnEntry[0].lsn = lsn;
+    eleNode->lsnEntry[0].materialized = false;
     eleNode->entryNum = 1;
     eleNode->nextEle = NULL;
     eleNode->prevEle = NULL;
@@ -524,6 +587,16 @@ bool HashMapInsertKey(HashMap hashMap, KeyType key, uint64_t lsn, int pageNum, b
 #endif
     return true;
 }
+
+#define AddToToReplayList(lsn) do{ \
+    (*toReplayList)[toReplayCount] = (lsn); \
+    toReplayCount++; \
+    if(toReplayCount == mallocSize) { \
+        mallocSize *= 2; \
+        uint64_t* newList = (uint64_t*) realloc(*toReplayList, sizeof(uint64_t)*mallocSize); \
+        *toReplayList = newList; \
+    } \
+}while(0)
 
 // This function will return lsn list that need be replayed
 // Parameters:
@@ -651,18 +724,37 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
                 fflush(stdout);
 #endif
                 pthread_rwlock_unlock(&iter->headLock);
-
-                printf("Error, %s can't find any match lsn\n", __func__ );
                 return false;
             } else {
 #ifdef ENABLE_DEBUG_INFO
                 printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
                 fflush(stdout);
 #endif
-                pthread_rwlock_unlock(&iter->headLock);
 
-                *listLen = 0;
-                *replayedLsn = iter->lsnEntry[resultIndex].lsn;
+                if(iter->lsnEntry[resultIndex].materialized){
+                    *listLen = 0;
+                    *replayedLsn = iter->lsnEntry[resultIndex].lsn;
+                    pthread_rwlock_unlock(&iter->headLock);
+                }
+                else{
+                    int mallocSize = 16;
+                    int toReplayCount = 0;
+                    *toReplayList = (uint64_t*) malloc(sizeof(uint64_t)* mallocSize);
+                    for(int i = resultIndex; i >= 0; i--)
+                        if(iter->lsnEntry[i].materialized){
+                            *replayedLsn = iter->lsnEntry[i].lsn;
+                            break;
+                        }
+                        else
+                            AddToToReplayList(iter->lsnEntry[i].lsn);
+                    for(int i = 0, j = toReplayCount - 1; i < j; i++, j--){
+                        uint64_t tmp = (*toReplayList)[i];
+                        (*toReplayList)[i] = (*toReplayList)[j];
+                        (*toReplayList)[j] = tmp;
+                    }
+                    *listLen = toReplayCount;
+                    iter->lsnEntry[resultIndex].materialized = true; // todo (te): Here we assume the caller will always materialize this version, but it needs to be changed.
+                }
                 return true;
             }
 
@@ -674,22 +766,23 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 
         // Try to find it in following nodes
         // Initialize the currentLsn as the rear lsn of list
-        uint64_t  currentLsn = iter->lsnEntry[iter->entryNum-1].lsn;
+        int resultIndex = iter->entryNum - 1;
+        LsnEntry* currentEntry = &(iter->lsnEntry[iter->entryNum-1]);
 
         HashNodeEle* eleIter = iter->nextEle;
         while(eleIter != NULL) {
             // fast skip
             if(eleIter->maxLsn < targetLsn) {
-                currentLsn = eleIter->lsnEntry[eleIter->entryNum-1].lsn;
+                currentEntry = &(eleIter->lsnEntry[eleIter->entryNum-1]);
 
                 eleIter = eleIter->nextEle;
                 continue;
             }
 
-            int resultIndex = LsnListFindLowerBound(targetLsn, eleIter->lsnEntry, eleIter->entryNum);
+            resultIndex = LsnListFindLowerBound(targetLsn, eleIter->lsnEntry, eleIter->entryNum);
 
             if(resultIndex >= 0)
-                currentLsn = eleIter->lsnEntry[resultIndex].lsn;
+                currentEntry = &(eleIter->lsnEntry[resultIndex]);
 
             // Found the desired lsn
             break;
@@ -698,13 +791,48 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
         printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
         fflush(stdout);
 #endif
-        *replayedLsn = currentLsn;
-        *listLen = 0;
+        if(currentEntry->materialized){
+            *listLen = 0;
+            *replayedLsn = currentEntry->lsn;
+            pthread_rwlock_unlock(&iter->headLock);
+        }
+        else{
+            int mallocSize = 16;
+            int toReplayCount = 0;
+            *toReplayList = (uint64_t*) malloc(sizeof(uint64_t)* mallocSize);
+
+            bool foundReplayedEntry = false;
+            for(auto eIter = eleIter; eIter != NULL; eIter = eIter->prevEle, resultIndex = eIter != NULL ? eIter->entryNum - 1 : iter->entryNum - 1)
+                for(int i = resultIndex; i >= 0; i--)
+                    if(eIter->lsnEntry[i].materialized){
+                        foundReplayedEntry = true;
+                        *replayedLsn = eIter->lsnEntry[i].lsn;
+                        break;
+                    }
+                    else
+                        AddToToReplayList(eIter->lsnEntry[i].lsn);
+            if(!foundReplayedEntry){
+                for(int i = resultIndex; i >= 0; i--)
+                    if(iter->lsnEntry[i].materialized){
+                        foundReplayedEntry = true;
+                        *replayedLsn = iter->lsnEntry[i].lsn;
+                        break;
+                    }
+                    else
+                        AddToToReplayList(iter->lsnEntry[i].lsn);
+            }
+            for(int i = 0, j = toReplayCount - 1; i < j; i++, j--){
+                uint64_t tmp = (*toReplayList)[i];
+                (*toReplayList)[i] = (*toReplayList)[j];
+                (*toReplayList)[j] = tmp;
+            }
+            *listLen = toReplayCount;
+            currentEntry->materialized = true; // todo (te): Here we assume the caller will always materialize this version, but it needs to be changed.
+        }
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d release header lock, %lu, %lu, %lu, fork = %u, blk = %lu\n", __func__, __LINE__, iter->key.SpcID, iter->key.DbID, iter->key.RelID, iter->key.ForkNum, iter->key.BlkNum );
         fflush(stdout);
 #endif
-        pthread_rwlock_unlock(&iter->headLock);
         return true;
     }
 
@@ -744,6 +872,7 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     int mallocSize = 16;
     int toReplayCount = 0;
     *toReplayList = (uint64_t*) malloc(sizeof(uint64_t)* mallocSize);
+    LsnEntry* toReplayedLsnEntry;
 
     // Circumstance: ... $replayedLsn ..(what we need).. $targetLsn
     int foundReplayLsnPosition = 0;
@@ -765,15 +894,8 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
             fflush(stdout);
 #endif
             if(iter->lsnEntry[i].lsn <= targetLsn) {
-                (*toReplayList)[toReplayCount] = iter->lsnEntry[i].lsn;
-//                printf("%s %d, set %d slot as lsn = %lu\n", __func__ , __LINE__, toReplayCount, iter->lsnEntry[i].lsn);
-//                fflush(stdout);
-                toReplayCount++;
-                if(toReplayCount == mallocSize) {
-                    mallocSize *= 2;
-                    uint64_t* newList = (uint64_t*) realloc(*toReplayList, sizeof(uint64_t)*mallocSize);
-                    *toReplayList = newList;
-                }
+                AddToToReplayList(iter->lsnEntry[i].lsn);
+                toReplayedLsnEntry = &(iter->lsnEntry[i]);
             } else { // found all toReplay list
                 break;
             }
@@ -807,13 +929,8 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
         // targetEntry should be found in the list
         for(int i = startIndex; i < eleIter->entryNum; i++) {
             if(eleIter->lsnEntry[i].lsn <= targetLsn) {
-                (*toReplayList)[toReplayCount] = eleIter->lsnEntry[i].lsn;
-                toReplayCount++;
-                if(toReplayCount == mallocSize) {
-                    mallocSize *= 2;
-                    uint64_t* newList = (uint64_t*) realloc(*toReplayList, sizeof(uint64_t)*mallocSize);
-                    *toReplayList = newList;
-                }
+                AddToToReplayList(eleIter->lsnEntry[i].lsn);
+                toReplayedLsnEntry = &(eleIter->lsnEntry[i]);
             } else {  // found all toReplay list
                 break;
             }
@@ -836,6 +953,9 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
 #endif
         free(*toReplayList);
     }
+    else{
+        toReplayedLsnEntry->materialized = true; // todo (te): Here we assume the caller will always materialize this version, but it needs to be changed.
+    }
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d , pid = %d\n", __func__ , __LINE__, getpid());
@@ -847,6 +967,125 @@ bool HashMapGetBlockReplayList(HashMap hashMap, KeyType key, uint64_t targetLsn,
     return true;
 }
 
+bool HashMapGarbageCollectKey(HashMap hashMap, KeyType key){
+    uint32_t hashValue = HashKey(key);
+    uint32_t bucketPos = hashValue % hashMap->bucketNum;
+
+    pthread_rwlock_rdlock(&hashMap->bucketList[bucketPos].bucketLock);
+
+    HashNodeHead* iter = hashMap->bucketList[bucketPos].nodeList;
+    bool foundHead = false;
+    while(iter != NULL) {
+        if(iter->hashValue == hashValue
+           && KeyMatch(iter->key, key)) {
+            foundHead = true;
+            break;
+        }
+        iter = iter->nextHead;
+    }
+
+    if (!foundHead) {
+        pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+        return false;
+    }
+    pthread_rwlock_unlock(&hashMap->bucketList[bucketPos].bucketLock);
+    pthread_rwlock_wrlock(&iter->headLock);
+    HashMapGarbageCollectNode(hashMap, iter);
+    pthread_rwlock_unlock(&iter->headLock);
+    return true;
+}
+
+// Delete corresponding RocksDb pages and hashNodeEle
+// Should remember ele->prev/next in advance, ele will be erased in this func
+void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag) {
+//    for(int i = 0; i < ele->entryNum; i++) {
+//        DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
+//    }
+    if(ele == head->nextEle) { // if it is the first node
+        head->nextEle = ele->nextEle;
+        if(ele->nextEle != NULL) {
+            ele->nextEle->prevEle = NULL;
+        }
+    } else {
+        ele->prevEle->nextEle = ele->nextEle;
+        if(ele->nextEle != NULL) {
+            ele->nextEle->prevEle = ele->prevEle;
+        }
+    }
+    free(ele);
+}
+
+void HashMapGarbageCollectNode(HashMap hashMap, HashNodeHead *head){
+    auto minComputeLsn = HashMapGetMinComputeLsn(hashMap);
+    if(minComputeLsn == InvalidXLogRecPtr || head->replayedLsn < minComputeLsn)
+        minComputeLsn = head->replayedLsn;
+    if(minComputeLsn <= 0ull)
+        return;
+
+    uint64_t toKeepLsn = InvalidXLogRecPtr;
+    BufferTag bufferTag;
+    RelFileNode rnode;
+
+    rnode.spcNode = head->key.SpcID;
+    rnode.dbNode = head->key.DbID;
+    rnode.relNode = head->key.RelID;
+
+    INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum);
+
+    for(int i = 0; i < head->entryNum; i++)
+        if(head->lsnEntry[i].lsn <= minComputeLsn){
+            if(head->lsnEntry[i].materialized)
+                toKeepLsn = head->lsnEntry[i].lsn;
+        }
+        else
+            break;
+    HashNodeEle *ele = head->nextEle;
+    while(ele != NULL) {
+        bool to_break = false;
+        for(int i = 0; i < ele->entryNum; i++)
+            if(ele->lsnEntry[i].lsn <= minComputeLsn){
+                if(ele->lsnEntry[i].materialized)
+                    toKeepLsn = ele->lsnEntry[i].lsn;
+            }
+            else{
+                to_break = true;
+                break;
+            }
+        if(to_break)
+            break;
+        ele = ele->nextEle;
+    }
+
+    for(int i = 0; i < head->entryNum; i++)
+        if(head->lsnEntry[i].lsn < toKeepLsn){
+            if(head->lsnEntry[i].materialized){
+                DeletePageFromRocksdb(bufferTag, head->lsnEntry[i].lsn);
+                head->lsnEntry[i].materialized = false;
+            }
+        }
+        else
+            break;
+    ele = head->nextEle;
+    while(ele != NULL) {
+        bool to_break = false;
+        for(int i = 0; i < ele->entryNum; i++)
+            if(ele->lsnEntry[i].lsn < toKeepLsn){
+                if(ele->lsnEntry[i].materialized){
+                    DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
+                    ele->lsnEntry[i].materialized = false;
+                }
+            }
+            else{
+                to_break = true;
+                break;
+            }
+        if(to_break)
+            break;
+        auto nextEle = ele->nextEle;
+        VacuumHashNode(head, ele, bufferTag);
+        ele = nextEle;
+    }
+}
 
 void HashMapDestroy(HashMap hashMap){
     for(int i = 0; i < hashMap->bucketNum; i++) {
@@ -864,6 +1103,8 @@ void HashMapDestroy(HashMap hashMap){
         }
     }
     free(hashMap->bucketList);
+    if(hashMap->computeNodeList != NULL)
+        free(hashMap->computeNodeList);
     free(hashMap);
 }
 
@@ -892,3 +1133,73 @@ void HashMapDestroy(HashMap hashMap){
 //    return i+1;
 //}
 
+int32_t HashMapRegisterSecondaryNode(HashMap hashMap, bool primary, uint64_t lsn){
+    pthread_rwlock_wrlock(&hashMap->computeNodeLock);
+    hashMap->computeNodeNum++;
+    hashMap->computeNodeList = (ComputeNodeInfo*) realloc(hashMap->computeNodeList, sizeof(ComputeNodeInfo) * hashMap->computeNodeNum);
+    uint32_t id = hashMap->computeNodeNum <= 1 ? 0 : hashMap->computeNodeList[hashMap->computeNodeNum - 2].id;
+    hashMap->computeNodeList[hashMap->computeNodeNum - 1].id = id;
+    hashMap->computeNodeList[hashMap->computeNodeNum - 1].primary = primary;
+    hashMap->computeNodeList[hashMap->computeNodeNum - 1].active = true;
+    hashMap->computeNodeList[hashMap->computeNodeNum - 1].lsn = lsn;
+    gettimeofday(&hashMap->computeNodeList[hashMap->computeNodeNum - 1].activeTime, NULL);
+    if(hashMap->minComputeLsn == InvalidXLogRecPtr || lsn < hashMap->minComputeLsn)
+        hashMap->minComputeLsn = lsn;
+    pthread_rwlock_unlock(&hashMap->computeNodeLock);
+    return id;
+}
+
+void HashMapSecondaryNodeUpdatesLsn(HashMap hashMap, int32_t node_id, int64_t lsn){
+    pthread_rwlock_wrlock(&hashMap->computeNodeLock);
+    hashMap->minComputeLsn = InvalidXLogRecPtr;
+    for(int i = 0; i < hashMap->computeNodeNum; i++){
+        if(hashMap->computeNodeList[i].id == node_id){
+            hashMap->computeNodeList[i].lsn = lsn;
+            gettimeofday(&hashMap->computeNodeList[i].activeTime, NULL);
+        }
+        if(hashMap->computeNodeList[i].active && (hashMap->minComputeLsn == InvalidXLogRecPtr || hashMap->computeNodeList[i].lsn < hashMap->minComputeLsn))
+            hashMap->minComputeLsn = hashMap->computeNodeList[i].lsn;
+    }
+    pthread_rwlock_unlock(&hashMap->computeNodeLock);
+}
+
+uint64_t HashMapGetMinComputeLsn(HashMap hashMap){
+    pthread_rwlock_rdlock(&hashMap->computeNodeLock);
+    uint64_t ret = hashMap->minComputeLsn;
+    pthread_rwlock_unlock(&hashMap->computeNodeLock);
+    return ret;
+}
+
+void HashMapClearInactiveComputeNode(HashMap hashMap){
+    pthread_rwlock_wrlock(&hashMap->computeNodeLock);
+    if(hashMap->computeNodeNum <= 0){
+        pthread_rwlock_unlock(&hashMap->computeNodeLock);
+        return;
+    }
+
+    int inactive_cnt = 0;
+    timeval now;
+    gettimeofday(&now, NULL);
+    unsigned long now_usec = (now.tv_sec * 1000000ul) + now.tv_usec;
+
+    hashMap->minComputeLsn = InvalidXLogRecPtr;
+    for(int i = 0; i < hashMap->computeNodeNum; i++){
+        unsigned long active_usec = (hashMap->computeNodeList[i].activeTime.tv_sec * 1000000ul) + hashMap->computeNodeList[i].activeTime.tv_usec;
+        if(now_usec - active_usec > HashMapComputeNodeInactiveTimeout_us){
+            inactive_cnt++;
+            continue;
+        }
+        if(hashMap->minComputeLsn == InvalidXLogRecPtr || hashMap->computeNodeList[i].lsn < hashMap->minComputeLsn)
+            hashMap->minComputeLsn = hashMap->computeNodeList[i].lsn;
+        if(inactive_cnt > 0)
+            memcpy(&hashMap->computeNodeList[i - inactive_cnt], &hashMap->computeNodeList[i], sizeof(ComputeNodeInfo));
+    }
+    hashMap->computeNodeNum -= inactive_cnt;
+    if(hashMap->computeNodeNum <= 0){
+        free(hashMap->computeNodeList);
+        hashMap->computeNodeList = NULL;
+    }
+    else
+        hashMap->computeNodeList = (ComputeNodeInfo*) realloc(hashMap->computeNodeList, hashMap->computeNodeNum * sizeof(ComputeNodeInfo));
+    pthread_rwlock_unlock(&hashMap->computeNodeLock);
+}
