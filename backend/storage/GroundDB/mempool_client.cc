@@ -36,7 +36,7 @@ public:
     // todo (te): asyncly do it with multiprocessing
     // DSMEngine::ThreadPool* thrd_pool;
 
-    size_t mem_node_cnt;
+    size_t memnode_cnt;
     bool has_failed = false;
 };
 
@@ -61,7 +61,7 @@ MemPoolClient::MemPoolClient(){
         has_failed = true;
         goto exit;
     }
-    mem_node_cnt = rdma_mg->memory_nodes.size();
+    memnode_cnt = rdma_mg->memory_nodes.size();
     rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
     rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
 
@@ -71,7 +71,7 @@ MemPoolClient::MemPoolClient(){
 
 	if(*is_first_mpc){
 		*is_first_mpc = false;
-        for(int i = 0; i < mem_node_cnt; i++)
+        for(int i = 0; i < memnode_cnt; i++)
     	    AppendToPAT(i, 0);
 	}
 exit:
@@ -362,7 +362,7 @@ int mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
     int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0);
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
@@ -383,7 +383,7 @@ int mempool::MemPoolClient::RemovePageOnMemoryPool(KeyType PageID){
     int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0);
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
@@ -472,7 +472,7 @@ int mempool::MemPoolClient::AsyncFlushPageToMemoryPool(char* src, KeyType PageID
     int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0);
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
@@ -494,7 +494,7 @@ int mempool::MemPoolClient::SyncFlushPageToMemoryPool(char* src, KeyType PageID)
     int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr recv_mr, send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0);
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
 	rc |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, memnode_id * 2 + 1);
