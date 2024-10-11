@@ -10,7 +10,7 @@ std::chrono::steady_clock::time_point *last_sync_pat;
 int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
 
 // For PAT
-size_t *mpc_pa_cnt, *mpc_pa_size;
+size_t *mpc_pa_cnt, *mpc_pa_size, *mpc_pa_cnt_per_memnode, *mpc_pa_to_memnode, *mpc_memnode_to_pa;
 KeyType *mpc_idx_to_pid;
 ibv_mr *mpc_idx_to_mr;
 HTAB *mpc_pid_to_idx;
@@ -50,6 +50,18 @@ void MemPoolClientShmemInit(){
 	mpc_pa_size = (size_t*)
 		ShmemInitStruct("MemPool Client PA size",
 						(MAX_PAGE_ARRAY_COUNT + 1) * sizeof(size_t),
+						found_any, found_all);
+	mpc_pa_cnt_per_memnode = (size_t*)
+		ShmemInitStruct("MemPool Client PA count for each MemNode",
+						MAX_MEMNODE_NODE * sizeof(size_t),
+						found_any, found_all);
+	mpc_pa_to_memnode = (size_t*)
+		ShmemInitStruct("MemPool Client PA-index-to-MemNode-index map",
+						MAX_PAGE_ARRAY_COUNT * sizeof(size_t) * 2,
+						found_any, found_all);
+	mpc_memnode_to_pa = (size_t*)
+		ShmemInitStruct("MemPool Client MemNode-index-to-PA-index map",
+						MAX_MEMNODE_NODE * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE * sizeof(size_t),
 						found_any, found_all);
 	mpc_idx_to_pid = (KeyType*)
 		ShmemInitStruct("MemPool Client index-to-PageID map",
@@ -99,6 +111,8 @@ void MemPoolClientShmemInit(){
 		*last_sync_pat = std::chrono::steady_clock::now();
 		*mpc_pa_cnt = 0;
 		*mpc_pa_size = 0;
+		for(int i = 0; i < MAX_MEMNODE_NODE; i++)
+			mpc_pa_cnt_per_memnode[i] = 0;
 		*is_first_mpc = true;
 		*mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
 	}
@@ -119,6 +133,12 @@ Size MemPoolClientShmemSize(void)
 	size = add_size(size, sizeof(size_t));
 
 	size = add_size(size, mul_size(MAX_PAGE_ARRAY_COUNT + 1, sizeof(size_t)));
+
+	size = add_size(size, mul_size(MAX_MEMNODE_NODE, sizeof(size_t)));
+
+	size = add_size(size, mul_size(MAX_PAGE_ARRAY_COUNT, sizeof(size_t) * 2));
+
+	size = add_size(size, mul_size(mul_size(MAX_MEMNODE_NODE, MAX_PAGE_ARRAY_COUNT_PER_MEMNODE), sizeof(size_t)));
 
 	size = add_size(size, mul_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(KeyType)));
 
