@@ -22,11 +22,13 @@ extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
 
 extern PGDLLIMPORT LWLock* mempool_client_lw_lock;
 
-#define MAX_PAGE_ARRAY_COUNT 20ull
+#define MAX_PAGE_ARRAY_COUNT 50ull
 #define MAX_TOTAL_PAGE_ARRAY_SIZE (1ull << 24)
+#define MAX_PAGE_ARRAY_COUNT_PER_MEMNODE 10ull
+#define MAX_MEMNODE_NODE 10ull
 #define PAGE_ARRAY_TABLE_PARTITION_NUM 128
 
-extern PGDLLIMPORT size_t *mpc_pa_cnt, *mpc_pa_size;
+extern PGDLLIMPORT size_t *mpc_pa_cnt, *mpc_pa_size, *mpc_pa_cnt_per_memnode, *mpc_pa_to_memnode, *mpc_memnode_to_pa;
 extern PGDLLIMPORT KeyType *mpc_idx_to_pid;
 extern PGDLLIMPORT struct ibv_mr *mpc_idx_to_mr;
 extern PGDLLIMPORT HTAB *mpc_pid_to_idx;
