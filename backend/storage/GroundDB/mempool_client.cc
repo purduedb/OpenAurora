@@ -82,7 +82,7 @@ void MemPoolClient::AppendToPAT(size_t memnode_id, size_t pa_idx){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
-	rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, 1);
+	rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, 2 * memnode_id + 1);
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
 	auto req = &send_pointer->content.mr_info;
