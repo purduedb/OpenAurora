@@ -17,7 +17,7 @@ HTAB *mpc_pid_to_idx;
 
 HTAB_VM *version_map;
 
-bool *is_first_mpc;
+bool *is_first_mpc, *is_first_mpc_connection;
 
 void* ShmemInitStruct(char* name, size_t size, bool& found_any, bool& found_all){
 	bool found;
@@ -75,6 +75,10 @@ void MemPoolClientShmemInit(){
 		ShmemInitStruct("MemPool Client first client flag",
 						sizeof(bool),
 						found_any, found_all);
+	is_first_mpc_connection = (bool*)
+		ShmemInitStruct("MemPool Client first client flag per MemNode connection",
+						sizeof(bool) * MAX_MEMNODE_NODE,
+						found_any, found_all);
     HASHCTL info;
     MemSet(&info, 0, sizeof(info));
     info.keysize = sizeof(KeyType);
@@ -109,10 +113,6 @@ void MemPoolClientShmemInit(){
 			LWLockInitialize(&mempool_client_lw_lock[i], LWTRANCHE_MEMPOOL_CLIENT);
 		*node_id_cnt = 0;
 		*last_sync_pat = std::chrono::steady_clock::now();
-		*mpc_pa_cnt = 0;
-		*mpc_pa_size = 0;
-		for(int i = 0; i < MAX_MEMNODE_NODE; i++)
-			mpc_pa_cnt_per_memnode[i] = 0;
 		*is_first_mpc = true;
 		*mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
 	}
@@ -145,6 +145,8 @@ Size MemPoolClientShmemSize(void)
 	size = add_size(size, mul_size(MAX_PAGE_ARRAY_COUNT, sizeof(ibv_mr) * 2));
 
 	size = add_size(size, sizeof(bool));
+
+	size = add_size(size, mul_size(MAX_MEMNODE_NODE, sizeof(bool)));
 
 	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(PATLookupEntry)));
 	

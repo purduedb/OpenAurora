@@ -38,7 +38,7 @@ typedef struct{
 	size_t pa_idx, pa_ofs;
 } PATLookupEntry;
 
-extern PGDLLIMPORT bool *is_first_mpc;
+extern PGDLLIMPORT bool *is_first_mpc, *is_first_mpc_connection;
 extern PGDLLIMPORT HTAB_VM *version_map;
 
 extern void MemPoolClientShmemInit();
