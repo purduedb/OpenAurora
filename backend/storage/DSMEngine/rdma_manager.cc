@@ -178,7 +178,13 @@ RDMA_Manager *RDMA_Manager::Get_Instance(config_t* config) {
     if (!rdma_mg) {
         rdma_mg = new RDMA_Manager(*config);
         bool successful = rdma_mg->Client_Set_Up_Resources();
-        if(!successful) RDMA_Manager::Delete_Instance(true);
+        if(!successful)
+            RDMA_Manager::Delete_Instance(true);
+        else{
+            for(int i = 0; i < rdma_mg->GetMemoryNodeNum(); i++)
+                if(!rdma_mg->memory_node_status[2 * i + 1])
+                    rdma_mg->ClearOneConnection(2 * i + 1);
+        }
     }
     lock.unlock();
     // while(rdma_mg->main_comm_thread_ready_num.load() != rdma_mg->memory_nodes.size());
@@ -191,6 +197,30 @@ void RDMA_Manager::Delete_Instance(bool holdLock) {
         rdma_mg = nullptr;
     }
     if(!holdLock) lock.unlock();
+}
+
+void RDMA_Manager::ClearOneConnection(uint16_t target_node_id) {
+    if (!res->qp_map.empty() && res->qp_map.count(target_node_id)) {
+        if (ibv_destroy_qp(res->qp_map[target_node_id]))
+            fprintf(stderr, "failed to destroy QP\n");
+        res->qp_map.erase(target_node_id);
+    }
+    if (!res->cq_map.empty() && res->cq_map.count(target_node_id)) {
+        if (ibv_destroy_cq(res->cq_map[target_node_id].first))
+            fprintf(stderr, "failed to destroy CQ\n");
+        if (res->cq_map[target_node_id].second != nullptr && ibv_destroy_cq(res->cq_map[target_node_id].second))
+            fprintf(stderr, "failed to destroy CQ\n");
+        res->cq_map.erase(target_node_id);
+    }
+    if (!res->qp_main_connection_info.empty() && res->qp_main_connection_info.count(target_node_id)){
+        delete res->qp_main_connection_info[target_node_id];
+        res->qp_main_connection_info.erase(target_node_id);
+    }
+    if (!res->sock_map.empty() && res->sock_map.count(target_node_id)){
+        if (res->sock_map[target_node_id] >= 0 && close(res->sock_map[target_node_id]))
+            fprintf(stderr, "failed to close socket\n");
+        res->sock_map.erase(target_node_id);
+    }
 }
 
 size_t RDMA_Manager::GetMemoryNodeNum() {
@@ -451,6 +481,21 @@ ibv_mr * RDMA_Manager::Preregister_Memory(size_t gb_number) {
     return mrpointer;
 }
 
+bool RDMA_Manager::Client_Set_Up_One_Connection(uint16_t target_node_id){
+    res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+    if (res->sock_map[target_node_id] < 0) {
+        fprintf(stderr, "failed to establish TCP connection to server %s, port %d\n",
+            memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+        memory_node_status[target_node_id] = false;
+    }
+    else{
+        printf("connect to node id %d\n", target_node_id);
+        Get_Remote_qp_Info_Then_Connect(target_node_id);
+        memory_node_status[target_node_id] = true;
+    }
+    return memory_node_status[target_node_id];
+}
+
 /******************************************************************************
 * Function: set_up_RDMA
 *
@@ -504,22 +549,27 @@ bool RDMA_Manager::Client_Set_Up_Resources() {
     }
     std::vector<std::thread> memory_handler_threads;
     std::vector<std::thread> compute_handler_threads;
+    int failed_connection_cnt = 0;
     for(int i = 0; i < memory_nodes.size(); i++){
         uint16_t target_node_id = 2*i+1;
         res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
         if (res->sock_map[target_node_id] < 0) {
             fprintf(stderr, "failed to establish TCP connection to server %s, port %d\n",
                 memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
-            return false;
+            memory_node_status[target_node_id] = false;
+            failed_connection_cnt++;
         }
-        printf("connect to node id %d\n", target_node_id);
-        //TODO: use mulitple thread to initialize the queue pairs.
-        memory_handler_threads.emplace_back(&RDMA_Manager::Get_Remote_qp_Info_Then_Connect, this, target_node_id);
-//        Get_Remote_qp_Info_Then_Connect(shard_target_node_id);
-        // memory_handler_threads.back().detach();
-        memory_handler_threads.back().join();
+        else{
+            printf("connect to node id %d\n", target_node_id);
+            //TODO: use mulitple thread to initialize the queue pairs.
+            memory_handler_threads.emplace_back(&RDMA_Manager::Get_Remote_qp_Info_Then_Connect, this, target_node_id);
+    //        Get_Remote_qp_Info_Then_Connect(shard_target_node_id);
+            // memory_handler_threads.back().detach();
+            memory_handler_threads.back().join(); // todo (te): change to multithreading
+            memory_node_status[target_node_id] = true;
+        }
     }
-    while (memory_connection_counter.load() != memory_nodes.size())
+    while (memory_connection_counter.load() < memory_nodes.size() - failed_connection_cnt)
         ;
 
     // for(int i = 0; i < compute_nodes.size(); i++){

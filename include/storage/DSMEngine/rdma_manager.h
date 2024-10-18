@@ -335,11 +335,13 @@ public:
     ~RDMA_Manager();
     static RDMA_Manager *Get_Instance(config_t* config);
     static void Delete_Instance(bool holdLock = false);
+    void ClearOneConnection(uint16_t target_node_id);
     size_t GetMemoryNodeNum();
     size_t GetComputeNodeNum();
     /**
      * RDMA set up create all the resources, and create one query pair for RDMA send & Receive.
      */
+    bool Client_Set_Up_One_Connection(uint16_t target_node_id);
     bool Client_Set_Up_Resources();
     void Initialize_threadlocal_map();
     // Set up the socket connection to remote shared memory.
@@ -502,6 +504,7 @@ public:
     ibv_mr* global_index_table = nullptr;
     ibv_mr* global_lock_table = nullptr;
 
+    std::map<uint16_t, int> memory_node_status;
 
 #ifdef PROCESSANALYSIS
     static std::atomic<uint64_t> RDMAReadTimeElapseSum;
