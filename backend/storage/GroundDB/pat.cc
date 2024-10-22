@@ -39,16 +39,25 @@ void PageAddressTable::init(size_t memnode_cnt){
 }
 void PageAddressTable::append_page_array(size_t memnode_id, size_t pa_idx, size_t pa_size, const ibv_mr& pa_mr, const ibv_mr& pida_mr){
 	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
-	mpc_pa_size[*mpc_pa_cnt + 1] = mpc_pa_size[*mpc_pa_cnt] + pa_size;
-	for(size_t i = mpc_pa_size[*mpc_pa_cnt]; i < mpc_pa_size[*mpc_pa_cnt+ 1]; i++)
-		mpc_idx_to_pid[i] = nullKeyType;
-	mpc_idx_to_mr[*mpc_pa_cnt << 1] = pa_mr;
-	mpc_idx_to_mr[*mpc_pa_cnt << 1 | 1] = pida_mr;
-	mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + mpc_pa_cnt_per_memnode[memnode_id]] = *mpc_pa_cnt;
-	mpc_pa_to_memnode[*mpc_pa_cnt << 1] = memnode_id;
-	mpc_pa_to_memnode[*mpc_pa_cnt << 1 | 1] = mpc_pa_cnt_per_memnode[memnode_id];
-	mpc_pa_cnt_per_memnode[memnode_id]++;
-	(*mpc_pa_cnt)++;
+	if(pa_idx < mpc_pa_cnt_per_memnode[memnode_id]){
+		size_t pat_idx = mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + pa_idx];
+		Assert(pa_size == mpc_pa_size[pat_idx + 1] - mpc_pa_size[pat_idx]);
+		mpc_idx_to_mr[pat_idx << 1] = pa_mr;
+		mpc_idx_to_mr[pat_idx << 1 | 1] = pida_mr;
+	}
+	else{
+		Assert(pa_idx == mpc_pa_cnt_per_memnode[memnode_id]);
+		mpc_pa_size[*mpc_pa_cnt + 1] = mpc_pa_size[*mpc_pa_cnt] + pa_size;
+		for(size_t i = mpc_pa_size[*mpc_pa_cnt]; i < mpc_pa_size[*mpc_pa_cnt+ 1]; i++)
+			mpc_idx_to_pid[i] = nullKeyType;
+		mpc_idx_to_mr[*mpc_pa_cnt << 1] = pa_mr;
+		mpc_idx_to_mr[*mpc_pa_cnt << 1 | 1] = pida_mr;
+		mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + mpc_pa_cnt_per_memnode[memnode_id]] = *mpc_pa_cnt;
+		mpc_pa_to_memnode[*mpc_pa_cnt << 1] = memnode_id;
+		mpc_pa_to_memnode[*mpc_pa_cnt << 1 | 1] = mpc_pa_cnt_per_memnode[memnode_id];
+		mpc_pa_cnt_per_memnode[memnode_id]++;
+		(*mpc_pa_cnt)++;
+	}
 	LWLockRelease(mempool_client_pat_lock);
 }
 void PageAddressTable::at(KeyType pid, RDMAReadPageInfo& info){
