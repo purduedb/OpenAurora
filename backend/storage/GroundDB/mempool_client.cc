@@ -63,7 +63,7 @@ MemPoolClient::MemPoolClient(){
     }
     memnode_cnt = rdma_mg->GetMemoryNodeNum();
     for(int i = 0; i < memnode_cnt; i++)
-        has_failed.push_back(rdma_mg->memory_node_status[2 * i + 1]);
+        has_failed.push_back(!rdma_mg->memory_node_status[2 * i + 1]);
     rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
     rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
 
@@ -129,6 +129,7 @@ MemPoolClient* MemPoolClient::Get_Instance(){
         client = new MemPoolClient();
 		pid = getpid();
         if(client->has_failed[0]){
+            DSMEngine::RDMA_Manager::Delete_Instance();
             delete client;
             client = nullptr;
         }
@@ -136,12 +137,16 @@ MemPoolClient* MemPoolClient::Get_Instance(){
     else if (client != nullptr && time_to_reconnect()){
         last_time_try_connecting_to_mempool_server = std::chrono::steady_clock::now();
         for(int i = 0; i < client->memnode_cnt; i++)
-            if(client->has_failed[i] && client->rdma_mg->Client_Set_Up_One_Connection(2 * i + 1)){
-                client->has_failed[i] = false;
-                if(is_first_mpc_connection[i]){
-                    if(client->AppendToPAT(i, 0))
-                        is_first_mpc_connection[i] = false;
+            if(client->has_failed[i]){
+                if(client->rdma_mg->Client_Set_Up_One_Connection(2 * i + 1)){
+                    client->has_failed[i] = false;
+                    if(is_first_mpc_connection[i]){
+                        if(client->AppendToPAT(i, 0))
+                            is_first_mpc_connection[i] = false;
+                    }
                 }
+                else
+                    client->rdma_mg->ClearOneConnection(2 * i + 1);
             }
     }
     get_instance_lock.unlock();
@@ -162,10 +167,19 @@ void MemPoolClient::Clear_Instance(bool disconnect){
 }
 void MemPoolClient::Clear_Instance_If_Failed(){
     get_instance_lock.lock();
-    bool failed = client != nullptr && client->has_failed[0];
+    if(client != nullptr){
+        if(client->has_failed[0]){
+            get_instance_lock.unlock();
+            MemPoolClient::Clear_Instance(false);
+            return;
+        }
+        for(int i = 1; i < client->memnode_cnt; i++)
+            if(client->has_failed[i] && !is_first_mpc_connection[i]){
+                client->rdma_mg->ClearOneConnection(2 * i + 1);
+                is_first_mpc_connection[i] = true;
+            }
+    }
     get_instance_lock.unlock();
-    if(failed)
-        MemPoolClient::Clear_Instance(false);
 }
 
 } // namespace mempool
