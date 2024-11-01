@@ -989,6 +989,14 @@ public:
         return OpenTransientFile(_filename.c_str(), _fileflags);
     }
 
+    _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) {
+        char* pgDataPath = getenv("PGDATA");
+        std::string pgDataPathStr(pgDataPath);
+        std::string filenameStr(_filename.c_str());
+        std::string fullPath = pgDataPathStr + "/" + filenameStr;
+        return OpenTransientFile(fullPath.c_str(), _fileflags);
+    }
+
     int32_t RpcCloseTransientFile(const _File _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
         FunctionTiming functionTiming(const_cast<char *>(__func__));
@@ -1082,6 +1090,14 @@ public:
         fflush(stdout);
 #endif
         return result;
+    }
+
+    int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) {
+        char* pgDataPath = getenv("PGDATA");
+        std::string pgDataPathStr(pgDataPath);
+        std::string filenameStr(_path.c_str());
+        std::string fullPath = pgDataPathStr + "/" + filenameStr;
+        return BasicOpenFile(fullPath.c_str(), _flags);
     }
 
     int32_t RpcPgFdatasync(const _File _fd) {

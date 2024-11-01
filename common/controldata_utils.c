@@ -38,6 +38,37 @@
 #include "storage/fd.h"
 #endif
 
+#ifndef FRONTEND
+#define RPC_REMOTE_DISK
+#include "storage/rpcclient.h"
+#endif
+
+#ifdef RPC_REMOTE_DISK
+extern int IsRpcClient;
+int pg_pread_rpc_local3(int fd, char *p, int amount, int offset) {
+    if(IsRpcClient)
+        return RpcPgPRead(fd, p, amount, offset);
+    else
+        return pg_pread(fd, p, amount, offset);
+}
+int pg_pwrite_rpc_local3(int fd, char *p, int amount, int offset) {
+    if(IsRpcClient){
+		fflush(stdout);
+        return RpcPgPWrite(fd, p, amount, offset);
+	}
+    else {
+		fflush(stdout);
+        return pg_pwrite(fd, p, amount, offset);
+	}
+}
+#define CloseTransientFile(_Fd) CloseTransientFile_Rpc_Local(_Fd)
+#define close(_fd) close_rpc_local(_fd)
+#define read(_Fd, _Buffer, _Amount) pg_pread_rpc_local3(_Fd, _Buffer, _Amount, 0)
+#define write(_Fd, _Buffer, _Amount) pg_pwrite_rpc_local3(_Fd, _Buffer, _Amount, 0)
+#define pg_fsync(_fd) pg_fsync_rpc_local(_fd)
+#define fsync(_fd) pg_fsync_rpc_local(_fd)
+#endif
+
 /*
  * get_controlfile()
  *
@@ -62,13 +93,23 @@ get_controlfile(const char *DataDir, bool *crc_ok_p)
 	snprintf(ControlFilePath, MAXPGPATH, "%s/global/pg_control", DataDir);
 
 #ifndef FRONTEND
+#ifdef RPC_REMOTE_DISK
+	snprintf(ControlFilePath, MAXPGPATH, "global/pg_control");
+	if ((fd = OpenTransientFileUnderPgData_Rpc_Local(ControlFilePath, O_RDONLY | PG_BINARY)) == -1)
+#else
 	if ((fd = OpenTransientFile(ControlFilePath, O_RDONLY | PG_BINARY)) == -1)
+#endif
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not open file \"%s\" for reading: %m",
 						ControlFilePath)));
 #else
+#ifdef RPC_REMOTE_DISK
+	snprintf(ControlFilePath, MAXPGPATH, "global/pg_control");
+	if ((fd = OpenTransientFileUnderPgData_Rpc_Local(ControlFilePath, O_RDONLY | PG_BINARY)) == -1)
+#else
 	if ((fd = open(ControlFilePath, O_RDONLY | PG_BINARY, 0)) == -1)
+#endif
 	{
 		pg_log_fatal("could not open file \"%s\" for reading: %m",
 					 ControlFilePath);
@@ -191,14 +232,24 @@ update_controlfile(const char *DataDir,
 	 * All errors issue a PANIC, so no need to use OpenTransientFile() and to
 	 * worry about file descriptor leaks.
 	 */
+#ifdef RPC_REMOTE_DISK
+	snprintf(ControlFilePath, sizeof(ControlFilePath), "%s", XLOG_CONTROL_FILE);
+	if ((fd = BasicOpenFileUnderPgData_Rpc_Local(ControlFilePath, O_RDWR | PG_BINARY)) < 0)
+#else
 	if ((fd = BasicOpenFile(ControlFilePath, O_RDWR | PG_BINARY)) < 0)
+#endif
 		ereport(PANIC,
 				(errcode_for_file_access(),
 				 errmsg("could not open file \"%s\": %m",
 						ControlFilePath)));
 #else
+#ifdef RPC_REMOTE_DISK
+	snprintf(ControlFilePath, sizeof(ControlFilePath), "%s", XLOG_CONTROL_FILE);
+	if ((fd = OpenTransientFileUnderPgData_Rpc_Local(ControlFilePath, O_RDONLY | PG_BINARY)) == -1)
+#else
 	if ((fd = open(ControlFilePath, O_WRONLY | PG_BINARY,
 				   pg_file_create_mode)) == -1)
+#endif
 	{
 		pg_log_fatal("could not open file \"%s\": %m", ControlFilePath);
 		exit(EXIT_FAILURE);

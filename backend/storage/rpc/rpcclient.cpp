@@ -949,6 +949,28 @@ int RpcOpenTransientFile(const char* filename, const int32_t _fileflags) {
     return result;
 }
 
+int RpcOpenTransientFileUnderPgData(const char* filename, const int32_t _fileflags) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    _File result = 0;
+    _Path _filename;
+    _filename.assign(filename);
+    result = client->RpcOpenTransientFileUnderPgData(_filename, _fileflags);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
 int32_t RpcCloseTransientFile(const int _fd) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));
@@ -1092,6 +1114,28 @@ int32_t RpcBasicOpenFile(char *path, int32_t _flags) {
     result = client->RpcBasicOpenFile(_path, _flags);
     //rpctransport->close();
 //    printf("[%s] result = %d\n", __func__ , result);
+#ifdef DEBUG_TIMING
+    gettimeofday(&end, NULL);
+    uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
+    printf("%s time cost = %lu\n", __func__ , usec);
+    fflush(stdout);
+#endif
+    return result;
+}
+
+int32_t RpcBasicOpenFileUnderPgData(char *path, int32_t _flags) {
+#ifdef ENABLE_FUNCTION_TIMING
+    FunctionTiming functionTiming(const_cast<char *>(__func__));
+#endif
+#ifdef DEBUG_TIMING
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+#endif
+    RpcInit();
+    int32_t result;
+    _Path _path;
+    _path.assign(path);
+    result = client->RpcBasicOpenFileUnderPgData(_path, _flags);
 #ifdef DEBUG_TIMING
     gettimeofday(&end, NULL);
     uint64_t usec = (end.tv_sec + end.tv_usec*1000000) - (start.tv_sec + start.tv_usec*1000000);
@@ -1366,27 +1410,3 @@ int RpcXLogFileInit(XLogSegNo logsegno, bool *use_existent, bool use_lock) {
     *use_existent = resp._use_existent;
     return resp._fd;
 }
-
-//void TryRpcInitFile(_Page& _return, _Path& _path)
-//{
-//    int trycount=0;
-//    int maxcount=3;
-//    do{
-//        try{
-//            rpctransport->open();
-//            client->RpcInitFile(_return, _path);
-//            rpctransport->close();
-//            trycount=maxcount;
-//        }catch(TException& tx){
-//            std::cout << "ERROR: " << tx.what() << std::endl;
-//            rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, RPCPORT);
-//            rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
-//            rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
-//            delete client;
-//            client = new DataPageAccessClient(rpcprotocol);
-//
-//            trycount++;
-//            printf("Try again %d\n", trycount);
-//        }
-//    }while(trycount < maxcount);
-//};

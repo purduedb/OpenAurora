@@ -4797,6 +4797,209 @@ uint32_t DataPageAccess_RpcOpenTransientFile_presult::read(::apache::thrift::pro
 }
 
 
+DataPageAccess_RpcOpenTransientFileUnderPgData_args::~DataPageAccess_RpcOpenTransientFileUnderPgData_args() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_args::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_STRING) {
+          xfer += iprot->readBinary(this->_filename);
+          this->__isset._filename = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_fileflags);
+          this->__isset._fileflags = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcOpenTransientFileUnderPgData_args");
+
+  xfer += oprot->writeFieldBegin("_filename", ::apache::thrift::protocol::T_STRING, 1);
+  xfer += oprot->writeBinary(this->_filename);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_fileflags", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32(this->_fileflags);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcOpenTransientFileUnderPgData_pargs::~DataPageAccess_RpcOpenTransientFileUnderPgData_pargs() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcOpenTransientFileUnderPgData_pargs");
+
+  xfer += oprot->writeFieldBegin("_filename", ::apache::thrift::protocol::T_STRING, 1);
+  xfer += oprot->writeBinary((*(this->_filename)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_fileflags", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32((*(this->_fileflags)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcOpenTransientFileUnderPgData_result::~DataPageAccess_RpcOpenTransientFileUnderPgData_result() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_result::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->success);
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
+
+  uint32_t xfer = 0;
+
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcOpenTransientFileUnderPgData_result");
+
+  if (this->__isset.success) {
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_I32, 0);
+    xfer += oprot->writeI32(this->success);
+    xfer += oprot->writeFieldEnd();
+  }
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcOpenTransientFileUnderPgData_presult::~DataPageAccess_RpcOpenTransientFileUnderPgData_presult() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcOpenTransientFileUnderPgData_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32((*(this->success)));
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+
 DataPageAccess_RpcCloseTransientFile_args::~DataPageAccess_RpcCloseTransientFile_args() noexcept {
 }
 
@@ -6412,6 +6615,209 @@ DataPageAccess_RpcBasicOpenFile_presult::~DataPageAccess_RpcBasicOpenFile_presul
 
 
 uint32_t DataPageAccess_RpcBasicOpenFile_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32((*(this->success)));
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+
+DataPageAccess_RpcBasicOpenFileUnderPgData_args::~DataPageAccess_RpcBasicOpenFileUnderPgData_args() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_args::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_STRING) {
+          xfer += iprot->readBinary(this->_path);
+          this->__isset._path = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->_flags);
+          this->__isset._flags = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_args::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcBasicOpenFileUnderPgData_args");
+
+  xfer += oprot->writeFieldBegin("_path", ::apache::thrift::protocol::T_STRING, 1);
+  xfer += oprot->writeBinary(this->_path);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_flags", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32(this->_flags);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcBasicOpenFileUnderPgData_pargs::~DataPageAccess_RpcBasicOpenFileUnderPgData_pargs() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_pargs::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  ::apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcBasicOpenFileUnderPgData_pargs");
+
+  xfer += oprot->writeFieldBegin("_path", ::apache::thrift::protocol::T_STRING, 1);
+  xfer += oprot->writeBinary((*(this->_path)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("_flags", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32((*(this->_flags)));
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcBasicOpenFileUnderPgData_result::~DataPageAccess_RpcBasicOpenFileUnderPgData_result() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_result::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->success);
+          this->__isset.success = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_result::write(::apache::thrift::protocol::TProtocol* oprot) const {
+
+  uint32_t xfer = 0;
+
+  xfer += oprot->writeStructBegin("DataPageAccess_RpcBasicOpenFileUnderPgData_result");
+
+  if (this->__isset.success) {
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_I32, 0);
+    xfer += oprot->writeI32(this->success);
+    xfer += oprot->writeFieldEnd();
+  }
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  return xfer;
+}
+
+
+DataPageAccess_RpcBasicOpenFileUnderPgData_presult::~DataPageAccess_RpcBasicOpenFileUnderPgData_presult() noexcept {
+}
+
+
+uint32_t DataPageAccess_RpcBasicOpenFileUnderPgData_presult::read(::apache::thrift::protocol::TProtocol* iprot) {
 
   ::apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
@@ -10178,6 +10584,65 @@ _File DataPageAccessClient::recv_RpcOpenTransientFile()
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcOpenTransientFile failed: unknown result");
 }
 
+_File DataPageAccessClient::RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags)
+{
+  send_RpcOpenTransientFileUnderPgData(_filename, _fileflags);
+  return recv_RpcOpenTransientFileUnderPgData();
+}
+
+void DataPageAccessClient::send_RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags)
+{
+  int32_t cseqid = 0;
+  oprot_->writeMessageBegin("RpcOpenTransientFileUnderPgData", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_pargs args;
+  args._filename = &_filename;
+  args._fileflags = &_fileflags;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+}
+
+_File DataPageAccessClient::recv_RpcOpenTransientFileUnderPgData()
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  iprot_->readMessageBegin(fname, mtype, rseqid);
+  if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+    ::apache::thrift::TApplicationException x;
+    x.read(iprot_);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+    throw x;
+  }
+  if (mtype != ::apache::thrift::protocol::T_REPLY) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  if (fname.compare("RpcOpenTransientFileUnderPgData") != 0) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  _File _return;
+  DataPageAccess_RpcOpenTransientFileUnderPgData_presult result;
+  result.success = &_return;
+  result.read(iprot_);
+  iprot_->readMessageEnd();
+  iprot_->getTransport()->readEnd();
+
+  if (result.__isset.success) {
+    return _return;
+  }
+  throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcOpenTransientFileUnderPgData failed: unknown result");
+}
+
 int32_t DataPageAccessClient::RpcCloseTransientFile(const _File _fd)
 {
   send_RpcCloseTransientFile(_fd);
@@ -10650,6 +11115,65 @@ int32_t DataPageAccessClient::recv_RpcBasicOpenFile()
     return _return;
   }
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcBasicOpenFile failed: unknown result");
+}
+
+int32_t DataPageAccessClient::RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags)
+{
+  send_RpcBasicOpenFileUnderPgData(_path, _flags);
+  return recv_RpcBasicOpenFileUnderPgData();
+}
+
+void DataPageAccessClient::send_RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags)
+{
+  int32_t cseqid = 0;
+  oprot_->writeMessageBegin("RpcBasicOpenFileUnderPgData", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_pargs args;
+  args._path = &_path;
+  args._flags = &_flags;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+}
+
+int32_t DataPageAccessClient::recv_RpcBasicOpenFileUnderPgData()
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  iprot_->readMessageBegin(fname, mtype, rseqid);
+  if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+    ::apache::thrift::TApplicationException x;
+    x.read(iprot_);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+    throw x;
+  }
+  if (mtype != ::apache::thrift::protocol::T_REPLY) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  if (fname.compare("RpcBasicOpenFileUnderPgData") != 0) {
+    iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+    iprot_->readMessageEnd();
+    iprot_->getTransport()->readEnd();
+  }
+  int32_t _return;
+  DataPageAccess_RpcBasicOpenFileUnderPgData_presult result;
+  result.success = &_return;
+  result.read(iprot_);
+  iprot_->readMessageEnd();
+  iprot_->getTransport()->readEnd();
+
+  if (result.__isset.success) {
+    return _return;
+  }
+  throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcBasicOpenFileUnderPgData failed: unknown result");
 }
 
 int32_t DataPageAccessClient::RpcPgFdatasync(const _File _fd)
@@ -12577,6 +13101,60 @@ void DataPageAccessProcessor::process_RpcOpenTransientFile(int32_t seqid, ::apac
   }
 }
 
+void DataPageAccessProcessor::process_RpcOpenTransientFileUnderPgData(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
+{
+  void* ctx = nullptr;
+  if (this->eventHandler_.get() != nullptr) {
+    ctx = this->eventHandler_->getContext("DataPageAccess.RpcOpenTransientFileUnderPgData", callContext);
+  }
+  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData");
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preRead(ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData");
+  }
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_args args;
+  args.read(iprot);
+  iprot->readMessageEnd();
+  uint32_t bytes = iprot->getTransport()->readEnd();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postRead(ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData", bytes);
+  }
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_result result;
+  try {
+    result.success = iface_->RpcOpenTransientFileUnderPgData(args._filename, args._fileflags);
+    result.__isset.success = true;
+  } catch (const std::exception& e) {
+    if (this->eventHandler_.get() != nullptr) {
+      this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData");
+    }
+
+    ::apache::thrift::TApplicationException x(e.what());
+    oprot->writeMessageBegin("RpcOpenTransientFileUnderPgData", ::apache::thrift::protocol::T_EXCEPTION, seqid);
+    x.write(oprot);
+    oprot->writeMessageEnd();
+    oprot->getTransport()->writeEnd();
+    oprot->getTransport()->flush();
+    return;
+  }
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preWrite(ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData");
+  }
+
+  oprot->writeMessageBegin("RpcOpenTransientFileUnderPgData", ::apache::thrift::protocol::T_REPLY, seqid);
+  result.write(oprot);
+  oprot->writeMessageEnd();
+  bytes = oprot->getTransport()->writeEnd();
+  oprot->getTransport()->flush();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postWrite(ctx, "DataPageAccess.RpcOpenTransientFileUnderPgData", bytes);
+  }
+}
+
 void DataPageAccessProcessor::process_RpcCloseTransientFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
 {
   void* ctx = nullptr;
@@ -13006,6 +13584,60 @@ void DataPageAccessProcessor::process_RpcBasicOpenFile(int32_t seqid, ::apache::
 
   if (this->eventHandler_.get() != nullptr) {
     this->eventHandler_->postWrite(ctx, "DataPageAccess.RpcBasicOpenFile", bytes);
+  }
+}
+
+void DataPageAccessProcessor::process_RpcBasicOpenFileUnderPgData(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext)
+{
+  void* ctx = nullptr;
+  if (this->eventHandler_.get() != nullptr) {
+    ctx = this->eventHandler_->getContext("DataPageAccess.RpcBasicOpenFileUnderPgData", callContext);
+  }
+  ::apache::thrift::TProcessorContextFreer freer(this->eventHandler_.get(), ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData");
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preRead(ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData");
+  }
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_args args;
+  args.read(iprot);
+  iprot->readMessageEnd();
+  uint32_t bytes = iprot->getTransport()->readEnd();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postRead(ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData", bytes);
+  }
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_result result;
+  try {
+    result.success = iface_->RpcBasicOpenFileUnderPgData(args._path, args._flags);
+    result.__isset.success = true;
+  } catch (const std::exception& e) {
+    if (this->eventHandler_.get() != nullptr) {
+      this->eventHandler_->handlerError(ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData");
+    }
+
+    ::apache::thrift::TApplicationException x(e.what());
+    oprot->writeMessageBegin("RpcBasicOpenFileUnderPgData", ::apache::thrift::protocol::T_EXCEPTION, seqid);
+    x.write(oprot);
+    oprot->writeMessageEnd();
+    oprot->getTransport()->writeEnd();
+    oprot->getTransport()->flush();
+    return;
+  }
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->preWrite(ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData");
+  }
+
+  oprot->writeMessageBegin("RpcBasicOpenFileUnderPgData", ::apache::thrift::protocol::T_REPLY, seqid);
+  result.write(oprot);
+  oprot->writeMessageEnd();
+  bytes = oprot->getTransport()->writeEnd();
+  oprot->getTransport()->flush();
+
+  if (this->eventHandler_.get() != nullptr) {
+    this->eventHandler_->postWrite(ctx, "DataPageAccess.RpcBasicOpenFileUnderPgData", bytes);
   }
 }
 
@@ -15581,6 +16213,91 @@ _File DataPageAccessConcurrentClient::recv_RpcOpenTransientFile(const int32_t se
   } // end while(true)
 }
 
+_File DataPageAccessConcurrentClient::RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags)
+{
+  int32_t seqid = send_RpcOpenTransientFileUnderPgData(_filename, _fileflags);
+  return recv_RpcOpenTransientFileUnderPgData(seqid);
+}
+
+int32_t DataPageAccessConcurrentClient::send_RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags)
+{
+  int32_t cseqid = this->sync_->generateSeqId();
+  ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
+  oprot_->writeMessageBegin("RpcOpenTransientFileUnderPgData", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_pargs args;
+  args._filename = &_filename;
+  args._fileflags = &_fileflags;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+
+  sentry.commit();
+  return cseqid;
+}
+
+_File DataPageAccessConcurrentClient::recv_RpcOpenTransientFileUnderPgData(const int32_t seqid)
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  // the read mutex gets dropped and reacquired as part of waitForWork()
+  // The destructor of this sentry wakes up other clients
+  ::apache::thrift::async::TConcurrentRecvSentry sentry(this->sync_.get(), seqid);
+
+  while(true) {
+    if(!this->sync_->getPending(fname, mtype, rseqid)) {
+      iprot_->readMessageBegin(fname, mtype, rseqid);
+    }
+    if(seqid == rseqid) {
+      if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+        ::apache::thrift::TApplicationException x;
+        x.read(iprot_);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+        sentry.commit();
+        throw x;
+      }
+      if (mtype != ::apache::thrift::protocol::T_REPLY) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+      }
+      if (fname.compare("RpcOpenTransientFileUnderPgData") != 0) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+
+        // in a bad state, don't commit
+        using ::apache::thrift::protocol::TProtocolException;
+        throw TProtocolException(TProtocolException::INVALID_DATA);
+      }
+      _File _return;
+      DataPageAccess_RpcOpenTransientFileUnderPgData_presult result;
+      result.success = &_return;
+      result.read(iprot_);
+      iprot_->readMessageEnd();
+      iprot_->getTransport()->readEnd();
+
+      if (result.__isset.success) {
+        sentry.commit();
+        return _return;
+      }
+      // in a bad state, don't commit
+      throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcOpenTransientFileUnderPgData failed: unknown result");
+    }
+    // seqid != rseqid
+    this->sync_->updatePending(fname, mtype, rseqid);
+
+    // this will temporarily unlock the readMutex, and let other clients get work done
+    this->sync_->waitForWork(seqid);
+  } // end while(true)
+}
+
 int32_t DataPageAccessConcurrentClient::RpcCloseTransientFile(const _File _fd)
 {
   int32_t seqid = send_RpcCloseTransientFile(_fd);
@@ -16254,6 +16971,91 @@ int32_t DataPageAccessConcurrentClient::recv_RpcBasicOpenFile(const int32_t seqi
       }
       // in a bad state, don't commit
       throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcBasicOpenFile failed: unknown result");
+    }
+    // seqid != rseqid
+    this->sync_->updatePending(fname, mtype, rseqid);
+
+    // this will temporarily unlock the readMutex, and let other clients get work done
+    this->sync_->waitForWork(seqid);
+  } // end while(true)
+}
+
+int32_t DataPageAccessConcurrentClient::RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags)
+{
+  int32_t seqid = send_RpcBasicOpenFileUnderPgData(_path, _flags);
+  return recv_RpcBasicOpenFileUnderPgData(seqid);
+}
+
+int32_t DataPageAccessConcurrentClient::send_RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags)
+{
+  int32_t cseqid = this->sync_->generateSeqId();
+  ::apache::thrift::async::TConcurrentSendSentry sentry(this->sync_.get());
+  oprot_->writeMessageBegin("RpcBasicOpenFileUnderPgData", ::apache::thrift::protocol::T_CALL, cseqid);
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_pargs args;
+  args._path = &_path;
+  args._flags = &_flags;
+  args.write(oprot_);
+
+  oprot_->writeMessageEnd();
+  oprot_->getTransport()->writeEnd();
+  oprot_->getTransport()->flush();
+
+  sentry.commit();
+  return cseqid;
+}
+
+int32_t DataPageAccessConcurrentClient::recv_RpcBasicOpenFileUnderPgData(const int32_t seqid)
+{
+
+  int32_t rseqid = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TMessageType mtype;
+
+  // the read mutex gets dropped and reacquired as part of waitForWork()
+  // The destructor of this sentry wakes up other clients
+  ::apache::thrift::async::TConcurrentRecvSentry sentry(this->sync_.get(), seqid);
+
+  while(true) {
+    if(!this->sync_->getPending(fname, mtype, rseqid)) {
+      iprot_->readMessageBegin(fname, mtype, rseqid);
+    }
+    if(seqid == rseqid) {
+      if (mtype == ::apache::thrift::protocol::T_EXCEPTION) {
+        ::apache::thrift::TApplicationException x;
+        x.read(iprot_);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+        sentry.commit();
+        throw x;
+      }
+      if (mtype != ::apache::thrift::protocol::T_REPLY) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+      }
+      if (fname.compare("RpcBasicOpenFileUnderPgData") != 0) {
+        iprot_->skip(::apache::thrift::protocol::T_STRUCT);
+        iprot_->readMessageEnd();
+        iprot_->getTransport()->readEnd();
+
+        // in a bad state, don't commit
+        using ::apache::thrift::protocol::TProtocolException;
+        throw TProtocolException(TProtocolException::INVALID_DATA);
+      }
+      int32_t _return;
+      DataPageAccess_RpcBasicOpenFileUnderPgData_presult result;
+      result.success = &_return;
+      result.read(iprot_);
+      iprot_->readMessageEnd();
+      iprot_->getTransport()->readEnd();
+
+      if (result.__isset.success) {
+        sentry.commit();
+        return _return;
+      }
+      // in a bad state, don't commit
+      throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RpcBasicOpenFileUnderPgData failed: unknown result");
     }
     // seqid != rseqid
     this->sync_->updatePending(fname, mtype, rseqid);

@@ -148,6 +148,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcOpenTransientFile\n");
   }
 
+  _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) {
+    // Your implementation goes here
+    printf("RpcOpenTransientFileUnderPgData\n");
+  }
+
   int32_t RpcCloseTransientFile(const _File _fd) {
     // Your implementation goes here
     printf("RpcCloseTransientFile\n");
@@ -186,6 +191,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
   int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) {
     // Your implementation goes here
     printf("RpcBasicOpenFile\n");
+  }
+
+  int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) {
+    // Your implementation goes here
+    printf("RpcBasicOpenFileUnderPgData\n");
   }
 
   int32_t RpcPgFdatasync(const _File _fd) {

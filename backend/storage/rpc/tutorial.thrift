@@ -155,6 +155,8 @@ service DataPageAccess {
 
    _File RpcOpenTransientFile(1:_Path _filename, 2:i32 _fileflags),
 
+   _File RpcOpenTransientFileUnderPgData(1:_Path _filename, 2:i32 _fileflags),
+
    i32 RpcCloseTransientFile(1:_File _fd),
 
    _Page Rpcread(1:_File _fd, 2:i32 size),
@@ -171,6 +173,8 @@ service DataPageAccess {
    i32 RpcClose(1: _File _fd),
 
    i32 RpcBasicOpenFile(1: _Path _path, 2: i32 _flags),
+
+   i32 RpcBasicOpenFileUnderPgData(1: _Path _path, 2: i32 _flags),
 
    i32 RpcPgFdatasync(1: _File _fd),
 

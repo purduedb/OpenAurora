@@ -63,6 +63,7 @@ class DataPageAccessIf {
   virtual int32_t RpcFtruncate(const _File _fd, const _Off_t _offset) = 0;
   virtual void RpcInitFile(_Page& _return, const _Path& _path) = 0;
   virtual _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) = 0;
+  virtual _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) = 0;
   virtual int32_t RpcCloseTransientFile(const _File _fd) = 0;
   virtual void Rpcread(_Page& _return, const _File _fd, const int32_t size) = 0;
   virtual int32_t Rpcwrite(const _File _fd, const _Page& _page, const int32_t size) = 0;
@@ -71,6 +72,7 @@ class DataPageAccessIf {
   virtual int32_t RpcPgPWrite(const _File _fd, const _Page& _page, const int32_t _amount, const _Off_t _offset) = 0;
   virtual int32_t RpcClose(const _File _fd) = 0;
   virtual int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) = 0;
+  virtual int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) = 0;
   virtual int32_t RpcPgFdatasync(const _File _fd) = 0;
   virtual int32_t RpcPgFsyncNoWritethrough(const _File _fd) = 0;
   virtual int32_t RpcLseek(const int32_t _fd, const _Off_t _offset, const int32_t _flag) = 0;
@@ -198,6 +200,10 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     _File _return = 0;
     return _return;
   }
+  _File RpcOpenTransientFileUnderPgData(const _Path& /* _filename */, const int32_t /* _fileflags */) override {
+    _File _return = 0;
+    return _return;
+  }
   int32_t RpcCloseTransientFile(const _File /* _fd */) override {
     int32_t _return = 0;
     return _return;
@@ -225,6 +231,10 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     return _return;
   }
   int32_t RpcBasicOpenFile(const _Path& /* _path */, const int32_t /* _flags */) override {
+    int32_t _return = 0;
+    return _return;
+  }
+  int32_t RpcBasicOpenFileUnderPgData(const _Path& /* _path */, const int32_t /* _flags */) override {
     int32_t _return = 0;
     return _return;
   }
@@ -2925,6 +2935,120 @@ class DataPageAccess_RpcOpenTransientFile_presult {
 
 };
 
+typedef struct _DataPageAccess_RpcOpenTransientFileUnderPgData_args__isset {
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_args__isset() : _filename(false), _fileflags(false) {}
+  bool _filename :1;
+  bool _fileflags :1;
+} _DataPageAccess_RpcOpenTransientFileUnderPgData_args__isset;
+
+class DataPageAccess_RpcOpenTransientFileUnderPgData_args {
+ public:
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_args(const DataPageAccess_RpcOpenTransientFileUnderPgData_args&);
+  DataPageAccess_RpcOpenTransientFileUnderPgData_args& operator=(const DataPageAccess_RpcOpenTransientFileUnderPgData_args&);
+  DataPageAccess_RpcOpenTransientFileUnderPgData_args() noexcept
+                                                      : _filename(),
+                                                        _fileflags(0) {
+  }
+
+  virtual ~DataPageAccess_RpcOpenTransientFileUnderPgData_args() noexcept;
+  _Path _filename;
+  int32_t _fileflags;
+
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_args__isset __isset;
+
+  void __set__filename(const _Path& val);
+
+  void __set__fileflags(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcOpenTransientFileUnderPgData_args & rhs) const
+  {
+    if (!(_filename == rhs._filename))
+      return false;
+    if (!(_fileflags == rhs._fileflags))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcOpenTransientFileUnderPgData_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcOpenTransientFileUnderPgData_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcOpenTransientFileUnderPgData_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcOpenTransientFileUnderPgData_pargs() noexcept;
+  const _Path* _filename;
+  const int32_t* _fileflags;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcOpenTransientFileUnderPgData_result__isset {
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcOpenTransientFileUnderPgData_result__isset;
+
+class DataPageAccess_RpcOpenTransientFileUnderPgData_result {
+ public:
+
+  DataPageAccess_RpcOpenTransientFileUnderPgData_result(const DataPageAccess_RpcOpenTransientFileUnderPgData_result&) noexcept;
+  DataPageAccess_RpcOpenTransientFileUnderPgData_result& operator=(const DataPageAccess_RpcOpenTransientFileUnderPgData_result&) noexcept;
+  DataPageAccess_RpcOpenTransientFileUnderPgData_result() noexcept
+                                                        : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcOpenTransientFileUnderPgData_result() noexcept;
+  _File success;
+
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_result__isset __isset;
+
+  void __set_success(const _File val);
+
+  bool operator == (const DataPageAccess_RpcOpenTransientFileUnderPgData_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcOpenTransientFileUnderPgData_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcOpenTransientFileUnderPgData_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcOpenTransientFileUnderPgData_presult__isset {
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcOpenTransientFileUnderPgData_presult__isset;
+
+class DataPageAccess_RpcOpenTransientFileUnderPgData_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcOpenTransientFileUnderPgData_presult() noexcept;
+  _File* success;
+
+  _DataPageAccess_RpcOpenTransientFileUnderPgData_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
 typedef struct _DataPageAccess_RpcCloseTransientFile_args__isset {
   _DataPageAccess_RpcCloseTransientFile_args__isset() : _fd(false) {}
   bool _fd :1;
@@ -3848,6 +3972,120 @@ class DataPageAccess_RpcBasicOpenFile_presult {
   int32_t* success;
 
   _DataPageAccess_RpcBasicOpenFile_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcBasicOpenFileUnderPgData_args__isset {
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_args__isset() : _path(false), _flags(false) {}
+  bool _path :1;
+  bool _flags :1;
+} _DataPageAccess_RpcBasicOpenFileUnderPgData_args__isset;
+
+class DataPageAccess_RpcBasicOpenFileUnderPgData_args {
+ public:
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_args(const DataPageAccess_RpcBasicOpenFileUnderPgData_args&);
+  DataPageAccess_RpcBasicOpenFileUnderPgData_args& operator=(const DataPageAccess_RpcBasicOpenFileUnderPgData_args&);
+  DataPageAccess_RpcBasicOpenFileUnderPgData_args() noexcept
+                                                  : _path(),
+                                                    _flags(0) {
+  }
+
+  virtual ~DataPageAccess_RpcBasicOpenFileUnderPgData_args() noexcept;
+  _Path _path;
+  int32_t _flags;
+
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_args__isset __isset;
+
+  void __set__path(const _Path& val);
+
+  void __set__flags(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcBasicOpenFileUnderPgData_args & rhs) const
+  {
+    if (!(_path == rhs._path))
+      return false;
+    if (!(_flags == rhs._flags))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcBasicOpenFileUnderPgData_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcBasicOpenFileUnderPgData_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcBasicOpenFileUnderPgData_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcBasicOpenFileUnderPgData_pargs() noexcept;
+  const _Path* _path;
+  const int32_t* _flags;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcBasicOpenFileUnderPgData_result__isset {
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcBasicOpenFileUnderPgData_result__isset;
+
+class DataPageAccess_RpcBasicOpenFileUnderPgData_result {
+ public:
+
+  DataPageAccess_RpcBasicOpenFileUnderPgData_result(const DataPageAccess_RpcBasicOpenFileUnderPgData_result&) noexcept;
+  DataPageAccess_RpcBasicOpenFileUnderPgData_result& operator=(const DataPageAccess_RpcBasicOpenFileUnderPgData_result&) noexcept;
+  DataPageAccess_RpcBasicOpenFileUnderPgData_result() noexcept
+                                                    : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcBasicOpenFileUnderPgData_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcBasicOpenFileUnderPgData_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcBasicOpenFileUnderPgData_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcBasicOpenFileUnderPgData_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcBasicOpenFileUnderPgData_presult__isset {
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcBasicOpenFileUnderPgData_presult__isset;
+
+class DataPageAccess_RpcBasicOpenFileUnderPgData_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcBasicOpenFileUnderPgData_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcBasicOpenFileUnderPgData_presult__isset __isset;
 
   uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
 
@@ -5280,6 +5518,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) override;
   void send_RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
   _File recv_RpcOpenTransientFile();
+  _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) override;
+  void send_RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags);
+  _File recv_RpcOpenTransientFileUnderPgData();
   int32_t RpcCloseTransientFile(const _File _fd) override;
   void send_RpcCloseTransientFile(const _File _fd);
   int32_t recv_RpcCloseTransientFile();
@@ -5304,6 +5545,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) override;
   void send_RpcBasicOpenFile(const _Path& _path, const int32_t _flags);
   int32_t recv_RpcBasicOpenFile();
+  int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) override;
+  void send_RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags);
+  int32_t recv_RpcBasicOpenFileUnderPgData();
   int32_t RpcPgFdatasync(const _File _fd) override;
   void send_RpcPgFdatasync(const _File _fd);
   int32_t recv_RpcPgFdatasync();
@@ -5382,6 +5626,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcFtruncate(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcInitFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcOpenTransientFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcOpenTransientFileUnderPgData(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcCloseTransientFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_Rpcread(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_Rpcwrite(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -5390,6 +5635,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_RpcPgPWrite(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcClose(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcBasicOpenFile(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcBasicOpenFileUnderPgData(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcPgFdatasync(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcPgFsyncNoWritethrough(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcLseek(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -5428,6 +5674,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcFtruncate"] = &DataPageAccessProcessor::process_RpcFtruncate;
     processMap_["RpcInitFile"] = &DataPageAccessProcessor::process_RpcInitFile;
     processMap_["RpcOpenTransientFile"] = &DataPageAccessProcessor::process_RpcOpenTransientFile;
+    processMap_["RpcOpenTransientFileUnderPgData"] = &DataPageAccessProcessor::process_RpcOpenTransientFileUnderPgData;
     processMap_["RpcCloseTransientFile"] = &DataPageAccessProcessor::process_RpcCloseTransientFile;
     processMap_["Rpcread"] = &DataPageAccessProcessor::process_Rpcread;
     processMap_["Rpcwrite"] = &DataPageAccessProcessor::process_Rpcwrite;
@@ -5436,6 +5683,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["RpcPgPWrite"] = &DataPageAccessProcessor::process_RpcPgPWrite;
     processMap_["RpcClose"] = &DataPageAccessProcessor::process_RpcClose;
     processMap_["RpcBasicOpenFile"] = &DataPageAccessProcessor::process_RpcBasicOpenFile;
+    processMap_["RpcBasicOpenFileUnderPgData"] = &DataPageAccessProcessor::process_RpcBasicOpenFileUnderPgData;
     processMap_["RpcPgFdatasync"] = &DataPageAccessProcessor::process_RpcPgFdatasync;
     processMap_["RpcPgFsyncNoWritethrough"] = &DataPageAccessProcessor::process_RpcPgFsyncNoWritethrough;
     processMap_["RpcLseek"] = &DataPageAccessProcessor::process_RpcLseek;
@@ -5701,6 +5949,15 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     return ifaces_[i]->RpcOpenTransientFile(_filename, _fileflags);
   }
 
+  _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) override {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcOpenTransientFileUnderPgData(_filename, _fileflags);
+    }
+    return ifaces_[i]->RpcOpenTransientFileUnderPgData(_filename, _fileflags);
+  }
+
   int32_t RpcCloseTransientFile(const _File _fd) override {
     size_t sz = ifaces_.size();
     size_t i = 0;
@@ -5773,6 +6030,15 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
       ifaces_[i]->RpcBasicOpenFile(_path, _flags);
     }
     return ifaces_[i]->RpcBasicOpenFile(_path, _flags);
+  }
+
+  int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) override {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcBasicOpenFileUnderPgData(_path, _flags);
+    }
+    return ifaces_[i]->RpcBasicOpenFileUnderPgData(_path, _flags);
   }
 
   int32_t RpcPgFdatasync(const _File _fd) override {
@@ -6004,6 +6270,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   _File RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags) override;
   int32_t send_RpcOpenTransientFile(const _Path& _filename, const int32_t _fileflags);
   _File recv_RpcOpenTransientFile(const int32_t seqid);
+  _File RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags) override;
+  int32_t send_RpcOpenTransientFileUnderPgData(const _Path& _filename, const int32_t _fileflags);
+  _File recv_RpcOpenTransientFileUnderPgData(const int32_t seqid);
   int32_t RpcCloseTransientFile(const _File _fd) override;
   int32_t send_RpcCloseTransientFile(const _File _fd);
   int32_t recv_RpcCloseTransientFile(const int32_t seqid);
@@ -6028,6 +6297,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   int32_t RpcBasicOpenFile(const _Path& _path, const int32_t _flags) override;
   int32_t send_RpcBasicOpenFile(const _Path& _path, const int32_t _flags);
   int32_t recv_RpcBasicOpenFile(const int32_t seqid);
+  int32_t RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags) override;
+  int32_t send_RpcBasicOpenFileUnderPgData(const _Path& _path, const int32_t _flags);
+  int32_t recv_RpcBasicOpenFileUnderPgData(const int32_t seqid);
   int32_t RpcPgFdatasync(const _File _fd) override;
   int32_t send_RpcPgFdatasync(const _File _fd);
   int32_t recv_RpcPgFdatasync(const int32_t seqid);
