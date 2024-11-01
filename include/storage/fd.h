@@ -220,6 +220,10 @@ extern int data_sync_elevel(int elevel);
 
 extern int OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags);
 
+extern int OpenTransientFileUnderPgData_Rpc_Local(const char *fileName, int fileFlags);
+
+extern int BasicOpenFileUnderPgData_Rpc_Local(const char *fileName, int fileFlags);
+
 extern int CloseTransientFile_Rpc_Local(int fd);
 
 extern int BasicOpenFile_Rpc_Local(const char *fileName, int fileFlags);

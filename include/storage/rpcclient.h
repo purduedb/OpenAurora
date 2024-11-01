@@ -46,12 +46,14 @@ extern "C" {
     int32_t RpcFtruncate(const int _fd, const int64_t _offset);
     void RpcInitFile(char* _return, const char* _path);
     int RpcOpenTransientFile(const char* _filename, const int32_t _fileflags);
+    int RpcOpenTransientFileUnderPgData(const char* filename, const int32_t _fileflags); 
     int32_t RpcCloseTransientFile(const int _fd);
     int32_t RpcFileSync(const int _fd, const int32_t _wait_event_info);
     int32_t RpcPgPRead(const int _fd, char *p, const int32_t _amount, const int32_t _offset);
     int32_t RpcPgPWrite(const int _fd, char *p, const int32_t _amount, const int32_t _offset);
     int32_t RpcClose(const int _fd);
     int32_t RpcBasicOpenFile(char *path, int32_t _flags);
+    int32_t RpcBasicOpenFileUnderPgData(char *path, int32_t _flags); 
     int32_t RpcPgFdatasync(const int32_t _fd);
     int32_t RpcPgFsyncNoWritethrough(const int32_t _fd);
     int32_t RpcLseek(const int32_t _fd, const int64_t _offset, const int32_t _flag);

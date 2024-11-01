@@ -389,6 +389,30 @@ OpenTransientFile_Rpc_Local(const char *fileName, int fileFlags) {
 }
 
 int
+OpenTransientFileUnderPgData_Rpc_Local(const char *fileName, int fileFlags) {
+    if (IsRpcClient)
+        return RpcOpenTransientFileUnderPgData(fileName, fileFlags);
+    else {
+        char path[MAXPGPATH];
+        char * PGDATA = getenv("PGDATA");
+        snprintf(path, MAXPGPATH, "%s/%s", PGDATA, fileName);
+        return OpenTransientFile(path, fileFlags);
+    }
+}
+
+int
+BasicOpenFileUnderPgData_Rpc_Local(const char *fileName, int fileFlags) {
+    if (IsRpcClient)
+        return RpcBasicOpenFileUnderPgData(fileName, fileFlags);
+    else {
+        char path[MAXPGPATH];
+        char * PGDATA = getenv("PGDATA");
+        snprintf(path, MAXPGPATH, "%s/%s", PGDATA, fileName);
+        return BasicOpenFile(path, fileFlags);
+    }
+}
+
+int
 CloseTransientFile_Rpc_Local(int fd) {
     if (IsRpcClient)
         return RpcCloseTransientFile(fd);
