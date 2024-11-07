@@ -16,6 +16,7 @@ ibv_mr *mpc_idx_to_mr;
 HTAB *mpc_pid_to_idx;
 
 HTAB_VM *version_map;
+size_t *update_vm_info_ptr;
 
 bool *is_first_mpc, *is_first_mpc_connection;
 
@@ -103,6 +104,10 @@ void MemPoolClientShmemInit(){
 		ShmemInitVersionMap("MemPool Client VersionMap",
 						1 << 18, 1 << 20,
 						&info_vm, HASH_ELEM | HASH_BLOBS | HASH_FUNCTION | HASH_COMPARE);
+	update_vm_info_ptr = (size_t*)
+		ShmemInitStruct("MemPool Client VersionMap Info Pointer",
+						sizeof(size_t),
+						found_any, found_all);
 
 	if (found_any){
 		/* should find all of these, or none of them */
@@ -151,6 +156,8 @@ Size MemPoolClientShmemSize(void)
 	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(PATLookupEntry)));
 	
 	size = add_size(size, hash_estimate_size_vm(1 << 18, 1 << 22));
+
+	size = add_size(size, sizeof(size_t));
 
 	return size;
 }

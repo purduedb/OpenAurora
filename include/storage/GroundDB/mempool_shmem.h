@@ -40,6 +40,7 @@ typedef struct{
 
 extern PGDLLIMPORT bool *is_first_mpc, *is_first_mpc_connection;
 extern PGDLLIMPORT HTAB_VM *version_map;
+extern PGDLLIMPORT size_t *update_vm_info_ptr;
 
 extern void MemPoolClientShmemInit();
 
