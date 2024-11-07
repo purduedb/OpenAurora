@@ -32,7 +32,6 @@ public:
 
     DSMEngine::RDMA_Manager* rdma_mg;
     PageAddressTable pat;
-    size_t update_vm_info_ptr;
     // todo (te): asyncly do it with multiprocessing
     // DSMEngine::ThreadPool* thrd_pool;
 
@@ -72,10 +71,18 @@ MemPoolClient::MemPoolClient(){
     // thrd_pool->SetBackgroundThreads(5);
 
 	if(*is_first_mpc){
-		*is_first_mpc = false;
         pat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
+        while(!has_failed[0]){
+            if(FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
+                (*update_vm_info_ptr)++;
+            else
+                break;
+        }
+        if(has_failed[0])
+            goto exit;
+		*is_first_mpc = false;
 	}
     for(int i = 0; i < memnode_cnt; i++)
         if(!has_failed[i] && is_first_mpc_connection[i]){
@@ -1828,8 +1835,8 @@ void MemPoolSyncMain(){
                 while(true){
                     auto client = mempool::MemPoolClient::Get_Instance();
                     if(client == NULL) goto skip_mempool_sync;
-                    if(client->FetchUpdateVersionMapInfoFromMemoryPool(client->update_vm_info_ptr))
-                        client->update_vm_info_ptr++;
+                    if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
+                        (*update_vm_info_ptr)++;
                     else
                         break;
                 }
