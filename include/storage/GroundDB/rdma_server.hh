@@ -62,6 +62,7 @@ public:
     void fetch_xlog_info_handler(void* args);
     void flush_update_vm_info_handler(void* args);
     void fetch_update_vm_info_handler(void* args);
+    void get_first_update_vm_info_idx_handler(void* args);
 };
 
 

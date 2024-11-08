@@ -27,6 +27,7 @@ public:
 	void FetchXLogInfoFromMemoryPool();
     void FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
     int FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx);
+    size_t GetFirstUpdateVersionMapInfoIndex();
     static void Clear_Instance(bool disconnect);
     static void Clear_Instance_If_Failed();
 
@@ -74,7 +75,7 @@ MemPoolClient::MemPoolClient(){
         pat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
-        while(!has_failed[0]){
+        for(*update_vm_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){
             if(FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
                 (*update_vm_info_ptr)++;
             else
@@ -703,6 +704,35 @@ int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_
         ret = 1;
         InsertIntoVersionMap(res->info.page_id, res->info.lsn);
     }
+
+	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
+    return ret;
+}
+size_t mempool::MemPoolClient::GetFirstUpdateVersionMapInfoIndex(){
+    int ret = 0;
+	ibv_mr recv_mr, send_mr;
+
+	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
+	has_failed[0] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, 1);
+    if(has_failed[0]) return ret;
+	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
+	send_pointer->command = DSMEngine::get_first_update_vm_info_idx_;
+	send_pointer->buffer = recv_mr.addr;
+	send_pointer->rkey = recv_mr.rkey;
+	has_failed[0] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+    if(has_failed[0]) return ret;
+
+	ibv_wc wc[3] = {};
+	std::string qp_type("main");
+	has_failed[0] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+    if(has_failed[0]) return ret;
+	has_failed[0] |= rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
+    if(has_failed[0]) return ret;
+
+	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.get_first_update_vm_info_idx;
+    *update_vm_info_ptr = res->idx;
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
