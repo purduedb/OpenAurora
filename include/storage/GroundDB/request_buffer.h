@@ -68,5 +68,8 @@ struct fetch_update_vm_info_request{
 struct fetch_update_vm_info_response{
     UpdateVersionMapInfo info;
 };
+struct get_first_update_vm_info_idx_response{
+    size_t idx;
+};
 
 } // namespace mempool

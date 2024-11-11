@@ -130,6 +130,7 @@ enum RDMA_Command_Type {
     fetch_xlog_info_,
     flush_update_vm_info_,
     fetch_update_vm_info_,
+    get_first_update_vm_info_idx_,
 /*******/
     create_qp_,
     create_mr_,
@@ -180,6 +181,7 @@ union RDMA_Reply_Content {
     mempool::mr_info_response mr_info;
     mempool::fetch_xlog_info_response fetch_xlog_info;
     mempool::fetch_update_vm_info_response fetch_update_vm_info;
+    mempool::get_first_update_vm_info_idx_response get_first_update_vm_info_idx;
 /********/
     Registered_qp_config qp_config;
 };
