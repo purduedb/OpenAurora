@@ -81,7 +81,7 @@ void PageAddressTable::at(KeyType pid, RDMAReadPageInfo& info){
 void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
 	auto& page_id = mpc_idx_to_pid[mpc_pa_size[pa_idx] + pa_ofs];
-	if(KeyTypeEqualFunction()(page_id, pid)){
+	if(!KeyTypeEqualFunction()(page_id, pid)){
 		if(!KeyTypeEqualFunction()(page_id, nullKeyType)){
 			auto *result = (PATLookupEntry*)
 				hash_search_with_hash_value(mpc_pid_to_idx,
