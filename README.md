@@ -151,6 +151,20 @@ cd postgresql-13.0
 make
 make install
 ```
+
+If the ``./configure`` command fails with the following error message:
+```
+configure: error: C compiler cannot create executables
+See `config.log' for more details
+```
+This likely indicates that your server is missing necessary libraries specified in the ``./configure`` command, such as:
+``-lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread``
+To identify the missing library, you can temporarily remove specific libraries from the ``./configure`` command and test if it works. For example, to check if the issue is due to the absence of the ``-lrocksdb`` library, run:
+
+```
+./configure --prefix=$YOUR_INSTALL_LOCATION LDFLAGS='-std=c++17 -lstdc++ -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin'
+```
+If the command executes successfully, try installing the rocksdb library first.
 ## 5. Initialize a database for storage node
 ```
 cd $YOUR_INSTALL_LOCATION/bin
