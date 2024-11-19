@@ -8126,7 +8126,7 @@ StartupXLOG(void)
 //					checkXLogConsistency(xlogreader);
 
 				/* Pop the error context stack */
-//				error_context_stack = errcallback.previous;
+				error_context_stack = errcallback.previous;
 
 				/*
 				 * Update lastReplayedEndRecPtr after this record has been
