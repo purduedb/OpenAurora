@@ -64,6 +64,8 @@
 #define durable_rename_excl(_old, _new, _elevel) durable_rename_excl_rpc_local(_old, _new, _elevel)
 #endif
 
+extern int IsRpcClient;
+
 /* GUC variable */
 bool		ignore_invalid_pages = false;
 
@@ -548,7 +550,7 @@ XLogReadBufferExtended(RelFileNode rnode, ForkNumber forknum,
     fflush(stdout);
 #endif
 
-    if (blkno < lastblock)
+    if (blkno < lastblock || IsRpcClient > 2)
 	{
 #ifdef ENABLE_DEBUG_INFO
         printf("%s %d, start find page in buffer, mdnblock=%u, target=%u\n", __func__ , __LINE__, lastblock, blkno);
