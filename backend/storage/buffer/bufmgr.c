@@ -160,9 +160,6 @@ static bool IsForInput;
 /* local state for LockBufferForCleanup */
 static BufferDesc *PinCountWaitBuf = NULL;
 
-/*  */
-int expected_pin_count_when_xlog_replay = 1;
-
 /*
  * Backend-Private refcount management:
  *
@@ -948,9 +945,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
 								read_from_mempool = true;
 								*hit = 2;
-								expected_pin_count_when_xlog_replay = 2;
 								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
-								expected_pin_count_when_xlog_replay = 1;
 #ifndef MEMPOOL_CACHE_POLICY_DISJOINT
 								AsyncAccessPageOnMemoryPool(page_id);
 #else
@@ -3981,7 +3976,7 @@ LockBufferForCleanup(Buffer buffer)
 	if (BufferIsLocal(buffer))
 	{
 		/* There should be exactly one pin */
-		if (LocalRefCount[-buffer - 1] != expected_pin_count_when_xlog_replay)
+		if (LocalRefCount[-buffer - 1] != 1)
 			elog(ERROR, "incorrect local pin count: %d",
 				 LocalRefCount[-buffer - 1]);
 		/* Nobody else to wait for */
@@ -3989,7 +3984,7 @@ LockBufferForCleanup(Buffer buffer)
 	}
 
 	/* There should be exactly one local pin */
-	if (GetPrivateRefCount(buffer) != expected_pin_count_when_xlog_replay)
+	if (GetPrivateRefCount(buffer) != (MempoolClientReplaying ? 2 : 1))
 		elog(ERROR, "incorrect local pin count: %d",
 			 GetPrivateRefCount(buffer));
 
@@ -4129,7 +4124,7 @@ ConditionalLockBufferForCleanup(Buffer buffer)
 	/* There should be exactly one local pin */
 	refcount = GetPrivateRefCount(buffer);
 	Assert(refcount);
-	if (refcount != expected_pin_count_when_xlog_replay)
+	if (refcount != (MempoolClientReplaying ? 2 : 1))
 		return false;
 
 	/* Try to acquire lock */

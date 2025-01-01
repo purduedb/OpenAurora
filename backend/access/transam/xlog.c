@@ -8086,13 +8086,16 @@ StartupXLOG(void)
                                        tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->EndRecPtr);
                                 fflush(stdout);
 #endif
+								MempoolClientReplaying = true;
                                 XlogRedoSinglePage(xlogreader, &tempTag, &buff);
+								MempoolClientReplaying = false;
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                                 printf("%s %d, after redo, buffer lsn = %lu\n", __func__, __LINE__, PageGetLSN((Page) BufferGetPage(buff)));
                                 fflush(stdout);
 #endif
                                 // Now release and unlock the buff
                                 UnlockReleaseBuffer(buff);
+                                ReleaseBuffer(buff);
                             }
                         }
 
