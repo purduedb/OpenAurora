@@ -8825,11 +8825,10 @@ CheckRecoveryConsistency(void)
 		XLogCheckInvalidPages();
 
 		reachedConsistency = true;
-		if(IsRpcClient <= 2)
-			ereport(LOG,
-					(errmsg("consistent recovery state reached at %X/%X",
-							(uint32) (lastReplayedEndRecPtr >> 32),
-							(uint32) lastReplayedEndRecPtr)));
+		ereport(LOG,
+				(errmsg("consistent recovery state reached at %X/%X",
+						(uint32) (lastReplayedEndRecPtr >> 32),
+						(uint32) lastReplayedEndRecPtr)));
 	}
 
 	/*
