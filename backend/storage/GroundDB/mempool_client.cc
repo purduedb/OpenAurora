@@ -377,10 +377,7 @@ bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr curr
 	GetLSNListfromVersionMap(PageID, current_lsn, target_lsn, lsn_list);
 	LWLockRelease(mempool_client_version_map_lock);
 	if(lsn_list.size() > 0){
-		bool already_locked = LWLockHeldByMeInMode(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
-		if(already_locked) LWLockRelease(BufferDescriptorGetContentLock(bufHdr));
 		ApplyLSNListToPage(PageID, block, lsn_list);
-		if(already_locked) LWLockAcquire(BufferDescriptorGetContentLock(bufHdr), LW_EXCLUSIVE);
         MempoolClientReplaying = false;
 		return true;
 	}

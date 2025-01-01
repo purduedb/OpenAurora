@@ -1129,6 +1129,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
                  * If we get here, previous attempts to read the buffer must
                  * have failed ... but we shall bravely try again.
                  */
+				TerminateBufferIO(buf, false, 0);
                 return InvalidBuffer;
             }
         }
@@ -4003,7 +4004,7 @@ LockBufferForCleanup(Buffer buffer)
 		buf_state = LockBufHdr(bufHdr);
 
 		Assert(BUF_STATE_GET_REFCOUNT(buf_state) > 0);
-		if (BUF_STATE_GET_REFCOUNT(buf_state) == 1)
+		if (BUF_STATE_GET_REFCOUNT(buf_state) == 1 || (buf_state & BM_IO_IN_PROGRESS) != 0)
 		{
 			/* Successfully acquired exclusive lock with pincount 1 */
 			UnlockBufHdr(bufHdr, buf_state);
@@ -4128,7 +4129,7 @@ ConditionalLockBufferForCleanup(Buffer buffer)
 	/* There should be exactly one local pin */
 	refcount = GetPrivateRefCount(buffer);
 	Assert(refcount);
-	if (refcount != 1)
+	if (refcount != expected_pin_count_when_xlog_replay)
 		return false;
 
 	/* Try to acquire lock */
@@ -4140,7 +4141,7 @@ ConditionalLockBufferForCleanup(Buffer buffer)
 	refcount = BUF_STATE_GET_REFCOUNT(buf_state);
 
 	Assert(refcount > 0);
-	if (refcount == 1)
+	if (refcount == 1 || (buf_state & BM_IO_IN_PROGRESS) != 0)
 	{
 		/* Successfully acquired exclusive lock with pincount 1 */
 		UnlockBufHdr(bufHdr, buf_state);
