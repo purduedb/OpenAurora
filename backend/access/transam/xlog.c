@@ -8041,6 +8041,45 @@ StartupXLOG(void)
                     // Deal With HEAP: add VM blocks to xlogreader->decoded_block
                     polar_xlog_decode_data(xlogreader);
 
+					if(IsRpcClient > 2)
+						switch (record->xl_rmid) {
+							case RM_XLOG_ID:
+								polar_xlog_idx_save(xlogreader);
+								break;
+							case RM_HEAP2_ID:
+								polar_heap2_idx_save(xlogreader);
+								break;
+							case RM_HEAP_ID:
+								polar_heap_idx_save(xlogreader);
+								break;
+							case RM_BTREE_ID:
+								polar_btree_idx_save(xlogreader);
+								break;
+							case RM_HASH_ID:
+								polar_hash_idx_save(xlogreader);
+								break;
+							case RM_GIN_ID:
+								polar_gin_idx_save(xlogreader);
+								break;
+							case RM_GIST_ID:
+								polar_gist_idx_save(xlogreader);
+								break;
+							case RM_SEQ_ID:
+								polar_seq_idx_save(xlogreader);
+								break;
+							case RM_SPGIST_ID:
+								polar_spg_idx_save(xlogreader);
+								break;
+							case RM_BRIN_ID:
+								polar_brin_idx_save(xlogreader);
+								break;
+							case RM_GENERIC_ID:
+								polar_generic_idx_save(xlogreader);
+								break;
+							default:
+								break;
+						}
+
                     BufferTag * bufferTagList = NULL;
                     int tagNum;
                     int parsed = GetXlogBuffTagList(xlogreader, &bufferTagList, &tagNum);
@@ -13887,7 +13926,10 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
         fflush(stdout);
     }
 #endif
-    HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
+	if(IsRpcClient > 2)
+		InsertIntoVersionMap(key, record->ReadRecPtr);
+	else
+    	HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
 
 #ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {

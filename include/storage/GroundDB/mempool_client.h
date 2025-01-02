@@ -72,6 +72,7 @@ extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 extern void ASyncFlushPageToMemoryPool(char* src, KeyType PageID);;
 extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 
+extern void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn);
 extern void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn);
 
 extern void MemPoolSyncMain();
