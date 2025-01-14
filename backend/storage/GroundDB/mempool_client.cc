@@ -75,7 +75,7 @@ MemPoolClient::MemPoolClient(){
         pat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
-        for(*update_vm_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){
+        for(*update_vm_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
             if(FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
                 (*update_vm_info_ptr)++;
             else
@@ -671,7 +671,6 @@ void mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
-void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn);
 int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx){
     int ret = 0;
 	ibv_mr recv_mr, send_mr;
@@ -1856,18 +1855,19 @@ void MemPoolSyncMain(){
                 client->FetchXLogInfoFromMemoryPool();
             }
 
-            now = std::chrono::steady_clock::now();
-            if(now - last[2] >= interval[2]){
-                last[2] = now;
-                while(true){
-                    auto client = mempool::MemPoolClient::Get_Instance();
-                    if(client == NULL) goto skip_mempool_sync;
-                    if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
-                        (*update_vm_info_ptr)++;
-                    else
-                        break;
-                }
-            }
+            // todo (te): to remove; update interval_us
+            // now = std::chrono::steady_clock::now();
+            // if(now - last[2] >= interval[2]){
+            //     last[2] = now;
+            //     while(true){
+            //         auto client = mempool::MemPoolClient::Get_Instance();
+            //         if(client == NULL) goto skip_mempool_sync;
+            //         if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
+            //             (*update_vm_info_ptr)++;
+            //         else
+            //             break;
+            //     }
+            // }
         }
 
 skip_mempool_sync:

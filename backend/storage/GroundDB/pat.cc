@@ -12,7 +12,6 @@ bool KeyTypeEqualFunction::operator() (const KeyType &key1, const KeyType &key2)
         && key1.BlkNum == key2.BlkNum;
 }
 
-// todo (te): optimize locking mechanism
 size_t PageAddressTable::page_array_count(){
 	LWLockAcquire(mempool_client_pat_lock, LW_SHARED);
 	auto res = *mpc_pa_cnt;
