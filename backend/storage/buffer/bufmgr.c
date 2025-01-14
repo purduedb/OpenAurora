@@ -4026,7 +4026,7 @@ LockBufferForCleanup(Buffer buffer)
 		LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 
 		/* Wait to be signaled by UnpinBuffer() */
-		if (InHotStandby)
+		if (InHotStandby && IsRpcClient <= 2)
 		{
 			/* Report change to waiting status */
 			if (update_process_title && new_status == NULL)
