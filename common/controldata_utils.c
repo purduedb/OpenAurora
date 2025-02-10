@@ -197,6 +197,10 @@ void
 update_controlfile(const char *DataDir,
 				   ControlFileData *ControlFile, bool do_sync)
 {
+#ifdef RPC_REMOTE_DISK
+	if(IsRpcClient > 2)
+		return;
+#endif
 	int			fd;
 	char		buffer[PG_CONTROL_FILE_SIZE];
 	char		ControlFilePath[MAXPGPATH];
