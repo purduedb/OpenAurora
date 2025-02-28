@@ -909,7 +909,13 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * doing so defeats the 'delayed allocation' mechanism, leading to
 		 * increased file fragmentation.
 		 */
-		if(IsRpcClient > 1) toMarkDirty = true;
+		if(IsRpcClient > 1){
+			toMarkDirty = true;
+#ifdef MEMPOOL_CACHE_POLICY_COVERING
+			SyncFlushPageToMemoryPool(bufBlock, page_id);
+			toMarkDirty = false;
+#endif
+		}
 	}
 	else
 	{
@@ -959,13 +965,11 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 					if(!read_from_mempool){
 						RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
 						toMarkDirty = true;
-					}
 #ifdef MEMPOOL_CACHE_POLICY_COVERING
-					if(toMarkDirty){
 						SyncFlushPageToMemoryPool(bufBlock, page_id);
 						toMarkDirty = false;
-					}
 #endif
+					}
 				}
 				else
 					RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
