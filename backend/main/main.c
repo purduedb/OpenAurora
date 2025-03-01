@@ -22,6 +22,7 @@
 #include "tcop/storage_server.h"
 #include "storage/GroundDB/mempool_server.h"
 #include <unistd.h>
+#include "tcop/log_store.h"
 
 #if defined(__NetBSD__)
 #include <sys/param.h>
@@ -215,6 +216,10 @@ main(int argc, char *argv[])
 		MemPoolMain(argc, argv,
 					 NULL,		/* no dbname */
 					 strdup(get_user_name_or_exit(progname)));	/* does not return */
+	else if (argc > 1 && strcmp(argv[1], "--log-store") == 0)
+        LogStoreMain(argc, argv,
+                     NULL,      /* no dbname */
+                     strdup(get_user_name_or_exit(progname))); /* does not return */
     else
 		PostmasterMain(argc, argv); /* does not return */
 	abort();					/* should not get here */
