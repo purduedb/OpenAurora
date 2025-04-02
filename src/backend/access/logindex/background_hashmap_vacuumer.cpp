@@ -22,8 +22,7 @@
 #define ITER_BUCKET_INTERVAL 300
 #define ITER_HEAD_INTERVAL 300
 
-void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag);
-void BackgroundReplayHeadNode(HashNodeHead * head);
+void BackgroundReplayHeadNode(HashMap hashMap, HashNodeHead * head);
 
 //#define ENABLE_DEBUG_INFO2
 //
@@ -39,6 +38,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 
     while(1) { // Iterate all buckets
         usleep(300);
+        HashMapClearInactiveComputeNode(hashMap);
 //        printf("%s %d\n", __func__ , __LINE__);
 //        fflush(stdout);
         // Iterate every bucket one by one
@@ -114,7 +114,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
                 struct timeval now;
                 gettimeofday(&now, NULL);
                 if(now.tv_sec - headNodes[i]->finishVacuumTime.tv_sec >= ITER_HEAD_INTERVAL) {
-                    BackgroundReplayHeadNode(headNodes[i]);
+                    BackgroundReplayHeadNode(hashMap, headNodes[i]);
                     headNodes[i]->finishVacuumTime = now;
                 }
 
@@ -157,7 +157,7 @@ bool BackgroundHashMapCleanRocksdb(HashMap hashMap) {
 }
 
 // Before
-void BackgroundReplayHeadNode(HashNodeHead * head) {
+void BackgroundReplayHeadNode(HashMap hashMap, HashNodeHead * head) {
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
@@ -175,6 +175,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
 
     INIT_BUFFERTAG(bufferTag, rnode, (ForkNumber)head->key.ForkNum, head->key.BlkNum);
 
+    LsnEntry *toReplayedLsnEntry = NULL;
     // If all LSNs in head have been replayed, skip it
     if(replayedLsn < head->lsnEntry[head->entryNum-1].lsn) {
         for(int i = 0; i < head->entryNum; i++) {
@@ -184,6 +185,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
                 fflush(stdout);
 #endif
                 lsnList[listSize++] = head->lsnEntry[i].lsn;
+                toReplayedLsnEntry = &(head->lsnEntry[i]);
             }
             if(listSize >= MAX_REPLAY_VERSION_SIZE) {
                 break;
@@ -202,6 +204,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
            for(int i = 0; i < ele->entryNum; i++) {
                if(replayedLsn < ele->lsnEntry[i].lsn) {
                    lsnList[listSize++] = ele->lsnEntry[i].lsn;
+                   toReplayedLsnEntry = &(ele->lsnEntry[i]);
                }
                if(listSize >= MAX_REPLAY_VERSION_SIZE) {
                    break;
@@ -210,19 +213,9 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
 
            // Check whether we have collected enough version LSNs
            if(listSize == MAX_REPLAY_VERSION_SIZE) {
-
-               if(lsnList[listSize-1] == ele->lsnEntry[ele->entryNum-1].lsn
-                    && ele->nextEle != NULL) {
-                   VacuumHashNode(head, ele, bufferTag);
-               }
                break;
            }
         }
-
-        if(ele->nextEle != NULL) { // If there have following nodes, free the current ele node
-            VacuumHashNode(head, ele, bufferTag);
-        }
-
         ele = nextEle;
     }
 
@@ -246,8 +239,7 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
         }
 
         PutPage2Rocksdb(bufferTag, lsnList[listSize-1], replayedPage);
-        if(replayedLsn > 0)
-            DeletePageFromRocksdb(bufferTag, replayedLsn);
+        toReplayedLsnEntry->materialized = true;
         head->replayedLsn = lsnList[listSize-1];
         free(replayedPage);
 //        printf("%s %d, applyed %d xlogs for page\n", __func__ , __LINE__, listSize);
@@ -256,57 +248,13 @@ void BackgroundReplayHeadNode(HashNodeHead * head) {
         printf("%s %d\n", __func__ , __LINE__);
         fflush(stdout);
 #endif
-        return;
     }
 
 #ifdef ENABLE_DEBUG_INFO
     printf("%s %d\n", __func__ , __LINE__);
     fflush(stdout);
 #endif
+    HashMapGarbageCollectNode(hashMap, head);
 
     return;
 }
-
-
-// Delete corresponding RocksDb pages and hashNodeEle
-// Should remember ele->prev/next in advance, ele will be erased in this func
-void VacuumHashNode(HashNodeHead* head, HashNodeEle* ele, BufferTag bufferTag) {
-//    for(int i = 0; i < ele->entryNum; i++) {
-//        DeletePageFromRocksdb(bufferTag, ele->lsnEntry[i].lsn);
-//    }
-    if(ele == head->nextEle) { // if it is the first node
-        head->nextEle = ele->nextEle;
-        if(ele->nextEle != NULL) {
-            ele->nextEle->prevEle = NULL;
-        }
-    } else {
-        ele->prevEle->nextEle = ele->nextEle;
-        if(ele->nextEle != NULL) {
-            ele->nextEle->prevEle = ele->prevEle;
-        }
-    }
-    free(ele);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

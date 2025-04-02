@@ -314,6 +314,9 @@ GetBackendTypeDesc(BackendType backendType)
 		case B_LOGGER:
 			backendDesc = "logger";
 			break;
+		case B_MP_SYNC:
+			backendDesc = "mempool synchronizer";
+			break;
 	}
 
 	return backendDesc;

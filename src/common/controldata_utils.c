@@ -244,6 +244,10 @@ void
 update_controlfile(const char *DataDir,
 				   ControlFileData *ControlFile, bool do_sync)
 {
+#ifdef RPC_REMOTE_DISK
+ 	if(IsRpcClient > 2)
+ 		return;
+#endif
 #ifdef FRONTEND
 	printf("%s %s started with Frontend\n", __FILE__, __func__);
 	fflush(stdout);

@@ -1151,18 +1151,18 @@ polar_btree_xlog_insert_get_bufftag_list(bool isleaf, bool ismeta, XLogReaderSta
     if (!isleaf) {
 //        ParseXLogBlocksLsn(record, 1);
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 //    ParseXLogBlocksLsn(record, 0);
 
     if (ismeta) {
         XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 //        ParseXLogBlocksLsn(record, 2);
     }
@@ -1196,25 +1196,25 @@ polar_btree_xlog_split_get_bufftag_list(XLogReaderState *record, BufferTag** buf
 
     if (XLogRecHasBlockRef(record, 3)) {
         XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 3);
     }
 
     XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 //    ParseXLogBlocksLsn(record, 1);
 //    ParseXLogBlocksLsn(record, 0);
 
     if (XLogRecHasBlockRef(record, 2)) {
         XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 2);
@@ -1254,25 +1254,25 @@ polar_btree_xlog_unlink_page_get_bufftag_list(uint8 info, XLogReaderState *recor
 
 //    ParseXLogBlocksLsn(record, 2);
     XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     if (XLogRecHasBlockRef(record, 1)) {
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 1);
     }
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 //    ParseXLogBlocksLsn(record, 0);
 
     if (XLogRecHasBlockRef(record, 3)) {
         XLogRecGetBlockTag(record, 3, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 
 //        ParseXLogBlocksLsn(record, 3);
@@ -1280,7 +1280,7 @@ polar_btree_xlog_unlink_page_get_bufftag_list(uint8 info, XLogReaderState *recor
 
     if (info == XLOG_BTREE_UNLINK_PAGE_META) {
         XLogRecGetBlockTag(record, 4, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
 //        ParseXLogBlocksLsn(record, 4);
     }
@@ -1342,7 +1342,7 @@ polar_btree_xlog_newroot_get_bufftag_list(XLogReaderState *record, BufferTag** b
     *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 3);
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 //    ParseXLogBlocksLsn(record, 0);
 
@@ -1350,12 +1350,12 @@ polar_btree_xlog_newroot_get_bufftag_list(XLogReaderState *record, BufferTag** b
 //        ParseXLogBlocksLsn(record, 1);
 
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
 
     XLogRecGetBlockTag(record, 2, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 //    ParseXLogBlocksLsn(record, 2);
 
@@ -1465,7 +1465,7 @@ polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagL
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
 //            ParseXLogBlocksLsn(record, 0);
             break;
@@ -1474,7 +1474,7 @@ polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagL
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
 //            ParseXLogBlocksLsn(record, 0);
             break;
@@ -1483,7 +1483,7 @@ polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagL
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
 //            ParseXLogBlocksLsn(record, 0);
             break;
@@ -1492,10 +1492,10 @@ polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagL
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
 
             XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[1], rnode, forkNumber, blockNumber);
             *tagNum = 2;
 //            ParseXLogBlocksLsn(record, 1);
 //            ParseXLogBlocksLsn(record, 0);
@@ -1517,7 +1517,7 @@ polar_btree_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagL
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
 //            ParseXLogBlocksLsn(record, 0);
             break;

@@ -17,6 +17,7 @@ OBJS = \
 	buf_table.o \
 	bufmgr.o \
 	freelist.o \
-	localbuf.o
+	localbuf.o \
+	mempool_shmem.o
 
 include $(top_srcdir)/src/backend/common.mk

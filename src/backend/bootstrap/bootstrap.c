@@ -50,6 +50,7 @@
 #include "utils/ps_status.h"
 #include "utils/rel.h"
 #include "utils/relmapper.h"
+#include "storage/GroundDB/mempool_client.h"
 
 uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
@@ -333,6 +334,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case WalReceiverProcess:
 			MyBackendType = B_WAL_RECEIVER;
 			break;
+		case MemPoolSyncProcess:
+			MyBackendType = B_MP_SYNC;
+			break;
 		default:
 			MyBackendType = B_INVALID;
 	}
@@ -467,6 +471,11 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case WalReceiverProcess:
 			WalReceiverMain();
 			proc_exit(1);
+
+		case MemPoolSyncProcess:
+			/* don't set signals, mempool synchronizer has its own agenda */
+			MemPoolSyncMain();
+			proc_exit(1);		/* should never return */
 
 		default:
 			elog(PANIC, "unrecognized process type: %d", (int) MyAuxProcType);

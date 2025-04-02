@@ -41,6 +41,8 @@ class DataPageAccessIf {
    * @param _lsn
    */
   virtual void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) = 0;
+  virtual int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn) = 0;
+  virtual void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn) = 0;
   virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) = 0;
   virtual int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
   virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
@@ -119,6 +121,13 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
  public:
   virtual ~DataPageAccessNull() {}
   void ReadBufferCommon(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _relpersistence */, const int32_t /* _forknum */, const int32_t /* _blknum */, const int32_t /* _readBufferMode */, const int64_t /* _lsn */) {
+    return;
+  }
+  int32_t RpcRegisterSecondaryNode(const bool /* _primary */, const int64_t /* _lsn */) {
+    int32_t _return = 0;
+    return _return;
+  }
+  void RpcSecondaryNodeUpdatesLsn(const int32_t /* _node_id */, const int64_t /* _lsn */) {
     return;
   }
   void RpcMdRead(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _blknum */, const int64_t /* _lsn */) {
@@ -410,6 +419,210 @@ class DataPageAccess_ReadBufferCommon_presult {
   _Page* success;
 
   _DataPageAccess_ReadBufferCommon_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcRegisterSecondaryNode_args__isset {
+  _DataPageAccess_RpcRegisterSecondaryNode_args__isset() : _primary(false), _lsn(false) {}
+  bool _primary :1;
+  bool _lsn :1;
+} _DataPageAccess_RpcRegisterSecondaryNode_args__isset;
+
+class DataPageAccess_RpcRegisterSecondaryNode_args {
+ public:
+
+  DataPageAccess_RpcRegisterSecondaryNode_args(const DataPageAccess_RpcRegisterSecondaryNode_args&);
+  DataPageAccess_RpcRegisterSecondaryNode_args& operator=(const DataPageAccess_RpcRegisterSecondaryNode_args&);
+  DataPageAccess_RpcRegisterSecondaryNode_args() : _primary(0), _lsn(0) {
+  }
+
+  virtual ~DataPageAccess_RpcRegisterSecondaryNode_args() noexcept;
+  bool _primary;
+  int64_t _lsn;
+
+  _DataPageAccess_RpcRegisterSecondaryNode_args__isset __isset;
+
+  void __set__primary(const bool val);
+
+  void __set__lsn(const int64_t val);
+
+  bool operator == (const DataPageAccess_RpcRegisterSecondaryNode_args & rhs) const
+  {
+    if (!(_primary == rhs._primary))
+      return false;
+    if (!(_lsn == rhs._lsn))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcRegisterSecondaryNode_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcRegisterSecondaryNode_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcRegisterSecondaryNode_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcRegisterSecondaryNode_pargs() noexcept;
+  const bool* _primary;
+  const int64_t* _lsn;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcRegisterSecondaryNode_result__isset {
+  _DataPageAccess_RpcRegisterSecondaryNode_result__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcRegisterSecondaryNode_result__isset;
+
+class DataPageAccess_RpcRegisterSecondaryNode_result {
+ public:
+
+  DataPageAccess_RpcRegisterSecondaryNode_result(const DataPageAccess_RpcRegisterSecondaryNode_result&);
+  DataPageAccess_RpcRegisterSecondaryNode_result& operator=(const DataPageAccess_RpcRegisterSecondaryNode_result&);
+  DataPageAccess_RpcRegisterSecondaryNode_result() : success(0) {
+  }
+
+  virtual ~DataPageAccess_RpcRegisterSecondaryNode_result() noexcept;
+  int32_t success;
+
+  _DataPageAccess_RpcRegisterSecondaryNode_result__isset __isset;
+
+  void __set_success(const int32_t val);
+
+  bool operator == (const DataPageAccess_RpcRegisterSecondaryNode_result & rhs) const
+  {
+    if (!(success == rhs.success))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcRegisterSecondaryNode_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcRegisterSecondaryNode_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+typedef struct _DataPageAccess_RpcRegisterSecondaryNode_presult__isset {
+  _DataPageAccess_RpcRegisterSecondaryNode_presult__isset() : success(false) {}
+  bool success :1;
+} _DataPageAccess_RpcRegisterSecondaryNode_presult__isset;
+
+class DataPageAccess_RpcRegisterSecondaryNode_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcRegisterSecondaryNode_presult() noexcept;
+  int32_t* success;
+
+  _DataPageAccess_RpcRegisterSecondaryNode_presult__isset __isset;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+typedef struct _DataPageAccess_RpcSecondaryNodeUpdatesLsn_args__isset {
+  _DataPageAccess_RpcSecondaryNodeUpdatesLsn_args__isset() : _node_id(false), _lsn(false) {}
+  bool _node_id :1;
+  bool _lsn :1;
+} _DataPageAccess_RpcSecondaryNodeUpdatesLsn_args__isset;
+
+class DataPageAccess_RpcSecondaryNodeUpdatesLsn_args {
+ public:
+
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_args(const DataPageAccess_RpcSecondaryNodeUpdatesLsn_args&);
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_args& operator=(const DataPageAccess_RpcSecondaryNodeUpdatesLsn_args&);
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_args() : _node_id(0), _lsn(0) {
+  }
+
+  virtual ~DataPageAccess_RpcSecondaryNodeUpdatesLsn_args() noexcept;
+  int32_t _node_id;
+  int64_t _lsn;
+
+  _DataPageAccess_RpcSecondaryNodeUpdatesLsn_args__isset __isset;
+
+  void __set__node_id(const int32_t val);
+
+  void __set__lsn(const int64_t val);
+
+  bool operator == (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_args & rhs) const
+  {
+    if (!(_node_id == rhs._node_id))
+      return false;
+    if (!(_lsn == rhs._lsn))
+      return false;
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcSecondaryNodeUpdatesLsn_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcSecondaryNodeUpdatesLsn_pargs() noexcept;
+  const int32_t* _node_id;
+  const int64_t* _lsn;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcSecondaryNodeUpdatesLsn_result {
+ public:
+
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_result(const DataPageAccess_RpcSecondaryNodeUpdatesLsn_result&);
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_result& operator=(const DataPageAccess_RpcSecondaryNodeUpdatesLsn_result&);
+  DataPageAccess_RpcSecondaryNodeUpdatesLsn_result() {
+  }
+
+  virtual ~DataPageAccess_RpcSecondaryNodeUpdatesLsn_result() noexcept;
+
+  bool operator == (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_result & /* rhs */) const
+  {
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcSecondaryNodeUpdatesLsn_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcSecondaryNodeUpdatesLsn_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcSecondaryNodeUpdatesLsn_presult() noexcept;
 
   uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
 
@@ -5097,6 +5310,12 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   void send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   void recv_ReadBufferCommon(_Page& _return);
+  int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn);
+  void send_RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn);
+  int32_t recv_RpcRegisterSecondaryNode();
+  void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
+  void send_RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
+  void recv_RpcSecondaryNodeUpdatesLsn();
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return);
@@ -5243,6 +5462,8 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   typedef std::map<std::string, ProcessFunction> ProcessMap;
   ProcessMap processMap_;
   void process_ReadBufferCommon(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcRegisterSecondaryNode(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcSecondaryNodeUpdatesLsn(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdNblocks(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdExists(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -5289,6 +5510,8 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   DataPageAccessProcessor(::std::shared_ptr<DataPageAccessIf> iface) :
     iface_(iface) {
     processMap_["ReadBufferCommon"] = &DataPageAccessProcessor::process_ReadBufferCommon;
+    processMap_["RpcRegisterSecondaryNode"] = &DataPageAccessProcessor::process_RpcRegisterSecondaryNode;
+    processMap_["RpcSecondaryNodeUpdatesLsn"] = &DataPageAccessProcessor::process_RpcSecondaryNodeUpdatesLsn;
     processMap_["RpcMdRead"] = &DataPageAccessProcessor::process_RpcMdRead;
     processMap_["RpcMdNblocks"] = &DataPageAccessProcessor::process_RpcMdNblocks;
     processMap_["RpcMdExists"] = &DataPageAccessProcessor::process_RpcMdExists;
@@ -5380,6 +5603,24 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
     }
     ifaces_[i]->ReadBufferCommon(_return, _reln, _relpersistence, _forknum, _blknum, _readBufferMode, _lsn);
     return;
+  }
+
+  int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcRegisterSecondaryNode(_primary, _lsn);
+    }
+    return ifaces_[i]->RpcRegisterSecondaryNode(_primary, _lsn);
+  }
+
+  void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn) {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcSecondaryNodeUpdatesLsn(_node_id, _lsn);
+    }
+    ifaces_[i]->RpcSecondaryNodeUpdatesLsn(_node_id, _lsn);
   }
 
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
@@ -5821,6 +6062,12 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   int32_t send_ReadBufferCommon(const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn);
   void recv_ReadBufferCommon(_Page& _return, const int32_t seqid);
+  int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn);
+  int32_t send_RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn);
+  int32_t recv_RpcRegisterSecondaryNode(const int32_t seqid);
+  void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
+  int32_t send_RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
+  void recv_RpcSecondaryNodeUpdatesLsn(const int32_t seqid);
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   int32_t send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return, const int32_t seqid);

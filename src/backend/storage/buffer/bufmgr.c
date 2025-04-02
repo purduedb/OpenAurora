@@ -37,6 +37,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/storage.h"
+#include "catalog/pg_namespace.h"
 #include "executor/instrument.h"
 #include "lib/binaryheap.h"
 #include "miscadmin.h"
@@ -55,6 +56,7 @@
 #include "utils/resowner_private.h"
 #include "utils/timestamp.h"
 #include "storage/rpcclient.h"
+#include "storage/GroundDB/mempool_client.h"
 
 
 /* Note: these two macros only work on shared buffers, not local ones! */
@@ -750,7 +752,7 @@ Buffer
 ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 				   ReadBufferMode mode, BufferAccessStrategy strategy)
 {
-	bool		hit;
+	char		hit;
 	Buffer		buf;
 
 	/*
@@ -770,8 +772,26 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	pgstat_count_buffer_read(reln);
 	buf = ReadBuffer_common(RelationGetSmgr(reln), reln->rd_rel->relpersistence,
 							forkNum, blockNum, mode, strategy, &hit);
-	if (hit)
+	if (hit == 1)
 		pgstat_count_buffer_hit(reln);
+#ifdef USE_MEMPOOL_STAT
+	if ((reln->rd_rel->relkind == RELKIND_RELATION
+		|| reln->rd_rel->relkind == RELKIND_MATVIEW
+		|| reln->rd_rel->relkind == RELKIND_TOASTVALUE)
+		&& RelationGetNamespace(reln) != PG_CATALOG_NAMESPACE
+		&& RelationGetNamespace(reln) != PG_TOAST_NAMESPACE
+		// && RelationGetNamespace(reln) != get_namespace_oid("information_schema", true)
+	){
+    	LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
+		if (hit == 1)
+			(*mpLocalCnt)++;
+		else if (hit == 2)
+			(*mpMemCnt)++;
+		else
+			(*mpStoCnt)++;
+    	LWLockRelease(mempool_client_stat_lock);
+	}
+#endif
 	return buf;
 }
 
@@ -809,7 +829,7 @@ ReadBufferWithoutRelcache(RelFileNode rnode, ForkNumber forkNum,
 Buffer
 ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 				  BlockNumber blockNum, ReadBufferMode mode,
-				  BufferAccessStrategy strategy, bool *hit)
+				  BufferAccessStrategy strategy, char *hit)
 {
 	BufferDesc *bufHdr;
 	Block		bufBlock;
@@ -979,6 +999,8 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	bufBlock = isLocalBuf ? LocalBufHdrGetBlock(bufHdr) : BufHdrGetBlock(bufHdr);
 
+	bool toMarkDirty = false;
+
 	if (isExtend)
 	{
 		/* new buffers are zero-filled */
@@ -992,6 +1014,13 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * doing so defeats the 'delayed allocation' mechanism, leading to
 		 * increased file fragmentation.
 		 */
+		if(IsRpcClient > 1){
+			toMarkDirty = true;
+#ifdef MEMPOOL_CACHE_POLICY_COVERING
+			SyncFlushPageToMemoryPool(bufBlock, page_id);
+			toMarkDirty = false;
+#endif
+		}
 	}
 	else
 	{
@@ -1008,9 +1037,48 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 			if (track_io_timing)
 				INSTR_TIME_SET_CURRENT(io_start);
-
-			if(IsRpcClient)
-                RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+			if(IsRpcClient){
+				if(IsRpcClient > 1){
+					bool read_from_mempool = false;
+					KeyType page_id = {
+						smgr->smgr_rnode.node.spcNode,
+						smgr->smgr_rnode.node.dbNode,
+						smgr->smgr_rnode.node.relNode,
+						forkNum,
+						blockNum
+					};
+					RDMAReadPageInfo rdma_read_info;
+					if(PageExistsInMemPool(page_id, &rdma_read_info)){
+						Assert(DataChecksumsEnabled());
+						if(FetchPageFromMemoryPool((char*)bufBlock, page_id, &rdma_read_info)
+						&& PageFromMemPoolIsVerified((Page)bufBlock, blockNum)){
+							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
+							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
+								read_from_mempool = true;
+								*hit = 2;
+								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
+#ifndef MEMPOOL_CACHE_POLICY_DISJOINT
+								AsyncAccessPageOnMemoryPool(page_id);
+#else
+								AsyncRemovePageOnMemoryPool(page_id);
+#endif
+							}
+						}
+						else
+							AsyncGetNewestPageAddressTable();
+					}
+					if(!read_from_mempool){
+						RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+						toMarkDirty = true;
+#ifdef MEMPOOL_CACHE_POLICY_COVERING
+						SyncFlushPageToMemoryPool(bufBlock, page_id);
+						toMarkDirty = false;
+#endif
+					}
+				}
+				else
+					RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+			}
 			else
 			    smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
 
@@ -1072,7 +1140,9 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	else
 	{
 		/* Set BM_VALID, terminate IO, and wake up any waiters */
-		TerminateBufferIO(bufHdr, false, BM_VALID);
+		uint32 set_flag_bits = BM_VALID;
+		if(toMarkDirty) set_flag_bits |= BM_DIRTY;
+		TerminateBufferIO(bufHdr, false, set_flag_bits);
 	}
 
 	VacuumPageMiss++;
@@ -1164,6 +1234,7 @@ FindPageInBuffer(RelFileNode rnode, ForkNumber forkNumber, BlockNumber blockNumb
                  * If we get here, previous attempts to read the buffer must
                  * have failed ... but we shall bravely try again.
                  */
+				TerminateBufferIO(buf, false, 0);
                 return InvalidBuffer;
             }
         }
@@ -1307,7 +1378,11 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * won't prevent hint-bit updates).  We will recheck the dirty bit
 		 * after re-locking the buffer header.
 		 */
+#ifdef MEMPOOL_CACHE_POLICY_DISJOINT
+		if (IsRpcClient > 1 || (oldFlags & BM_DIRTY))
+#else
 		if (oldFlags & BM_DIRTY)
+#endif
 		{
 			/*
 			 * We need a share-lock on the buffer contents to write it out
@@ -1359,6 +1434,16 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 														  smgr->smgr_rnode.node.dbNode,
 														  smgr->smgr_rnode.node.relNode);
 
+#ifdef MEMPOOL_CACHE_POLICY_DISJOINT
+				if(IsRpcClient > 1)
+					SyncFlushPageToMemoryPool(BufHdrGetBlock(buf), (KeyType){
+						buf->tag.rnode.spcNode,
+						buf->tag.rnode.dbNode,
+						buf->tag.rnode.relNode,
+						buf->tag.forkNum,
+						buf->tag.blockNum,
+					});
+#endif
 				FlushBuffer(buf, NULL);
 				LWLockRelease(BufferDescriptorGetContentLock(buf));
 
@@ -4215,7 +4300,7 @@ LockBufferForCleanup(Buffer buffer)
 	}
 
 	/* There should be exactly one local pin */
-	if (GetPrivateRefCount(buffer) != 1)
+	if (GetPrivateRefCount(buffer) != (MempoolClientReplaying ? 2 : 1))
 		elog(ERROR, "incorrect local pin count: %d",
 			 GetPrivateRefCount(buffer));
 
@@ -4230,7 +4315,7 @@ LockBufferForCleanup(Buffer buffer)
 		buf_state = LockBufHdr(bufHdr);
 
 		Assert(BUF_STATE_GET_REFCOUNT(buf_state) > 0);
-		if (BUF_STATE_GET_REFCOUNT(buf_state) == 1)
+		if (BUF_STATE_GET_REFCOUNT(buf_state) == 1 || (buf_state & BM_IO_IN_PROGRESS) != 0)
 		{
 			/* Successfully acquired exclusive lock with pincount 1 */
 			UnlockBufHdr(bufHdr, buf_state);
@@ -4267,7 +4352,7 @@ LockBufferForCleanup(Buffer buffer)
 		LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 
 		/* Wait to be signaled by UnpinBuffer() */
-		if (InHotStandby)
+		if (InHotStandby && IsRpcClient <= 2)
 		{
 			/* Report change to waiting status */
 			if (update_process_title && new_status == NULL)
@@ -4393,7 +4478,7 @@ ConditionalLockBufferForCleanup(Buffer buffer)
 	/* There should be exactly one local pin */
 	refcount = GetPrivateRefCount(buffer);
 	Assert(refcount);
-	if (refcount != 1)
+	if (refcount != (MempoolClientReplaying ? 2 : 1))
 		return false;
 
 	/* Try to acquire lock */
@@ -4405,7 +4490,7 @@ ConditionalLockBufferForCleanup(Buffer buffer)
 	refcount = BUF_STATE_GET_REFCOUNT(buf_state);
 
 	Assert(refcount > 0);
-	if (refcount == 1)
+	if (refcount == 1 || (buf_state & BM_IO_IN_PROGRESS) != 0)
 	{
 		/* Successfully acquired exclusive lock with pincount 1 */
 		UnlockBufHdr(bufHdr, buf_state);

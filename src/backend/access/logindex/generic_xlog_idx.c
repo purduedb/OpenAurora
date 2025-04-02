@@ -38,7 +38,7 @@ polar_generic_idx_get_bufftag_list(XLogReaderState *record, BufferTag** bufferta
         if (XLogRecHasBlockRef(record, block_id)) {
             XLogRecGetBlockTag(record, block_id, &rnode, &forkNumber, &blockNumber);
 
-            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
             tagCount++;
         }
     }

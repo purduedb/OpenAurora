@@ -109,7 +109,7 @@ polar_seq_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLis
 			*buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
 			XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-			INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+			INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
 			*tagNum = 1;
 //			ParseXLogBlocksLsn(record, 0);
 			break;

@@ -25,6 +25,7 @@
 #include "storage/rpcmd.h"
 #include "storage/smgr.h"
 #include "storage/rpcclient.h"
+#include "storage/GroundDB/mempool_client.h"
 #include "utils/hsearch.h"
 #include "utils/inval.h"
 #include <pthread.h>
@@ -103,6 +104,23 @@ static const f_smgr smgrsw[] = {
         .smgr_nblocks = rpcmdnblocks,
         .smgr_truncate = rpcmdtruncate,
         .smgr_immedsync = rpcmdimmedsync,
+    },
+    {
+        .smgr_init = rpcmdinit,
+        .smgr_shutdown = NULL,
+        .smgr_open = rpcmdopen,
+        .smgr_close = rpcmdclose,
+        .smgr_create = rpcmdcreate,
+        .smgr_exists = rpcmdexists,
+        .smgr_unlink = rpcmdunlink,
+        .smgr_extend = rpcmdextend,
+        .smgr_prefetch = rpcmdprefetch,
+        .smgr_read = rpcmdread,
+        .smgr_write = MemPoolmdwrite,
+        .smgr_writeback = rpcmdwriteback,
+        .smgr_nblocks = rpcmdnblocks,
+        .smgr_truncate = rpcmdtruncate,
+        .smgr_immedsync = rpcmdimmedsync,
     }
 };
 
@@ -134,7 +152,7 @@ smgrinit(void)
     char *pgRpcClient = getenv("RPC_CLIENT");
 
     if(pgRpcClient != NULL) {
-        IsRpcClient = 1;
+        IsRpcClient = strtol(pgRpcClient, NULL, 10);
     }
 
 	int			i;
@@ -207,7 +225,9 @@ smgropen(RelFileNode rnode, BackendId backend)
 		for (int i = 0; i <= MAX_FORKNUM; ++i)
 			reln->smgr_cached_nblocks[i] = InvalidBlockNumber;
 
-        if(IsRpcClient)
+        if(IsRpcClient > 1)
+			reln->smgr_which = 2;
+		else if(IsRpcClient)
             reln->smgr_which = 1;
         else
     		reln->smgr_which = 0;	/* we only have md.c at present */

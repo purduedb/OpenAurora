@@ -20,6 +20,7 @@ SUBDIRS     = \
 	cache \
 	error \
 	fmgr \
+	GroundDB \
 	hash \
 	init \
 	mb \

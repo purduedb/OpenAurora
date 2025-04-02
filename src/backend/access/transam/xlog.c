@@ -93,6 +93,8 @@
 #include "storage/rpcclient.h"
 #include "storage/rel_cache.h"
 
+#include "storage/GroundDB/mempool_client.h"
+
 //#define ITER_TIMING
 #ifdef ITER_TIMING
 #include <sys/time.h>
@@ -210,6 +212,8 @@ extern bool	am_wal_redo_postgres;
 extern HashMap pageVersionHashMap;
 
 extern uint64_t RpcXLogFlushedLsn;
+
+extern bool MempoolClientReplaying;
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
 #define RECOVERY_COMMAND_DONE	"recovery.done"
@@ -1336,6 +1340,9 @@ XLogInsertRecord(XLogRecData *rdata,
 		COMP_CRC32C(rdata_crc, rechdr, offsetof(XLogRecord, xl_crc));
 		FIN_CRC32C(rdata_crc);
 		rechdr->xl_crc = rdata_crc;
+
+		if(IsRpcClient > 1)
+			UpdateVersionMap(rdata, StartPos);
 
 		/*
 		 * All the record data, including the header, is now ready to be
@@ -4164,8 +4171,14 @@ XLogFileReadAnyTLI(XLogSegNo segno, int emode, XLogSource source)
 	 */
 	if (expectedTLEs)
 		tles = expectedTLEs;
-	else
+	else{
+		MemoryContext original_ctx;
+		if(MempoolClientReplaying)
+			original_ctx = MemoryContextSwitchTo(TopMemoryContext);
 		tles = readTimeLineHistory(recoveryTargetTLI);
+		if(MempoolClientReplaying)
+			MemoryContextSwitchTo(original_ctx);
+	}
 
 #ifdef ENABLE_DEBUG_INFO
     printf("pid=%d, %s %s %d\n", getpid(), __func__ , __FILE__, __LINE__);
@@ -4809,7 +4822,7 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			 * StandbyMode that only happens if we have been triggered, so we
 			 * shouldn't loop anymore in that case.
 			 */
-			if (!IsRpcServer && errormsg)
+			if (!IsRpcServer && IsRpcClient <= 2 && errormsg)
 				ereport(emode_for_corrupt_record(emode, EndRecPtr),
 						(errmsg_internal("%s", errormsg) /* already translated */ ));
 #ifdef ENABLE_DEBUG_INFO
@@ -4925,7 +4938,7 @@ ReadRecord(XLogReaderState *xlogreader, int emode,
 			/* In standby mode, loop back to retry. Otherwise, give up. */
 			if (StandbyMode && !CheckForStandbyTrigger())
 				continue;
-            if (IsRpcServer) // Rpc Server will retry to read via RPC messages
+            if (IsRpcServer || IsRpcClient > 2) // Rpc Server will retry to read via RPC messages
                 continue;
 			else
 				return NULL;
@@ -4960,9 +4973,14 @@ rescanLatestTimeLine(void)
 	/*
 	 * Determine the list of expected TLIs for the new TLI
 	 */
+	MemoryContext original_ctx;
+	if(MempoolClientReplaying)
+		original_ctx = MemoryContextSwitchTo(TopMemoryContext);
 
 	newExpectedTLEs = readTimeLineHistory(newtarget);
 
+	if(MempoolClientReplaying)
+		MemoryContextSwitchTo(original_ctx);
 	/*
 	 * If the current timeline is not part of the history of the new timeline,
 	 * we cannot proceed to it.
@@ -6931,6 +6949,15 @@ ReadControlFileTimeLine(void) {
 #endif
 }
 
+XLogReaderState *
+XLogReaderAllocateForMemPool(void **private_data){
+	*private_data = malloc(sizeof(XLogPageReadPrivate));
+	MemSet(*private_data, 0, sizeof(XLogPageReadPrivate));
+	return XLogReaderAllocate(wal_segment_size, NULL,
+		XL_ROUTINE(.page_read = &XLogPageRead, .segment_open = NULL, .segment_close = wal_segment_close),
+		*private_data);
+}
+
 /*
  * This must be called ONCE during postmaster or standalone-backend startup
  */
@@ -8263,6 +8290,45 @@ StartupXLOG(void)
                     // Deal With HEAP: add VM blocks to xlogreader->decoded_block
                     polar_xlog_decode_data(xlogreader);
 
+					if(IsRpcClient > 2)
+						switch (record->xl_rmid) {
+							case RM_XLOG_ID:
+								polar_xlog_idx_save(xlogreader);
+								break;
+							case RM_HEAP2_ID:
+								polar_heap2_idx_save(xlogreader);
+								break;
+							case RM_HEAP_ID:
+								polar_heap_idx_save(xlogreader);
+								break;
+							case RM_BTREE_ID:
+								polar_btree_idx_save(xlogreader);
+								break;
+							case RM_HASH_ID:
+								polar_hash_idx_save(xlogreader);
+								break;
+							case RM_GIN_ID:
+								polar_gin_idx_save(xlogreader);
+								break;
+							case RM_GIST_ID:
+								polar_gist_idx_save(xlogreader);
+								break;
+							case RM_SEQ_ID:
+								polar_seq_idx_save(xlogreader);
+								break;
+							case RM_SPGIST_ID:
+								polar_spg_idx_save(xlogreader);
+								break;
+							case RM_BRIN_ID:
+								polar_brin_idx_save(xlogreader);
+								break;
+							case RM_GENERIC_ID:
+								polar_generic_idx_save(xlogreader);
+								break;
+							default:
+								break;
+						}
+
                     BufferTag * bufferTagList = NULL;
                     int tagNum;
                     int parsed = GetXlogBuffTagList(xlogreader, &bufferTagList, &tagNum);
@@ -8308,13 +8374,16 @@ StartupXLOG(void)
                                        tempTag.rnode.spcNode, tempTag.rnode.dbNode, tempTag.rnode.relNode, tempTag.forkNum, tempTag.blockNum, xlogreader->EndRecPtr);
                                 fflush(stdout);
 #endif
+								MempoolClientReplaying = true;
                                 XlogRedoSinglePage(xlogreader, &tempTag, &buff);
+								MempoolClientReplaying = false;
 #ifdef ENABLE_STARTUP_DEBUG_INFO
                                 printf("%s %d, after redo, buffer lsn = %lu\n", __func__, __LINE__, PageGetLSN((Page) BufferGetPage(buff)));
                                 fflush(stdout);
 #endif
                                 // Now release and unlock the buff
                                 UnlockReleaseBuffer(buff);
+                                ReleaseBuffer(buff);
                             }
                         }
 
@@ -13273,6 +13342,8 @@ retry:
          ( (currentSource == XLOG_FROM_RPC||readSource == XLOG_FROM_RPC) &&
          RpcXLogFlushedLsn < targetPagePtr + reqLen))
 	{
+		if(IsRpcClient > 1)
+			ReadControlFileTimeLine();
 		if (!WaitForWALToBecomeAvailable(targetPagePtr + reqLen,
 										 private->randAccess,
 										 private->fetching_ckpt,
@@ -14040,8 +14111,14 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 						 */
 						if (readFile < 0)
 						{
-							if (!expectedTLEs)
-								expectedTLEs = readTimeLineHistory(recoveryTargetTLI);
+							if (!expectedTLEs){
+								MemoryContext original_ctx;
+								if(MempoolClientReplaying)
+									original_ctx = MemoryContextSwitchTo(TopMemoryContext);
+								expectedTLEs = readTimeLineHistory(receiveTLI);
+								if(MempoolClientReplaying)
+									MemoryContextSwitchTo(original_ctx);
+							}
 							readFile = XLogFileRead(readSegNo, PANIC,
 													receiveTLI,
 													XLOG_FROM_STREAM, false);
@@ -14358,6 +14435,19 @@ uint64_t GetLogWrtResultLsn(void)
     else
         return XLogCtl->LogwrtResult.Flush;
 }
+extern void GetLogWrtResult(XLogRecPtr* Write, XLogRecPtr* Flush){
+	*Write = XLogCtl->LogwrtResult.Write;
+	*Flush = XLogCtl->LogwrtResult.Flush;
+}
+extern void UpdateLogWrtResult(XLogRecPtr Write, XLogRecPtr Flush){
+	SpinLockAcquire(&XLogCtl->info_lck);
+	XLogCtl->LogwrtResult = LogwrtResult = (XLogwrtResult){Write, Flush};
+	if (XLogCtl->LogwrtRqst.Write < LogwrtResult.Write)
+		XLogCtl->LogwrtRqst.Write = LogwrtResult.Write;
+	if (XLogCtl->LogwrtRqst.Flush < LogwrtResult.Flush)
+		XLogCtl->LogwrtRqst.Flush = LogwrtResult.Flush;
+	SpinLockRelease(&XLogCtl->info_lck);
+}
 
 void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
 #ifdef ENABLE_DEBUG_INFO
@@ -14423,7 +14513,10 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
         fflush(stdout);
     }
 #endif
-    HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
+	if(IsRpcClient > 2)
+		InsertIntoVersionMap(key, record->ReadRecPtr);
+	else
+    	HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
 
 #ifdef ENABLE_DEBUG_INFO
     if (info == 0xA0) {

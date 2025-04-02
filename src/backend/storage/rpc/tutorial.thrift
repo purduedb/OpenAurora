@@ -110,6 +110,10 @@ service DataPageAccess {
 
    _Page ReadBufferCommon(1:_Smgr_Relation _reln, 2:i32 _relpersistence, 3:i32 _forknum, 4:i32 _blknum, 5:i32 _readBufferMode, 6:i64 _lsn),
 
+   i32 RpcRegisterSecondaryNode(1:bool _primary, 2:i64 _lsn),
+
+   void RpcSecondaryNodeUpdatesLsn(1:i32 _node_id, 2:i64 _lsn),
+
    _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum, 4:i64 _lsn),
 
    i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _lsn),
@@ -189,6 +193,10 @@ service DataPageAccess {
    i32 RpcXLogWrite(1: _File _fd, 2:_Page _page, 3:i32 _amount, 4: _Off_t _offset, 5: list<i64> _xlblocks, 6: i32 _blknum, 7: i32 _idx, 8: i64 _lsn),
 
    _XLog_Init_File_Resp RpcXLogFileInit(1:i64 _logsegno, 2:i32 _use_existent, 3:i32 _use_lock),
+
+   _File RpcOpenTransientFileUnderPgData(1:_Path _filename, 2:i32 _fileflags),
+
+   i32 RpcBasicOpenFileUnderPgData(1: _Path _path, 2: i32 _flags),
   
    /**
     * This method has a oneway modifier. That means the client only makes

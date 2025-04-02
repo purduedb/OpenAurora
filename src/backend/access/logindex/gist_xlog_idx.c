@@ -437,12 +437,12 @@ polar_gist_redo_page_update_record_get_bufftag_list(XLogReaderState *record, Buf
     *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
 
     XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     if (XLogRecHasBlockRef(record, 1)) {
         XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
     *tagNum = tagCount;
@@ -493,14 +493,14 @@ polar_gist_redo_page_split_record_get_bufftag_list(XLogReaderState *record, Buff
 
     tagCount = 0;
     XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-    INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+    INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
     tagCount++;
 
     for (block_id = 2; block_id <= XLR_MAX_BLOCK_ID; block_id++)
     {
         if (XLogRecHasBlockRef(record, block_id)) {
             XLogRecGetBlockTag(record, block_id, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
             tagCount++;
         }
         else
@@ -509,7 +509,7 @@ polar_gist_redo_page_split_record_get_bufftag_list(XLogReaderState *record, Buff
 
     if (XLogRecHasBlockRef(record, 0)) {
         XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-        INIT_BUFFERTAG(*buffertagList[tagCount], rnode, forkNumber, blockNumber);
+        INIT_BUFFERTAG((*buffertagList)[tagCount], rnode, forkNumber, blockNumber);
         tagCount++;
     }
     *tagNum = tagCount;
@@ -565,7 +565,7 @@ polar_gist_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLi
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 1);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
             *tagNum = 1;
             break;
         case XLOG_GIST_PAGE_REUSE:
@@ -579,10 +579,10 @@ polar_gist_idx_get_bufftag_list(XLogReaderState *record, BufferTag** buffertagLi
             *buffertagList = (BufferTag*) malloc(sizeof(BufferTag) * 2);
 
             XLogRecGetBlockTag(record, 0, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[0], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[0], rnode, forkNumber, blockNumber);
 
             XLogRecGetBlockTag(record, 1, &rnode, &forkNumber, &blockNumber);
-            INIT_BUFFERTAG(*buffertagList[1], rnode, forkNumber, blockNumber);
+            INIT_BUFFERTAG((*buffertagList)[1], rnode, forkNumber, blockNumber);
             *tagNum = 2;
             break;
         case XLOG_GIST_ASSIGN_LSN:

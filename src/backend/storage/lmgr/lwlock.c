@@ -181,7 +181,9 @@ static const char *const BuiltinTrancheNames[] = {
 	"WAL_LOGINDEX_MEM_TBL",
 	"WAL_LOGINDEX_HASH_LOCK",
 	"WAL_LOGINDEX_IO",
-	"WAL_LOGINDEX_BLOOM_LRU"
+	"WAL_LOGINDEX_BLOOM_LRU",
+	"MEMPOOL_CLIENT",
+	"MEMPOOL_SERVER"
 };
 
 StaticAssertDecl(lengthof(BuiltinTrancheNames) ==

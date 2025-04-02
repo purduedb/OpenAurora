@@ -50,7 +50,7 @@
  */
 #define EXTENSION_DONT_CHECK_SIZE	(1 << 4)
 
-#define PRIMARY_NODE_IP ("127.0.0.1")
+#define PRIMARY_NODE_IP ("db1.cs.purdue.edu")
 #define BLCKSZ 8192
 
 using namespace std;
@@ -226,7 +226,7 @@ void RpcInit()
     int myPid = getpid();
     if(myPid == MyPid)
         return;
-    rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, 9090);
+    rpcsocket = std::make_shared<TSocket>(PRIMARY_NODE_IP, 9092);
     rpctransport = std::make_shared<TBufferedTransport>(rpcsocket);
     rpcprotocol = std::make_shared<TBinaryProtocol>(rpctransport);
     client = new DataPageAccessClient(rpcprotocol);
@@ -339,6 +339,16 @@ void RpcReadBuffer_common(char* buff, SMgrRelation reln, char relpersistence, Fo
            reln->smgr_rnode.node.dbNode, reln->smgr_rnode.node.relNode, forkNum, blockNum, GetLogWrtResultLsn());
     fflush(stdout);
 #endif
+}
+
+int32_t RpcRegisterSecondaryNode(bool primary, int64_t lsn){
+    RpcInit();
+    return client->RpcRegisterSecondaryNode(primary, lsn);
+}
+
+void RpcSecondaryNodeUpdatesLsn(int32_t node_id, int64_t lsn){
+    RpcInit();
+    client->RpcSecondaryNodeUpdatesLsn(node_id, lsn);
 }
 
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
