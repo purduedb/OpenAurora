@@ -1129,13 +1129,10 @@ bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 
     switch (info & XLOG_HEAP_OPMASK)
     {
-        case XLOG_HEAP2_CLEAN:
+        case XLOG_HEAP2_PRUNE:
+        case XLOG_HEAP2_VACUUM:
         case XLOG_HEAP2_FREEZE_PAGE:
             ParseXLogBlocksLsn_vm(record, 0, lsn);
-            break;
-
-        case XLOG_HEAP2_CLEANUP_INFO:
-            /* don't modify buffer, nothing to do for parse, just do it */
             break;
 
         case XLOG_HEAP2_VISIBLE:

@@ -113,7 +113,6 @@
 #define DEF_SEGSIZE			   256
 #define DEF_SEGSIZE_SHIFT	   8	/* must be log2(DEF_SEGSIZE) */
 #define DEF_DIRSIZE			   256
-#define DEF_FFACTOR			   1	/* default fill factor */
 
 /* Number of freelists to be used for a partitioned hash table. */
 #define NUM_FREELISTS			32
@@ -184,7 +183,6 @@ struct HASHHDR_VM
 	Size		keysize;		/* hash key length in bytes */
 	Size		entrysize;		/* total user element size in bytes */
 	long		num_partitions; /* # partitions (must be power of 2), or 0 */
-	long		ffactor;		/* target fill factor */
 	int			nelem_alloc;	/* number of entries to allocate at once */
 
 };
@@ -298,10 +296,18 @@ string_compare(const char *key1, const char *key2, Size keysize)
  * large nelem will penalize hash_seq_search speed without buying much.
  */
 HTAB_VM *
-hash_create_vm(const char *tabname, long nelem, HASHCTL_VM *info, int flags)
+hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flags)
 {
 	HTAB_VM	   *hashp;
 	HASHHDR_VM    *hctl;
+
+	/*
+	 * Hash tables now allocate space for key and data, but you have to say
+	 * how much space to allocate.
+	 */
+	Assert(flags & HASH_ELEM);
+	Assert(info->keysize > 0);
+	Assert(info->entrysize >= info->keysize);
 
 	/*
 	 * For shared hash tables, we have a local hash header (HTAB_VM struct) that
@@ -345,18 +351,25 @@ hash_create_vm(const char *tabname, long nelem, HASHCTL_VM *info, int flags)
 	 * Select the appropriate hash function (see comments at head of file).
 	 */
 	if (flags & HASH_FUNCTION)
+	{
+		Assert(!(flags & (HASH_BLOBS | HASH_STRINGS)));
 		hashp->hash = info->hash;
+	}
 	else if (flags & HASH_BLOBS)
 	{
+		Assert(!(flags & HASH_STRINGS));
 		/* We can optimize hashing for common key sizes */
-		Assert(flags & HASH_ELEM);
 		if (info->keysize == sizeof(uint32))
 			hashp->hash = uint32_hash;
 		else
 			hashp->hash = tag_hash;
 	}
 	else
+	{
+		Assert(flags & HASH_STRINGS);
+		Assert(info->keysize > 8);
 		hashp->hash = string_hash;	/* default hash function */
+	}
 
 	/*
 	 * If you don't specify a match function, it defaults to string_compare if
@@ -381,7 +394,16 @@ hash_create_vm(const char *tabname, long nelem, HASHCTL_VM *info, int flags)
 	if (flags & HASH_KEYCOPY)
 		hashp->keycopy = info->keycopy;
 	else if (hashp->hash == string_hash)
-		hashp->keycopy = (HashCopyFunc) strlcpy;
+	{
+		/*
+		 * The signature of keycopy is meant for memcpy(), which returns
+		 * void*, but strlcpy() returns size_t.  Since we never use the return
+		 * value of keycopy, and size_t is pretty much always the same size as
+		 * void *, this should be safe.  The extra cast in the middle is to
+		 * avoid warnings from -Wcast-function-type.
+		 */
+		hashp->keycopy = (HashCopyFunc) (pg_funcptr_t) strlcpy;
+	}
 	else
 		hashp->keycopy = memcpy;
 
@@ -451,19 +473,9 @@ hash_create_vm(const char *tabname, long nelem, HASHCTL_VM *info, int flags)
 		hctl->num_partitions = info->num_partitions;
 	}
 
-	if (flags & HASH_FFACTOR)
-		hctl->ffactor = info->ffactor;
-
-	/*
-	 * hash table now allocates space for key and data but you have to say how
-	 * much space to allocate
-	 */
-	if (flags & HASH_ELEM)
-	{
-		Assert(info->entrysize >= info->keysize);
-		hctl->keysize = info->keysize;
-		hctl->entrysize = info->entrysize;
-	}
+	/* remember the entry sizes, too */
+	hctl->keysize = info->keysize;
+	hctl->entrysize = info->entrysize;
 
 	/* make local copies of heavily-used constant fields */
 	hashp->keysize = hctl->keysize;
@@ -545,8 +557,6 @@ hdefault(HTAB_VM *hashp)
 	hctl->entrysize = sizeof(SEGMENT_ITEM_VM);
 
 	hctl->num_partitions = 0;	/* not partitioned */
-
-	hctl->ffactor = DEF_FFACTOR;
 
 }
 
@@ -636,7 +646,6 @@ init_htab(HTAB_VM *hashp, long nelem)
 #ifdef HASH_DEBUG
 	fprintf(stderr, "init_htab:\n%s%p\n%s%ld\n%s%ld\n%s%d\n%s%ld\n%s%u\n%s%x\n%s%x\n%s%ld\n",
 			"TABLE POINTER   ", hashp,
-			"FILL FACTOR     ", hctl->ffactor,
 			"MAX BUCKET      ", hctl->max_bucket,
 			"HIGH MASK       ", hctl->high_mask,
 			"LOW  MASK       ", hctl->low_mask);
@@ -662,7 +671,7 @@ hash_estimate_size_vm(long hashtable_cnt, long segment_cnt)
 	Size entrysize = sizeof(SEGMENT_ITEM_VM);
 
 	/* estimate number of buckets wanted */
-	nBuckets = next_pow2_long((hashtable_cnt - 1) / DEF_FFACTOR + 1);
+	nBuckets = next_pow2_long(hashtable_cnt);
 
 	/* fixed control info */
 	size = MAXALIGN(sizeof(HASHHDR_VM));	/* but not HTAB_VM, per above */

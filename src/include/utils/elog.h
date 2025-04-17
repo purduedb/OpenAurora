@@ -492,7 +492,4 @@ extern void write_stderr_signal_safe(const char *fmt);
 }
 #endif
 
-#ifdef __cplusplus
-}
-#endif
 #endif							/* ELOG_H */

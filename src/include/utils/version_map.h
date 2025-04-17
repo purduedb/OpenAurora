@@ -68,7 +68,7 @@ typedef struct {
 } HASH_SEQ_STATUS_VM;
 
 extern HTAB_VM *hash_create_vm(const char *tabname, long nelem,
-                         HASHCTL_VM *info, int flags);
+                         const HASHCTL_VM *info, int flags);
 
 extern void hash_destroy_vm(HTAB_VM *hashp);
 

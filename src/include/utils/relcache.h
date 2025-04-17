@@ -14,6 +14,7 @@
 #ifndef RELCACHE_H
 #define RELCACHE_H
 
+#include "postgres.h"
 #include "access/tupdesc.h"
 #include "nodes/bitmapset.h"
 
