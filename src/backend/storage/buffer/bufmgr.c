@@ -1068,7 +1068,9 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 							AsyncGetNewestPageAddressTable();
 					}
 					if(!read_from_mempool){
-						RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+						do{
+							RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+						}while(forkNum == 0 && blockNum == 0 && PageIsNew(bufBlock));
 						toMarkDirty = true;
 #ifdef MEMPOOL_CACHE_POLICY_COVERING
 						SyncFlushPageToMemoryPool(bufBlock, page_id);
@@ -1076,8 +1078,11 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 #endif
 					}
 				}
-				else
-					RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+				else{
+					do{
+						RpcReadBuffer_common((char*)bufBlock, smgr, relpersistence, forkNum, blockNum, mode);
+					}while(forkNum == 0 && blockNum == 0 && PageIsNew(bufBlock));
+				}
 			}
 			else
 			    smgrread(smgr, forkNum, blockNum, (char *) bufBlock);
