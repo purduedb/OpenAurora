@@ -44,7 +44,7 @@
 #define BLCKSZ 8192
 
 /* Saved arguments from configure */
-#define CONFIGURE_ARGS " '--prefix=/home/xi/14_NewLog/built_project' 'LDFLAGS=-std=c++17 -lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin'"
+#define CONFIGURE_ARGS " '--prefix=/home/guo777/postgresql_built_project' 'LDFLAGS=-std=c++17 -lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread -libverbs -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin'"
 
 /* Define to the default TCP port number on which the server listens and to
    which clients will try to connect. This can be overridden at run-time, but

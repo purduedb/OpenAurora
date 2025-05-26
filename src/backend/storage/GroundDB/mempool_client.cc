@@ -1809,16 +1809,16 @@ vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 void MemPoolSyncMain(){
     int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, GetLogWrtResultLsn());
 
-    size_t interval_us[4] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHearbeatInterval_us};
+    size_t interval_us[5] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us};
     size_t min_interval_us = interval_us[0];
-    for(int i = 0; i < 4; i++)
+    for(int i = 0; i < 5; i++)
         min_interval_us = std::min(min_interval_us, interval_us[i]);
 	std::chrono::steady_clock::duration interval[3];
-    for(int i = 0; i < 4; i++)
+    for(int i = 0; i < 5; i++)
         interval[i] = std::chrono::duration<int, std::micro>(interval_us[i]);
 
     std::chrono::steady_clock::time_point last[3];
-    for(int i = 0; i < 4; i++)
+    for(int i = 0; i < 5; i++)
         last[i] = std::chrono::steady_clock::now() - interval[i];
         
     std::chrono::steady_clock::time_point now;
@@ -1872,6 +1872,12 @@ skip_mempool_sync:
         if(now - last[3] >= interval[3]){
             last[3] = now;
             RpcSecondaryNodeUpdatesLsn(SyncToStorageHashMapId, GetLogWrtResultLsn());
+        }
+
+        now = std::chrono::steady_clock::now();
+        if(now - last[4] >= interval[4]){
+            last[4] = now;
+            RpcNeonHeartbeat();
         }
         usleep(min_interval_us);
     }

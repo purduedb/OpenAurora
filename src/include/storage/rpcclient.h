@@ -30,6 +30,7 @@ extern "C" {
 
     int32_t RpcRegisterSecondaryNode(bool primary, int64_t lsn);
     void RpcSecondaryNodeUpdatesLsn(int32_t node_id, int64_t lsn);
+    void RpcNeonHeartbeat();
 
     void RpcShutdown(void);
     void RpcFileClose(const int _fd);

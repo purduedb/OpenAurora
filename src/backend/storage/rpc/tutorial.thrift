@@ -114,6 +114,8 @@ service DataPageAccess {
 
    void RpcSecondaryNodeUpdatesLsn(1:i32 _node_id, 2:i64 _lsn),
 
+   void RpcNeonHeartbeat(),
+
    _Page RpcMdRead(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _blknum, 4:i64 _lsn),
 
    i32 RpcMdNblocks(1:_Smgr_Relation _reln, 2:i32 _forknum, 3:i64 _lsn),

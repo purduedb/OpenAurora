@@ -48,6 +48,11 @@ class DataPageAccessHandler : virtual public DataPageAccessIf {
     printf("RpcSecondaryNodeUpdatesLsn\n");
   }
 
+  void RpcNeonHeartbeat() {
+    // Your implementation goes here
+    printf("RpcNeonHeartbeat\n");
+  }
+
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
     // Your implementation goes here
     printf("RpcMdRead\n");

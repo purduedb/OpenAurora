@@ -351,6 +351,11 @@ void RpcSecondaryNodeUpdatesLsn(int32_t node_id, int64_t lsn){
     client->RpcSecondaryNodeUpdatesLsn(node_id, lsn);
 }
 
+void RpcNeonHeartbeat(){
+    RpcInit();
+    client->RpcNeonHeartbeat();
+}
+
 void RpcMdRead(char* buff, SMgrRelation reln, ForkNumber forknum, BlockNumber blknum) {
 #ifdef ENABLE_FUNCTION_TIMING
     FunctionTiming functionTiming(const_cast<char *>(__func__));

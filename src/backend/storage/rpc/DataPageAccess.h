@@ -43,6 +43,7 @@ class DataPageAccessIf {
   virtual void ReadBufferCommon(_Page& _return, const _Smgr_Relation& _reln, const int32_t _relpersistence, const int32_t _forknum, const int32_t _blknum, const int32_t _readBufferMode, const int64_t _lsn) = 0;
   virtual int32_t RpcRegisterSecondaryNode(const bool _primary, const int64_t _lsn) = 0;
   virtual void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn) = 0;
+  virtual void RpcNeonHeartbeat() = 0;
   virtual void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) = 0;
   virtual int32_t RpcMdNblocks(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
   virtual int32_t RpcMdExists(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _lsn) = 0;
@@ -128,6 +129,9 @@ class DataPageAccessNull : virtual public DataPageAccessIf {
     return _return;
   }
   void RpcSecondaryNodeUpdatesLsn(const int32_t /* _node_id */, const int64_t /* _lsn */) {
+    return;
+  }
+  void RpcNeonHeartbeat() {
     return;
   }
   void RpcMdRead(_Page& /* _return */, const _Smgr_Relation& /* _reln */, const int32_t /* _forknum */, const int64_t /* _blknum */, const int64_t /* _lsn */) {
@@ -623,6 +627,80 @@ class DataPageAccess_RpcSecondaryNodeUpdatesLsn_presult {
 
 
   virtual ~DataPageAccess_RpcSecondaryNodeUpdatesLsn_presult() noexcept;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+
+};
+
+
+class DataPageAccess_RpcNeonHeartbeat_args {
+ public:
+
+  DataPageAccess_RpcNeonHeartbeat_args(const DataPageAccess_RpcNeonHeartbeat_args&);
+  DataPageAccess_RpcNeonHeartbeat_args& operator=(const DataPageAccess_RpcNeonHeartbeat_args&);
+  DataPageAccess_RpcNeonHeartbeat_args() {
+  }
+
+  virtual ~DataPageAccess_RpcNeonHeartbeat_args() noexcept;
+
+  bool operator == (const DataPageAccess_RpcNeonHeartbeat_args & /* rhs */) const
+  {
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcNeonHeartbeat_args &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcNeonHeartbeat_args & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcNeonHeartbeat_pargs {
+ public:
+
+
+  virtual ~DataPageAccess_RpcNeonHeartbeat_pargs() noexcept;
+
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcNeonHeartbeat_result {
+ public:
+
+  DataPageAccess_RpcNeonHeartbeat_result(const DataPageAccess_RpcNeonHeartbeat_result&);
+  DataPageAccess_RpcNeonHeartbeat_result& operator=(const DataPageAccess_RpcNeonHeartbeat_result&);
+  DataPageAccess_RpcNeonHeartbeat_result() {
+  }
+
+  virtual ~DataPageAccess_RpcNeonHeartbeat_result() noexcept;
+
+  bool operator == (const DataPageAccess_RpcNeonHeartbeat_result & /* rhs */) const
+  {
+    return true;
+  }
+  bool operator != (const DataPageAccess_RpcNeonHeartbeat_result &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const DataPageAccess_RpcNeonHeartbeat_result & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+};
+
+
+class DataPageAccess_RpcNeonHeartbeat_presult {
+ public:
+
+
+  virtual ~DataPageAccess_RpcNeonHeartbeat_presult() noexcept;
 
   uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
 
@@ -5316,6 +5394,9 @@ class DataPageAccessClient : virtual public DataPageAccessIf {
   void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
   void send_RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
   void recv_RpcSecondaryNodeUpdatesLsn();
+  void RpcNeonHeartbeat();
+  void send_RpcNeonHeartbeat();
+  void recv_RpcNeonHeartbeat();
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return);
@@ -5464,6 +5545,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
   void process_ReadBufferCommon(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcRegisterSecondaryNode(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcSecondaryNodeUpdatesLsn(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
+  void process_RpcNeonHeartbeat(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdRead(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdNblocks(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
   void process_RpcMdExists(int32_t seqid, ::apache::thrift::protocol::TProtocol* iprot, ::apache::thrift::protocol::TProtocol* oprot, void* callContext);
@@ -5512,6 +5594,7 @@ class DataPageAccessProcessor : public ::apache::thrift::TDispatchProcessor {
     processMap_["ReadBufferCommon"] = &DataPageAccessProcessor::process_ReadBufferCommon;
     processMap_["RpcRegisterSecondaryNode"] = &DataPageAccessProcessor::process_RpcRegisterSecondaryNode;
     processMap_["RpcSecondaryNodeUpdatesLsn"] = &DataPageAccessProcessor::process_RpcSecondaryNodeUpdatesLsn;
+    processMap_["RpcNeonHeartbeat"] = &DataPageAccessProcessor::process_RpcNeonHeartbeat;
     processMap_["RpcMdRead"] = &DataPageAccessProcessor::process_RpcMdRead;
     processMap_["RpcMdNblocks"] = &DataPageAccessProcessor::process_RpcMdNblocks;
     processMap_["RpcMdExists"] = &DataPageAccessProcessor::process_RpcMdExists;
@@ -5621,6 +5704,15 @@ class DataPageAccessMultiface : virtual public DataPageAccessIf {
       ifaces_[i]->RpcSecondaryNodeUpdatesLsn(_node_id, _lsn);
     }
     ifaces_[i]->RpcSecondaryNodeUpdatesLsn(_node_id, _lsn);
+  }
+
+  void RpcNeonHeartbeat() {
+    size_t sz = ifaces_.size();
+    size_t i = 0;
+    for (; i < (sz - 1); ++i) {
+      ifaces_[i]->RpcNeonHeartbeat();
+    }
+    ifaces_[i]->RpcNeonHeartbeat();
   }
 
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn) {
@@ -6068,6 +6160,9 @@ class DataPageAccessConcurrentClient : virtual public DataPageAccessIf {
   void RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
   int32_t send_RpcSecondaryNodeUpdatesLsn(const int32_t _node_id, const int64_t _lsn);
   void recv_RpcSecondaryNodeUpdatesLsn(const int32_t seqid);
+  void RpcNeonHeartbeat();
+  int32_t send_RpcNeonHeartbeat();
+  void recv_RpcNeonHeartbeat(const int32_t seqid);
   void RpcMdRead(_Page& _return, const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   int32_t send_RpcMdRead(const _Smgr_Relation& _reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn);
   void recv_RpcMdRead(_Page& _return, const int32_t seqid);

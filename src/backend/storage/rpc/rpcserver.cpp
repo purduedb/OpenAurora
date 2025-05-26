@@ -604,7 +604,7 @@ int establish_socket(int port)
     server_address.sin_port = htons(port);
 
     // Convert IPv4 and IPv6 addresses from text to binary form
-    if (inet_pton(AF_INET, "10.145.21.43", &server_address.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, "10.145.21.34", &server_address.sin_addr) <= 0) {
         perror("Invalid address/Address not supported");
         close(sock);
         exit(EXIT_FAILURE);
@@ -1465,6 +1465,10 @@ public:
 
         void RpcSecondaryNodeUpdatesLsn(int32_t _node_id, int64_t _lsn){
                 HashMapSecondaryNodeUpdatesLsn(pageVersionHashMap, _node_id, _lsn);
+        }
+
+        void RpcNeonHeartbeat(){
+                relexists_from_neon_api(0, 0, 0, 0, 0, 0);
         }
 
         void RpcMdRead(_Page &_return, const _Smgr_Relation &_reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
