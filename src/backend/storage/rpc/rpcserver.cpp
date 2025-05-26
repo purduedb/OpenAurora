@@ -1468,7 +1468,8 @@ public:
         }
 
         void RpcNeonHeartbeat(){
-                relexists_from_neon_api(0, 0, 0, 0, 0, 0);
+                for(int i = 0; i < NeonApiSocketNum; i++)
+                        relexists_from_neon_api(0, 0, 0, 0, 0, 0);
         }
 
         void RpcMdRead(_Page &_return, const _Smgr_Relation &_reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)

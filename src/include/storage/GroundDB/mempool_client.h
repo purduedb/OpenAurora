@@ -38,7 +38,7 @@ extern "C" {
 #define CheckSyncPAT_Interval_us (SyncPAT_Interval_us / 100)
 #define SyncXLogInfo_Interval_us 1000
 #define SyncUpdateVersionMapInfo_Interval_us 500
-#define NeonHeartbeatInterval_us 100000
+#define NeonHeartbeatInterval_us 1000000
 
 #define TryReconnectionToMemPool_Interval_us 1000000
 

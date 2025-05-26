@@ -127,7 +127,7 @@ extern void HashMapGarbageCollectNode(HashMap hashMap, HashNodeHead *head);
 
 
 #define HashMapComputeNodeHeartbeatInterval_us 1000000ul
-#define HashMapComputeNodeInactiveTimeout_us (10ul * HashMapComputeNodeHearbeatInterval_us)
+#define HashMapComputeNodeInactiveTimeout_us (10ul * HashMapComputeNodeHeartbeatInterval_us)
 extern int32_t HashMapRegisterSecondaryNode(HashMap hashMap, bool primary, uint64_t lsn);
 extern void HashMapSecondaryNodeUpdatesLsn(HashMap hashMap, int32_t node_id, int64_t lsn);
 extern uint64_t HashMapGetMinComputeLsn(HashMap hashMap);
