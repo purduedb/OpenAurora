@@ -68,6 +68,11 @@ int NeonCachedUp = 0;
 unsigned long long NeonFlushedLSN = -1;
 extern pthread_mutex_t *NeonAccessLock;
 
+struct{
+        bool initialized;
+        uint64_t requestLsn; uint64_t notModifiedSinceLsn; uint32_t spcId; uint32_t dbId; uint32_t relId; uint8_t forkNum;
+}neon_api_arguments_for_heartbeat;
+
 
 // #define DEBUG_TIMING 1
 // #define INFO_FUNC_START
@@ -652,6 +657,7 @@ int init_neon_api_socket(int port, char* tenantId, char* timelineId) {
 }
 
 int8_t relexists_from_neon_api(uint64_t requestLsn, uint64_t notModifiedSinceLsn, uint32_t spcId, uint32_t dbId, uint32_t relId, uint8_t forkNum) {
+        neon_api_arguments_for_heartbeat = {true, requestLsn, notModifiedSinceLsn, spcId, dbId, relId, forkNum};
         requestLsn = requestLsn - LsnLatency;
         notModifiedSinceLsn = notModifiedSinceLsn - LsnLatency;
 
@@ -1468,8 +1474,11 @@ public:
         }
 
         void RpcNeonHeartbeat(){
-                for(int i = 0; i < NeonApiSocketNum; i++)
-                        relexists_from_neon_api(0, 0, 0, 0, 0, 0);
+                if(neon_api_arguments_for_heartbeat.initialized)
+                        for(int i = 0; i < NeonApiSocketNum; i++)
+                                relexists_from_neon_api(neon_api_arguments_for_heartbeat.requestLsn, neon_api_arguments_for_heartbeat.notModifiedSinceLsn,
+                                        neon_api_arguments_for_heartbeat.spcId, neon_api_arguments_for_heartbeat.dbId,
+                                        neon_api_arguments_for_heartbeat.relId, neon_api_arguments_for_heartbeat.forkNum);
         }
 
         void RpcMdRead(_Page &_return, const _Smgr_Relation &_reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)

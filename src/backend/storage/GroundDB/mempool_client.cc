@@ -1813,11 +1813,11 @@ void MemPoolSyncMain(){
     size_t min_interval_us = interval_us[0];
     for(int i = 0; i < 5; i++)
         min_interval_us = std::min(min_interval_us, interval_us[i]);
-	std::chrono::steady_clock::duration interval[3];
+	std::chrono::steady_clock::duration interval[5];
     for(int i = 0; i < 5; i++)
         interval[i] = std::chrono::duration<int, std::micro>(interval_us[i]);
 
-    std::chrono::steady_clock::time_point last[3];
+    std::chrono::steady_clock::time_point last[5];
     for(int i = 0; i < 5; i++)
         last[i] = std::chrono::steady_clock::now() - interval[i];
         
