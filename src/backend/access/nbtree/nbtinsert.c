@@ -333,9 +333,9 @@ _bt_search_insert(Relation rel, BTInsertState insertstate)
 			Page		page;
 			BTPageOpaque opaque;
 
-			printf("%s %d, spc = %lu, db = %lu, rel = %lu\n", 
-			__FILE__, __LINE__, rel->rd_node.spcNode, rel->rd_node.dbNode, rel->rd_node.relNode); 
-			fflush(stdout);
+			// printf("%s %d, spc = %lu, db = %lu, rel = %lu\n", 
+			// __FILE__, __LINE__, rel->rd_node.spcNode, rel->rd_node.dbNode, rel->rd_node.relNode); 
+			// fflush(stdout);
 
 			_bt_checkpage(rel, insertstate->buf);
 			page = BufferGetPage(insertstate->buf);

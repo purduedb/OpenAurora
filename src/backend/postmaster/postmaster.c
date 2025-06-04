@@ -1426,7 +1426,7 @@ PostmasterMain(int argc, char *argv[])
 
 	/* Some workers may be scheduled to start now */
 	maybe_start_bgworkers();
-	if(IsRpcClient > 1)
+	if(IsRpcClient)
 		MPSyncPID = StartMemPoolSynchronizer();
 
 	status = ServerLoop();

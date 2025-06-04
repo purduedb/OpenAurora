@@ -1823,13 +1823,15 @@ void MemPoolSyncMain(){
         
     std::chrono::steady_clock::time_point now;
     while(true){
-        now = std::chrono::steady_clock::now();
-        if(now - last[0] >= interval[0]){
-            last[0] = now;
-            if(whetherSyncPAT()){
-                auto client = mempool::MemPoolClient::Get_Instance();
-                if(client == NULL) goto skip_mempool_sync;
-                client->GetNewestPageAddressTable();
+        if(IsRpcClient >= 2){
+            now = std::chrono::steady_clock::now();
+            if(now - last[0] >= interval[0]){
+                last[0] = now;
+                if(whetherSyncPAT()){
+                    auto client = mempool::MemPoolClient::Get_Instance();
+                    if(client == NULL) goto skip_mempool_sync;
+                    client->GetNewestPageAddressTable();
+                }
             }
         }
 
