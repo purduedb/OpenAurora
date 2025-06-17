@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include "postgres.h"
 #include "storage/GroundDB/mempool_shmem.h"
 #include "utils/DSMEngine/hash.h"
@@ -168,17 +169,28 @@ size_t get_MemPoolClient_node_id(){
 	return id;
 }
 
+#define Max_SyncPAT_Interval_Multiplier 100
 void AsyncGetNewestPageAddressTable(){
 	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
-	*last_sync_pat = std::chrono::steady_clock::now() - std::chrono::duration<int, std::micro>(SyncPAT_Interval_us);
+	*last_sync_pat = std::chrono::steady_clock::now() - std::chrono::duration<int, std::micro>(SyncPAT_Interval_us) * Max_SyncPAT_Interval_Multiplier;
 	LWLockRelease(mempool_client_sync_pat_lock);
 }
 bool whetherSyncPAT(){
+	static double last_mempool_hit_ratio = 1;
+    LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
+    int64_t tmpLocalCnt = *mpLocalCnt, tmpMemCnt = *mpMemCnt, tmpStoCnt = *mpStoCnt;
+    int64_t totalCnt = tmpLocalCnt + tmpMemCnt + tmpStoCnt;
+    if(totalCnt > 1000)
+        last_mempool_hit_ratio = (double)tmpMemCnt / totalCnt;
+    LWLockRelease(mempool_client_stat_lock);
+
+	double multiplier = last_mempool_hit_ratio < pow(Max_SyncPAT_Interval_Multiplier, -2) ? Max_SyncPAT_Interval_Multiplier : 1 / sqrt(last_mempool_hit_ratio);
+
 	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 	std::chrono::steady_clock::duration elapsed = now - *last_sync_pat;
 	long long elapsed_seconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-	if(elapsed_seconds >= SyncPAT_Interval_us * 0.95){
+	if(elapsed_seconds >= SyncPAT_Interval_us * multiplier){
 		*last_sync_pat = now;
 		LWLockRelease(mempool_client_sync_pat_lock);
 		return true;
