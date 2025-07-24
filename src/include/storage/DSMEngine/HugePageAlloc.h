@@ -51,8 +51,8 @@ namespace DSMEngine{
         }else{
 
             // printf("mmap is not enabled from the beginning\n");
+            free(ptr);
         }
-        free(ptr);
 
     }
 }
