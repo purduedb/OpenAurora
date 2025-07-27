@@ -10,6 +10,8 @@ extern "C" {
 #include "storage/relfilenode.h"
 #include "access/xlogdefs.h"
 
+// #define NeonAsRemoteStorageEngine
+
 #define NeonApiSocketNum 32 
 
 extern void

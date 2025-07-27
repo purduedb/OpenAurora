@@ -1301,6 +1301,7 @@ public:
                 // printf("%s %d start, spc = %lu, db = %lu, rel = %lu, fork = %d, blk = %d, lsn = %lu, tid = %d, current_neon_flush_lsn=%lu\n", __func__ , __LINE__,
                 //       _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum, _blknum, _lsn, gettid(), NeonFlushedLSN);
                 // fflush(stdout);
+#ifdef NeonAsRemoteStorageEngine
 
 
                 uint8_t relExists = relexists_from_neon_api(_lsn, _lsn, _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
@@ -1343,6 +1344,7 @@ public:
                 free(neon_page);
                 return;
 
+#endif
                 
                 WaitParse(_lsn);
 
@@ -1474,11 +1476,13 @@ public:
         }
 
         void RpcNeonHeartbeat(){
+#ifdef NeonAsRemoteStorageEngine
                 if(neon_api_arguments_for_heartbeat.initialized)
                         for(int i = 0; i < NeonApiSocketNum; i++)
                                 relexists_from_neon_api(neon_api_arguments_for_heartbeat.requestLsn, neon_api_arguments_for_heartbeat.notModifiedSinceLsn,
                                         neon_api_arguments_for_heartbeat.spcId, neon_api_arguments_for_heartbeat.dbId,
                                         neon_api_arguments_for_heartbeat.relId, neon_api_arguments_for_heartbeat.forkNum);
+#endif
         }
 
         void RpcMdRead(_Page &_return, const _Smgr_Relation &_reln, const int32_t _forknum, const int64_t _blknum, const int64_t _lsn)
@@ -1557,10 +1561,12 @@ public:
                 // Your implementation goes here
                 //        SyncReplayProcess();
 
+#ifdef NeonAsRemoteStorageEngine
                 uint32_t nblocks = nblocks_from_neon_api(_lsn, _lsn, _reln._spc_node, _reln._db_node, _reln._rel_node, _forknum);
                 // printf("ReadBufferCommon, nblocks = %u\n", nblocks);
                 // fflush(stdout);
                 return nblocks;
+#endif
 #ifdef DEBUG_TIMING
                 struct timeval start, end;
                 START_TIMING(&start);
@@ -2374,7 +2380,7 @@ public:
                 // So, RpcXLogPages + (_idx*BLCKSZ) + (_blknum*BLCKSZ) will smaller than or equal with end of RpcXLogPages
                 memcpy(RpcXLogPages + (XLOG_BLCKSZ * _idx), _page.c_str(), XLOG_BLCKSZ * _blknum);
 
-
+#ifdef NeonAsRemoteStorageEngine
 
                 // printf("_amount = %lu, pageOffset = %d, _lsn = %lu\n", _amount, pageOffset, _lsn);
                 // fflush(stdout);
@@ -2422,6 +2428,7 @@ public:
                                 // send_xlog_to_neon_engine(neon_socket, NeonStartupLSN, xlogWriteEndLSN, 0, (xlogWriteEndLSN-xlogWriteStartLSN) - shouldIgnoreBytes, _page.c_str() + pageOffset);
                         // }
                 }
+#endif
 
                 for (int i = 0; i < _blknum; i++)
                 {  
@@ -2516,7 +2523,7 @@ public:
 
 void RpcServerLoop(void)
 {
-
+#ifdef NeonAsRemoteStorageEngine
         printf("RpcServerLoop start\n");
         fflush(stdout);
         neon_socket = start_server(NeonListenPort);
@@ -2572,6 +2579,7 @@ void RpcServerLoop(void)
                 printf("Connected with server started on port %d\n", NeonApiPort);
                 fflush(stdout);
         }
+#endif
 
         int port = 9092;
 

@@ -1834,7 +1834,9 @@ RpcServerMain(int argc, char *argv[],
 //        }
 //    }
 
+#ifdef NeonAsRemoteStorageEngine
     NeonAccessLock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t)*NeonApiSocketNum);
+#endif
 
     RpcServerLoop();
     proc_exit(0);
