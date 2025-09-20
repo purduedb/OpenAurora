@@ -1017,6 +1017,13 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		if(IsRpcClient > 1){
 			toMarkDirty = true;
 #ifdef MEMPOOL_CACHE_POLICY_COVERING
+			KeyType page_id = {
+				smgr->smgr_rnode.node.spcNode,
+				smgr->smgr_rnode.node.dbNode,
+				smgr->smgr_rnode.node.relNode,
+				forkNum,
+				blockNum
+			};
 			SyncFlushPageToMemoryPool(bufBlock, page_id);
 			toMarkDirty = false;
 #endif
