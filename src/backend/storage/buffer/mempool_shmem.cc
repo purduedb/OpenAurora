@@ -7,6 +7,7 @@
 LWLock *mempool_client_lw_lock;
 size_t *node_id_cnt;
 
+size_t *to_async_pat;
 std::chrono::steady_clock::time_point *last_sync_pat;
 int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
 
@@ -39,6 +40,10 @@ void MemPoolClientShmemInit(){
 						found_any, found_all);
 	node_id_cnt = (size_t*)
 		ShmemInitStruct("MemPool Client node ID counter",
+						sizeof(size_t),
+						found_any, found_all);
+	to_async_pat = (size_t*)
+		ShmemInitStruct("MemPool Client To Async PAT",
 						sizeof(size_t),
 						found_any, found_all);
 	last_sync_pat = (std::chrono::steady_clock::time_point*)
@@ -118,6 +123,7 @@ void MemPoolClientShmemInit(){
 		for(int i = 0; i < NUMBER_OF_mempool_client_lw_lock; i++)
 			LWLockInitialize(&mempool_client_lw_lock[i], LWTRANCHE_MEMPOOL_CLIENT);
 		*node_id_cnt = 0;
+		*to_async_pat = 0;
 		*last_sync_pat = std::chrono::steady_clock::now();
 		*is_first_mpc = true;
 		*mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
@@ -131,6 +137,8 @@ Size MemPoolClientShmemSize(void)
 	size = add_size(size, mul_size(3, sizeof(int64)));
 
 	size = add_size(size, mul_size(NUMBER_OF_mempool_client_lw_lock, sizeof(LWLock)));
+
+	size = add_size(size, sizeof(size_t));
 
 	size = add_size(size, sizeof(size_t));
 
@@ -169,10 +177,14 @@ size_t get_MemPoolClient_node_id(){
 	return id;
 }
 
-#define Max_SyncPAT_Interval_Multiplier 100
-void AsyncGetNewestPageAddressTable(){
+#define Max_SyncPAT_Interval_Multiplier 10
+#define Async_SyncPAT_Threshold 1000
+void AsyncGetNewestPageAddressTable(int increment){
 	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
-	*last_sync_pat = std::chrono::steady_clock::now() - std::chrono::duration<int, std::micro>(SyncPAT_Interval_us) * Max_SyncPAT_Interval_Multiplier;
+	if(increment > 0)
+		(*to_async_pat)+= increment;
+	else
+		*to_async_pat = Async_SyncPAT_Threshold;
 	LWLockRelease(mempool_client_sync_pat_lock);
 }
 bool whetherSyncPAT(){
@@ -190,7 +202,7 @@ bool whetherSyncPAT(){
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 	std::chrono::steady_clock::duration elapsed = now - *last_sync_pat;
 	long long elapsed_seconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-	if(elapsed_seconds >= SyncPAT_Interval_us * multiplier){
+	if(elapsed_seconds >= SyncPAT_Interval_us * multiplier || *to_async_pat >= Async_SyncPAT_Threshold){
 		*last_sync_pat = now;
 		LWLockRelease(mempool_client_sync_pat_lock);
 		return true;

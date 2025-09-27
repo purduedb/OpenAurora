@@ -67,7 +67,7 @@ extern void AsyncAccessPageOnMemoryPool(KeyType PageID);
 
 extern void AsyncRemovePageOnMemoryPool(KeyType PageID);
 
-extern void AsyncGetNewestPageAddressTable();
+extern void AsyncGetNewestPageAddressTable(int increment);
 
 extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync);
 extern void ASyncFlushPageToMemoryPool(char* src, KeyType PageID);;

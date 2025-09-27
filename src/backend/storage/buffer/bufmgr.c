@@ -1072,7 +1072,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 							}
 						}
 						else
-							AsyncGetNewestPageAddressTable();
+							AsyncGetNewestPageAddressTable(1);
 					}
 					if(!read_from_mempool){
 						do{

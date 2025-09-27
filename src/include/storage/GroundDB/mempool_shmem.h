@@ -11,6 +11,7 @@ extern "C" {
 #include "storage/shmem.h"
 #include "storage/GroundDB/mempool_client.h"
 
+extern size_t *to_async_pat;
 extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
 
 #define NUMBER_OF_mempool_client_lw_lock 5

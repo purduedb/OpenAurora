@@ -141,6 +141,8 @@ MemPoolClient* MemPoolClient::Get_Instance(){
             delete client;
             client = nullptr;
         }
+        else
+            AsyncGetNewestPageAddressTable(0);
 	}
     else if (client != nullptr && time_to_reconnect()){
         last_time_try_connecting_to_mempool_server = std::chrono::steady_clock::now();
@@ -152,6 +154,7 @@ MemPoolClient* MemPoolClient::Get_Instance(){
                         if(client->AppendToPAT(i, 0))
                             is_first_mpc_connection[i] = false;
                     }
+                    AsyncGetNewestPageAddressTable(0);
                 }
                 else
                     client->rdma_mg->ClearOneConnection(2 * i + 1);
@@ -514,6 +517,7 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 			rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 		}
     }
+    *to_async_pat = 0;
 }
 
 int mempool::MemPoolClient::AsyncFlushPageToMemoryPool(char* src, KeyType PageID){
