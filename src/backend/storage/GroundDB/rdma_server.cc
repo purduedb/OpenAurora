@@ -8,6 +8,7 @@
 #include "storage/DSMEngine/ThreadPool.h"
 #include "storage/DSMEngine/cache.h"
 #include "storage/GroundDB/request_buffer.h"
+#include <mutex>
 
 namespace mempool {
 
@@ -230,17 +231,18 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         else
             buffer_position++;
     }
-    if (!rdma_mg->res->sock_map.count(compute_node_id)){
+    std::unique_lock<std::shared_mutex> l(rdma_mg->qp_cq_map_mutex);
+    if (rdma_mg->res->sock_map.count(compute_node_id)){
         close(rdma_mg->res->sock_map[compute_node_id]);
         rdma_mg->res->sock_map.erase(compute_node_id);
     }
-    if (!rdma_mg->res->cq_map.count(compute_node_id)){
+    if (rdma_mg->res->cq_map.count(compute_node_id)){
         ibv_destroy_cq(rdma_mg->res->cq_map[compute_node_id].first);
         if(rdma_mg->res->cq_map[compute_node_id].second != nullptr)
             ibv_destroy_cq(rdma_mg->res->cq_map[compute_node_id].second);
         rdma_mg->res->cq_map.erase(compute_node_id);
     }
-    if (!rdma_mg->res->qp_map.count(compute_node_id)){
+    if (rdma_mg->res->qp_map.count(compute_node_id)){
         ibv_destroy_qp(rdma_mg->res->qp_map[compute_node_id]);
         rdma_mg->res->qp_map.erase(compute_node_id);
     }

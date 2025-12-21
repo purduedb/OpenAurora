@@ -215,6 +215,7 @@ void RDMA_Manager::Delete_Instance(bool holdLock) {
 }
 
 void RDMA_Manager::ClearOneConnection(uint16_t target_node_id) {
+    std::unique_lock<std::shared_mutex> l(qp_cq_map_mutex);
     if (!res->qp_map.empty() && res->qp_map.count(target_node_id)) {
         if (ibv_destroy_qp(res->qp_map[target_node_id]))
             fprintf(stderr, "failed to destroy QP\n");
@@ -371,7 +372,7 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     if (!qp)
         fprintf(stderr, "failed to create QP\n");
 
-    fprintf(stdout, "QP was created, QP number=0x%x\n", qp->qp_num);
+    // fprintf(stdout, "QP was created, QP number=0x%x\n", qp->qp_num);
     // Used to be "ibv_qp* qp = create_qp(shard_target_node_id, true, qp_type);", but the
     // shard_target_node_id is not available so we unwrap the function
 
@@ -379,7 +380,7 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     local_con_data.lid = htons(res->port_attr.lid);
     memcpy(local_con_data.gid, &res->my_gid, 16);
     local_con_data.node_id = target_node_id;
-    fprintf(stdout, "Local LID = 0x%x\n", res->port_attr.lid);
+    // fprintf(stdout, "Local LID = 0x%x\n", res->port_attr.lid);
 
     if (sock_sync_data(socket_fd, sizeof(struct Registered_qp_config),
             (char*)&local_con_data, (char*)&tmp_con_data) < 0) {
@@ -388,8 +389,8 @@ void RDMA_Manager::ConnectQPThroughSocket(std::string qp_type, int socket_fd, ui
     remote_con_data->qp_num = ntohl(tmp_con_data.qp_num);
     remote_con_data->lid = ntohs(tmp_con_data.lid);
     memcpy(remote_con_data->gid, tmp_con_data.gid, 16);
-    fprintf(stdout, "Remote QP number = 0x%x\n", remote_con_data->qp_num);
-    fprintf(stdout, "Remote LID = 0x%x\n", remote_con_data->lid);
+    // fprintf(stdout, "Remote QP number = 0x%x\n", remote_con_data->qp_num);
+    // fprintf(stdout, "Remote LID = 0x%x\n", remote_con_data->lid);
     remote_con_data->node_id = target_node_id;
     std::unique_lock<std::shared_mutex> l(qp_cq_map_mutex);
     res->qp_map[target_node_id] = qp;
