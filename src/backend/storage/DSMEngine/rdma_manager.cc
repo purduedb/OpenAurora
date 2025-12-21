@@ -12,6 +12,21 @@ uint16_t allocated_compute_node_id = 0;
 thread_local int RDMA_Manager::thread_id = 0;
 thread_local int RDMA_Manager::qp_inc_ticket = 0;
 
+int ibv_post_send_debug(ibv_qp *qp, ibv_send_wr *wr, ibv_send_wr **bad_wr){
+    for(int i = 0; i < wr->num_sge; i++)
+        *mpNtwkBndwdth += wr->sg_list[i].length;
+    return ibv_post_send(qp, wr, bad_wr);
+}
+int ibv_post_recv_debug(ibv_qp *qp, ibv_recv_wr *wr, ibv_recv_wr **bad_wr){
+    for(int i = 0; i < wr->num_sge; i++)
+        *mpNtwkBndwdth += wr->sg_list[i].length;
+    return ibv_post_recv(qp, wr, bad_wr);
+}
+#ifdef USE_MEMPOOL_STAT
+#define ibv_post_send ibv_post_send_debug
+#define ibv_post_recv ibv_post_recv
+#endif
+
 void UnrefHandle_rdma(void* ptr) { delete static_cast<std::string*>(ptr); }
 void UnrefHandle_qp(void* ptr) {
     if (ptr == nullptr) return;

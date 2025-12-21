@@ -9,7 +9,7 @@ size_t *node_id_cnt;
 
 size_t *to_async_pat;
 std::chrono::steady_clock::time_point *last_sync_pat;
-int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
+int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt, *mpNtwkBndwdth;
 
 // For PAT
 size_t *mpc_pa_cnt, *mpc_pa_size, *mpc_pa_cnt_per_memnode, *mpc_pa_to_memnode, *mpc_memnode_to_pa;
@@ -34,6 +34,7 @@ void MemPoolClientShmemInit(){
 	mpLocalCnt = (int64 *)ShmemInitStruct("mpLocalCnt",sizeof(int64),found_any, found_all);
 	mpMemCnt = (int64 *)ShmemInitStruct("mpMemCnt",sizeof(int64),found_any, found_all);
 	mpStoCnt = (int64 *)ShmemInitStruct("mpStoCnt",sizeof(int64),found_any, found_all);
+	mpNtwkBndwdth = (int64 *)ShmemInitStruct("mpNtwkBndwdth",sizeof(int64),found_any, found_all);
 	mempool_client_lw_lock = (LWLock *)
 		ShmemInitStruct("MemPool Client lwlock",
 						NUMBER_OF_mempool_client_lw_lock * sizeof(LWLock),
@@ -126,7 +127,7 @@ void MemPoolClientShmemInit(){
 		*to_async_pat = 0;
 		*last_sync_pat = std::chrono::steady_clock::now();
 		*is_first_mpc = true;
-		*mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
+		*mpLocalCnt = *mpMemCnt = *mpStoCnt = *mpNtwkBndwdth = 0;
 	}
 }
 
@@ -134,7 +135,7 @@ Size MemPoolClientShmemSize(void)
 {
 	Size size = 0;
 
-	size = add_size(size, mul_size(3, sizeof(int64)));
+	size = add_size(size, mul_size(4, sizeof(int64)));
 
 	size = add_size(size, mul_size(NUMBER_OF_mempool_client_lw_lock, sizeof(LWLock)));
 

@@ -1813,20 +1813,37 @@ vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 void MemPoolSyncMain(){
     int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, GetLogWrtResultLsn());
 
-    size_t interval_us[5] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us};
+    size_t interval_us[6] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
     size_t min_interval_us = interval_us[0];
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 6; i++)
         min_interval_us = std::min(min_interval_us, interval_us[i]);
-	std::chrono::steady_clock::duration interval[5];
-    for(int i = 0; i < 5; i++)
+	std::chrono::steady_clock::duration interval[6];
+    for(int i = 0; i < 6; i++)
         interval[i] = std::chrono::duration<int, std::micro>(interval_us[i]);
 
-    std::chrono::steady_clock::time_point last[5];
-    for(int i = 0; i < 5; i++)
+    std::chrono::steady_clock::time_point last[6];
+    for(int i = 0; i < 6; i++)
         last[i] = std::chrono::steady_clock::now() - interval[i];
         
     std::chrono::steady_clock::time_point now;
     while(true){
+#ifdef USE_MEMPOOL_STAT
+        if(IsRpcClient >= 2){
+            now = std::chrono::steady_clock::now();
+            if(now - last[5] >= interval[5]){
+                auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - last[5]).count();
+                double elapsed_sec = elapsed / 1e6;
+                last[5] = now;
+
+                int64_t bytes = *mpNtwkBndwdth;
+                *mpNtwkBndwdth = 0;
+                double rate_mb_s = (bytes / (1024.0 * 1024.0)) / elapsed_sec;
+
+                printf("total bytes: %lld\t\ttime: %.3f s\t\tbandwidth usage: %.3f MB/s\n", bytes, elapsed_sec, rate_mb_s);
+            }
+        }
+#endif
+
         if(IsRpcClient >= 2){
             now = std::chrono::steady_clock::now();
             if(now - last[0] >= interval[0]){

@@ -39,6 +39,7 @@ extern "C" {
 #define SyncXLogInfo_Interval_us 1000
 #define SyncUpdateVersionMapInfo_Interval_us 500
 #define NeonHeartbeatInterval_us 1000000
+#define BandwidthUsageReportInterval_us 5000000
 
 #define TryReconnectionToMemPool_Interval_us 1000000
 

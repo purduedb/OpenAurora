@@ -12,7 +12,7 @@ extern "C" {
 #include "storage/GroundDB/mempool_client.h"
 
 extern size_t *to_async_pat;
-extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt;
+extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt, *mpNtwkBndwdth;
 
 #define NUMBER_OF_mempool_client_lw_lock 5
 #define mempool_client_connection_lock (&mempool_client_lw_lock[0])

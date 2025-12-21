@@ -39,6 +39,7 @@
 #include <list>
 #include <cstdint>
 #include "storage/GroundDB/rdma_server.hh"
+#include "storage/GroundDB/mempool_shmem.h"
 #define _mm_clflush(addr)\
 	asm volatile("clflush %0" : "+m" (*(volatile char *)(addr)))
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -63,6 +64,13 @@ enum Chunk_type {Internal_and_Leaf, LockTable, Message, PageArray, PageIDArray, 
 static const char * EnumStrings[] = { "Internal_and_Leaf", "LockTable", "Message", "PageArray", "PageIDArray", "Version_edit", "IndexChunk", "FilterChunk", "FlushBuffer", "DataChunk"};
 
 static char config_file_name[100] = "../connection.conf";
+
+int ibv_post_send_debug(ibv_qp *qp, ibv_send_wr *wr, ibv_send_wr **bad_wr);
+int ibv_post_recv_debug(ibv_qp *qp, ibv_recv_wr *wr, ibv_recv_wr **bad_wr);
+#ifdef USE_MEMPOOL_STAT
+#define ibv_post_send ibv_post_send_debug
+#define ibv_post_recv ibv_post_recv_debug
+#endif
 
 struct config_t {
     const char* dev_name;        /* IB device name */
@@ -669,4 +677,9 @@ public:
 };
 
 }
+
+#ifdef USE_MEMPOOL_STAT
+#undef ibv_post_send
+#undef ibv_post_recv
+#endif
 #endif
