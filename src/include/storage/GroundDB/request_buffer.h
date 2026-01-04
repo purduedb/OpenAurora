@@ -72,4 +72,15 @@ struct get_first_update_vm_info_idx_response{
     size_t idx;
 };
 
+struct register_page_request{
+    KeyType page_id;
+};
+struct register_page_response{
+    bool exists;
+    size_t pa_idx, pa_ofs;
+};
+struct unregister_page_request{
+    KeyType page_id;
+};
+
 } // namespace mempool

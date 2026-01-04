@@ -139,6 +139,8 @@ enum RDMA_Command_Type {
     flush_update_vm_info_,
     fetch_update_vm_info_,
     get_first_update_vm_info_idx_,
+    register_page_,
+    unregister_page_,
 /*******/
     create_qp_,
     create_mr_,
@@ -181,6 +183,8 @@ union RDMA_Request_Content {
     mempool::flush_xlog_info_request flush_xlog_info;
     mempool::flush_update_vm_info_request flush_update_vm_info;
     mempool::fetch_update_vm_info_request fetch_update_vm_info;
+    mempool::register_page_request register_page;
+    mempool::unregister_page_request unregister_page;
 /******/
     Registered_qp_config qp_config;
 };
@@ -190,6 +194,7 @@ union RDMA_Reply_Content {
     mempool::fetch_xlog_info_response fetch_xlog_info;
     mempool::fetch_update_vm_info_response fetch_update_vm_info;
     mempool::get_first_update_vm_info_idx_response get_first_update_vm_info_idx;
+    mempool::register_page_response register_page;
 /********/
     Registered_qp_config qp_config;
 };

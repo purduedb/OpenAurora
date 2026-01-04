@@ -218,6 +218,12 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::get_first_update_vm_info_idx_) {
             std::function<void(void *args)> handler = [this](void *args){this->get_first_update_vm_info_idx_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::register_page_) {
+            std::function<void(void *args)> handler = [this](void *args){this->register_page_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
+        } else if (receive_msg_buf.command == DSMEngine::unregister_page_) {
+            std::function<void(void *args)> handler = [this](void *args){this->unregister_page_handler(args);};
+            thrd_pool->Schedule(std::move(handler), (void*)req_args);
         } else if (receive_msg_buf.command == DSMEngine::disconnect_) {
             break;
         } else {
@@ -537,6 +543,60 @@ void MemPoolManager::get_first_update_vm_info_idx_handler(void* args){
     ibv_wc wc[3] = {};
     rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
     rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::register_page_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.register_page;
+
+    ibv_mr send_mr;
+    rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+    auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
+    auto res = &send_pointer->content.register_page;
+
+    auto e1 = lru->Lookup(req->page_id);
+    auto e2 = lru->LookupInsert(req->page_id, nullptr, 1, nullptr);
+    auto pagemeta = (PageMeta*)e2->value;
+    std::unique_lock<std::shared_mutex> lk(e2->rw_mtx);
+    res->exists = (e1 != nullptr);
+    for(int i = 0; i < page_arrays.size(); i++){
+        auto&page_array = page_arrays[i];
+        if(pagemeta->page_addr < page_array.pa_buf ||
+           pagemeta->page_addr >= page_array.pa_buf + page_array.size * BLCKSZ)
+            continue;
+        res->pa_idx = i;
+        res->pa_ofs = ((char*)(pagemeta->page_addr) - page_array.pa_buf) / BLCKSZ;
+        break;
+    }
+    lk.unlock();
+    if(e1 != nullptr)
+        lru->Release(e1);
+
+    send_pointer->received = true;
+    rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
+    ibv_wc wc[3] = {};
+    rdma_mg->poll_completion(wc, 1, client_ip, true, target_node_id);
+    rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+    delete Args;
+}
+
+void MemPoolManager::unregister_page_handler(void* args){
+    auto Args = (request_handler_args*)args;
+    auto request = &Args->request;
+    auto client_ip = Args->client_ip;
+    auto target_node_id = Args->compute_node_id;
+    auto req = &request->content.unregister_page;
+
+    auto e = lru->Lookup(req->page_id);
+    if (e != nullptr){
+        lru->Release(e);
+        lru->Release(e);
+    }
+
     delete Args;
 }
 
