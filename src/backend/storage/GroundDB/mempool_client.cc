@@ -30,6 +30,7 @@ public:
     size_t GetFirstUpdateVersionMapInfoIndex();
     static void Clear_Instance(bool disconnect);
     static void Clear_Instance_If_Failed();
+    bool NoAliveConnection();
 
     DSMEngine::RDMA_Manager* rdma_mg;
     PageAddressTable pat;
@@ -47,6 +48,11 @@ bool time_to_reconnect(){
     return std::chrono::steady_clock::now() - last_time_try_connecting_to_mempool_server > std::chrono::duration<int, std::micro>(TryReconnectionToMemPool_Interval_us);
 }
 
+bool MemPoolClient::NoAliveConnection(){
+    for(auto f: has_failed)
+        if(!f) return false;
+    return true;
+}
 MemPoolClient::MemPoolClient(){
 	LWLockAcquire(mempool_client_connection_lock, LW_EXCLUSIVE);
     struct DSMEngine::config_t config = {
@@ -57,13 +63,11 @@ MemPoolClient::MemPoolClient(){
             0,
             0 << 16 | get_MemPoolClient_node_id()};
     rdma_mg = DSMEngine::RDMA_Manager::Get_Instance(&config);
-    if (rdma_mg == NULL){
-        has_failed.push_back(true);
-        goto exit;
-    }
     memnode_cnt = rdma_mg->GetMemoryNodeNum();
     for(int i = 0; i < memnode_cnt; i++)
-        has_failed.push_back(!rdma_mg->memory_node_status[2 * i + 1]);
+        has_failed.push_back(rdma_mg == NULL || !rdma_mg->memory_node_status[2 * i + 1]);
+    if(NoAliveConnection())
+        goto exit;
     rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
     rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
 
@@ -136,7 +140,7 @@ MemPoolClient* MemPoolClient::Get_Instance(){
         last_time_try_connecting_to_mempool_server = std::chrono::steady_clock::now();
         client = new MemPoolClient();
 		pid = getpid();
-        if(client->has_failed[0]){
+        if(client->NoAliveConnection()){
             DSMEngine::RDMA_Manager::Delete_Instance();
             delete client;
             client = nullptr;
@@ -179,12 +183,12 @@ void MemPoolClient::Clear_Instance(bool disconnect){
 void MemPoolClient::Clear_Instance_If_Failed(){
     get_instance_lock.lock();
     if(client != nullptr){
-        if(client->has_failed[0]){
+        if(client->NoAliveConnection()){
             get_instance_lock.unlock();
             MemPoolClient::Clear_Instance(false);
             return;
         }
-        for(int i = 1; i < client->memnode_cnt; i++)
+        for(int i = 0; i < client->memnode_cnt; i++)
             if(client->has_failed[i] && !is_first_mpc_connection[i]){
                 client->rdma_mg->ClearOneConnection(2 * i + 1);
                 is_first_mpc_connection[i] = true;
