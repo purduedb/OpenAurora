@@ -77,6 +77,9 @@ extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 extern void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn);
 extern void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn);
 
+bool RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
+void UnregisterPageOnMemPool(KeyType PageID);
+
 extern void MemPoolSyncMain();
 
 

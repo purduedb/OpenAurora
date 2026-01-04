@@ -104,5 +104,16 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 	}
 	LWLockRelease(mempool_client_pat_lock);
 }
+void PageAddressTable::erase(KeyType pid){
+	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
+    auto *result = (PATLookupEntry*)
+		hash_search_with_hash_value(mpc_pid_to_idx,
+									&pid,
+									get_hash_value(mpc_pid_to_idx, &pid),
+									HASH_REMOVE,
+									NULL);
+	Assert(result != NULL);
+	LWLockRelease(mempool_client_pat_lock);
+}
 
 } // namespace mempool

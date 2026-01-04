@@ -28,6 +28,8 @@ public:
     void FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
     int FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx);
     size_t GetFirstUpdateVersionMapInfoIndex();
+    bool RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
+    void UnregisterPageOnMemPool(KeyType PageID);
     static void Clear_Instance(bool disconnect);
     static void Clear_Instance_If_Failed();
     bool NoAliveConnection();
@@ -752,6 +754,69 @@ void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         blocknum,
     });
 #endif
+}
+bool mempool::MemPoolClient::RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info){
+	ibv_mr recv_mr, send_mr;
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
+
+	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
+	has_failed[memnode_id] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, 1);
+    if(has_failed[memnode_id]) return false;
+	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
+	auto req = &send_pointer->content.register_page;
+	send_pointer->command = DSMEngine::register_page_;
+	send_pointer->buffer = recv_mr.addr;
+	send_pointer->rkey = recv_mr.rkey;
+    req->page_id = PageID;
+	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+    if(has_failed[memnode_id]) return false;
+
+	ibv_wc wc[3] = {};
+	std::string qp_type("main");
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+    if(has_failed[memnode_id]) return false;
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
+    if(has_failed[memnode_id]) return false;
+
+	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.register_page;
+    pat.update(res->pa_idx, res->pa_ofs, PageID);
+    bool exists = res->exists;
+	if(exists)
+        pat.at(PageID, *rdma_read_info);
+
+	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
+    return exists;
+}
+bool RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info){
+    auto client = mempool::MemPoolClient::Get_Instance();
+    if(client == NULL) return false;
+    return client->RegisterPageOnMemPool(PageID, rdma_read_info);
+}
+void mempool::MemPoolClient::UnregisterPageOnMemPool(KeyType PageID){
+	ibv_mr send_mr;
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
+
+	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
+	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
+	auto req = &send_pointer->content.unregister_page;
+	send_pointer->command = DSMEngine::unregister_page_;
+    req->page_id = PageID;
+	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+    if(has_failed[memnode_id]) return;
+
+	ibv_wc wc[3] = {};
+	std::string qp_type("main");
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+    if(has_failed[memnode_id]) return;
+
+	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
+}
+void UnregisterPageOnMemPool(KeyType PageID){
+    auto client = mempool::MemPoolClient::Get_Instance();
+    if(client == NULL) return;
+    client->UnregisterPageOnMemPool(PageID);
 }
 
 void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn){
