@@ -983,6 +983,21 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		}
 	}
 
+	KeyType page_id = {
+		smgr->smgr_rnode.node.spcNode,
+		smgr->smgr_rnode.node.dbNode,
+		smgr->smgr_rnode.node.relNode,
+		forkNum,
+		blockNum
+	};
+	RDMAReadPageInfo rdma_read_info;
+#ifdef MEMPOOL_CENTRALIZED_PAT
+	// Register the page on the remote memory pool
+	bool exists_in_mempool = false;
+	if(IsRpcClient > 1)
+		exists_in_mempool = RegisterPageOnMemPool(page_id, &rdma_read_info);
+#endif
+
 	/*
 	 * if we have gotten to this point, we have allocated a buffer for the
 	 * page but its contents are not yet valid.  IO_IN_PROGRESS is set for it,
@@ -1017,13 +1032,6 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		if(IsRpcClient > 1){
 			toMarkDirty = true;
 #ifdef MEMPOOL_CACHE_POLICY_COVERING
-			KeyType page_id = {
-				smgr->smgr_rnode.node.spcNode,
-				smgr->smgr_rnode.node.dbNode,
-				smgr->smgr_rnode.node.relNode,
-				forkNum,
-				blockNum
-			};
 			SyncFlushPageToMemoryPool(bufBlock, page_id);
 			toMarkDirty = false;
 #endif
@@ -1047,27 +1055,28 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			if(IsRpcClient){
 				if(IsRpcClient > 1){
 					bool read_from_mempool = false;
-					KeyType page_id = {
-						smgr->smgr_rnode.node.spcNode,
-						smgr->smgr_rnode.node.dbNode,
-						smgr->smgr_rnode.node.relNode,
-						forkNum,
-						blockNum
-					};
-					RDMAReadPageInfo rdma_read_info;
+#ifdef MEMPOOL_CENTRALIZED_PAT
+					if(exists_in_mempool){
+#else
 					if(PageExistsInMemPool(page_id, &rdma_read_info)){
+#endif
 						Assert(DataChecksumsEnabled());
 						if(FetchPageFromMemoryPool((char*)bufBlock, page_id, &rdma_read_info)
+#ifdef MEMPOOL_CENTRALIZED_PAT
+						&& !PageIsNew(bufBlock)
+#endif
 						&& PageFromMemPoolIsVerified((Page)bufBlock, blockNum)){
 							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
 							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
 								read_from_mempool = true;
 								*hit = 2;
 								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
+#ifndef MEMPOOL_CENTRALIZED_PAT
 #ifndef MEMPOOL_CACHE_POLICY_DISJOINT
 								AsyncAccessPageOnMemoryPool(page_id);
 #else
 								AsyncRemovePageOnMemoryPool(page_id);
+#endif
 #endif
 							}
 						}
@@ -1630,6 +1639,15 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	if (oldPartitionLock != NULL)
 	{
+#ifdef MEMPOOL_CENTRALIZED_PAT
+		UnregisterPageOnMemPool((KeyType){
+			oldTag.rnode.spcNode,
+			oldTag.rnode.dbNode,
+			oldTag.rnode.relNode,
+			oldTag.forkNum,
+			oldTag.blockNum,
+		});
+#endif
 		BufTableDelete(&oldTag, oldHash);
 		if (oldPartitionLock != newPartitionLock)
 			LWLockRelease(oldPartitionLock);

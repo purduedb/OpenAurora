@@ -1913,6 +1913,7 @@ void MemPoolSyncMain(){
         }
 #endif
 
+#ifndef MEMPOOL_CENTRALIZED_PAT
         if(IsRpcClient >= 2){
             now = std::chrono::steady_clock::now();
             if(now - last[0] >= interval[0]){
@@ -1924,6 +1925,7 @@ void MemPoolSyncMain(){
                 }
             }
         }
+#endif
 
         if(IsRpcClient == 2){
             now = std::chrono::steady_clock::now();
