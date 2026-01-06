@@ -112,6 +112,7 @@ void PageAddressTable::erase(KeyType pid){
 									get_hash_value(mpc_pid_to_idx, &pid),
 									HASH_REMOVE,
 									NULL);
+	mpc_idx_to_pid[mpc_pa_size[result->pa_idx] + result->pa_ofs] = nullKeyType;
 	Assert(result != NULL);
 	LWLockRelease(mempool_client_pat_lock);
 }

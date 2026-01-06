@@ -810,6 +810,7 @@ void mempool::MemPoolClient::UnregisterPageOnMemPool(KeyType PageID){
 	std::string qp_type("main");
 	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
     if(has_failed[memnode_id]) return;
+    pat.erase(PageID);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 }
