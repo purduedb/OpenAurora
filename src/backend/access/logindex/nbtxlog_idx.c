@@ -248,7 +248,7 @@ polar_btree_xlog_split(bool newitemonleft, XLogReaderState *record,
             oopaque->btpo_flags = BTP_INCOMPLETE_SPLIT;
             if (isleaf)
                 oopaque->btpo_flags |= BTP_LEAF;
-            oopaque->btpo_next = tag[1].blockNum;
+            oopaque->btpo_next = tags[1].blockNum;
             oopaque->btpo_cycleid = 0;
 
             PageSetLSN(origpage, lsn);
