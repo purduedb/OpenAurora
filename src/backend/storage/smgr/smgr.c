@@ -603,6 +603,7 @@ smgrwriteback(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
  *	smgrnblocks() -- Calculate the number of blocks in the
  *					 supplied relation.
  */
+extern bool am_wal_redo_postgres;
 BlockNumber
 smgrnblocks(SMgrRelation reln, ForkNumber forknum)
 {
@@ -610,7 +611,7 @@ smgrnblocks(SMgrRelation reln, ForkNumber forknum)
 
 	/* Check and return if we get the cached value for the number of blocks. */
 	result = smgrnblocks_cached(reln, forknum);
-	if (result != InvalidBlockNumber)
+	if (!am_wal_redo_postgres && result != InvalidBlockNumber)
 		return result;
 
 	result = smgrsw[reln->smgr_which].smgr_nblocks(reln, forknum);
