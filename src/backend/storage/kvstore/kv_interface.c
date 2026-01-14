@@ -28,13 +28,13 @@ rocksdb_t *db = NULL;
 #endif
 
 // $SpcID_$DbID_$RelID_$ForkNum_$BlkNum
-#define ROCKSDB_LSN_LIST_KEY  ("rocks_list_%lu_%lu_%lu_%d_%u\0")
+#define ROCKSDB_LSN_LIST_KEY  ("l%lx_%lx_%lx_%d_%x\0")
 
 // $SpcID_$DbID_$RelID_$ForkNum_$BlkNum_$LSN
-#define ROCKSDB_PAGE_VERSION_KEY  ("rocks_page_%lu_%lu_%lu_%d_%u_%lu\0")
+#define ROCKSDB_PAGE_VERSION_KEY  ("p%lx_%lx_%lx_%d_%x_%lx\0")
 
 // $LSN
-#define ROCKSDB_XLOG_KEY ("rocks_xlog_%lu\0")
+#define ROCKSDB_XLOG_KEY ("x%lx\0")
 
 #define MAX_PATH_LEN (256)
 
@@ -67,7 +67,7 @@ void InitKvStore() {
 //                    errmsg("MAX FILE NUM = %d\n", max_file_num)));
 //
 //    sleep(15);
-    rocksdb_options_set_max_open_files(options, 1024);
+    rocksdb_options_set_max_open_files(options, -1);
 #if defined(OS_WIN)
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
@@ -89,6 +89,11 @@ void InitKvStore() {
     rocksdb_options_set_max_successive_merges(options, 1000);
 //    rocksdb_options_set_manual_wal_flush(options, 1);
     rocksdb_options_set_write_buffer_size(options, (size_t)300*1024*1024);
+    rocksdb_options_set_max_bytes_for_level_base(options,
+        rocksdb_options_get_write_buffer_size(options)
+        * rocksdb_options_get_min_write_buffer_number_to_merge(options)
+        * rocksdb_options_get_level0_file_num_compaction_trigger(options));
+    rocksdb_options_set_target_file_size_base(options, rocksdb_options_get_max_bytes_for_level_base(options) / 10);
 
     rocksdb_env_t *options_env = rocksdb_create_default_env();
     rocksdb_env_set_high_priority_background_threads(options_env, (int)(cpus));
