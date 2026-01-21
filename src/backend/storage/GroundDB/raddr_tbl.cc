@@ -13,22 +13,22 @@ bool KeyTypeEqualFunction::operator() (const KeyType &key1, const KeyType &key2)
 }
 
 size_t PageAddressTable::page_array_count(){
-	LWLockAcquire(mempool_client_pat_lock, LW_SHARED);
+	LWLockAcquire(mempool_client_rat_lock, LW_SHARED);
 	auto res = *mpc_pa_cnt;
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 	return res;
 }
 size_t PageAddressTable::page_array_size(size_t pa_idx){
-	LWLockAcquire(mempool_client_pat_lock, LW_SHARED);
+	LWLockAcquire(mempool_client_rat_lock, LW_SHARED);
 	auto res = mpc_pa_size[pa_idx + 1] - mpc_pa_size[pa_idx];
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 	return res;
 }
 void PageAddressTable::get_memnode_id(size_t pa_idx, size_t& memnode_id, size_t& memnode_pa_idx){
-	LWLockAcquire(mempool_client_pat_lock, LW_SHARED);
+	LWLockAcquire(mempool_client_rat_lock, LW_SHARED);
 	memnode_id = mpc_pa_to_memnode[pa_idx << 1];
 	memnode_pa_idx = mpc_pa_to_memnode[pa_idx << 1 | 1];
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 }
 void PageAddressTable::init(size_t memnode_cnt){
 	*mpc_pa_cnt = 0;
@@ -37,12 +37,12 @@ void PageAddressTable::init(size_t memnode_cnt){
 		mpc_pa_cnt_per_memnode[i] = 0;
 }
 void PageAddressTable::append_page_array(size_t memnode_id, size_t pa_idx, size_t pa_size, const ibv_mr& pa_mr, const ibv_mr& pida_mr){
-	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
+	LWLockAcquire(mempool_client_rat_lock, LW_EXCLUSIVE);
 	if(pa_idx < mpc_pa_cnt_per_memnode[memnode_id]){
-		size_t pat_idx = mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + pa_idx];
-		Assert(pa_size == mpc_pa_size[pat_idx + 1] - mpc_pa_size[pat_idx]);
-		mpc_idx_to_mr[pat_idx << 1] = pa_mr;
-		mpc_idx_to_mr[pat_idx << 1 | 1] = pida_mr;
+		size_t rat_idx = mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + pa_idx];
+		Assert(pa_size == mpc_pa_size[rat_idx + 1] - mpc_pa_size[rat_idx]);
+		mpc_idx_to_mr[rat_idx << 1] = pa_mr;
+		mpc_idx_to_mr[rat_idx << 1 | 1] = pida_mr;
 	}
 	else{
 		Assert(pa_idx == mpc_pa_cnt_per_memnode[memnode_id]);
@@ -57,11 +57,11 @@ void PageAddressTable::append_page_array(size_t memnode_id, size_t pa_idx, size_
 		mpc_pa_cnt_per_memnode[memnode_id]++;
 		(*mpc_pa_cnt)++;
 	}
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 }
 void PageAddressTable::at(KeyType pid, RDMAReadPageInfo& info){
-	LWLockAcquire(mempool_client_pat_lock, LW_SHARED);
-    auto *result = (PATLookupEntry*)
+	LWLockAcquire(mempool_client_rat_lock, LW_SHARED);
+    auto *result = (RATLookupEntry*)
 		hash_search_with_hash_value(mpc_pid_to_idx,
 									&pid,
 									get_hash_value(mpc_pid_to_idx, &pid),
@@ -75,14 +75,14 @@ void PageAddressTable::at(KeyType pid, RDMAReadPageInfo& info){
 	}
 	else
 		info.pa_ofs = -1;
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 }
 void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
-	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
+	LWLockAcquire(mempool_client_rat_lock, LW_EXCLUSIVE);
 	auto& page_id = mpc_idx_to_pid[mpc_pa_size[pa_idx] + pa_ofs];
 	if(!KeyTypeEqualFunction()(page_id, pid)){
 		if(!KeyTypeEqualFunction()(page_id, nullKeyType)){
-			auto *result = (PATLookupEntry*)
+			auto *result = (RATLookupEntry*)
 				hash_search_with_hash_value(mpc_pid_to_idx,
 											&page_id,
 											get_hash_value(mpc_pid_to_idx, &page_id),
@@ -92,7 +92,7 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 		}
 		page_id = pid;
 		if(!KeyTypeEqualFunction()(pid, nullKeyType)){
-			auto result = (PATLookupEntry*)
+			auto result = (RATLookupEntry*)
 				hash_search_with_hash_value(mpc_pid_to_idx,
 											&pid,
 											get_hash_value(mpc_pid_to_idx, &pid),
@@ -102,11 +102,11 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 			result->pa_ofs = pa_ofs;
 		}
 	}
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 }
 void PageAddressTable::erase(KeyType pid){
-	LWLockAcquire(mempool_client_pat_lock, LW_EXCLUSIVE);
-    auto *result = (PATLookupEntry*)
+	LWLockAcquire(mempool_client_rat_lock, LW_EXCLUSIVE);
+    auto *result = (RATLookupEntry*)
 		hash_search_with_hash_value(mpc_pid_to_idx,
 									&pid,
 									get_hash_value(mpc_pid_to_idx, &pid),
@@ -114,7 +114,7 @@ void PageAddressTable::erase(KeyType pid){
 									NULL);
 	mpc_idx_to_pid[mpc_pa_size[result->pa_idx] + result->pa_ofs] = nullKeyType;
 	Assert(result != NULL);
-	LWLockRelease(mempool_client_pat_lock);
+	LWLockRelease(mempool_client_rat_lock);
 }
 
 } // namespace mempool

@@ -197,8 +197,8 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::async_remove_page_) {
             std::function<void(void *args)> handler = [this](void *args){this->async_remove_page_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
-        } else if (receive_msg_buf.command == DSMEngine::sync_pat_) {
-            std::function<void(void *args)> handler = [this](void *args){this->sync_pat_handler(args);};
+        } else if (receive_msg_buf.command == DSMEngine::sync_rat_) {
+            std::function<void(void *args)> handler = [this](void *args){this->sync_rat_handler(args);};
             thrd_pool->Schedule(std::move(handler), (void*)req_args);
         } else if (receive_msg_buf.command == DSMEngine::mr_info_) {
             std::function<void(void *args)> handler = [this](void *args){this->mr_info_handler(args);};
