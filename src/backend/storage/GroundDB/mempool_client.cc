@@ -16,7 +16,7 @@ class MemPoolClient{
 public:
     MemPoolClient();
     static MemPoolClient* Get_Instance();
-    bool AppendToPAT(size_t memnode_id, size_t pa_idx);
+    bool AppendToRAT(size_t memnode_id, size_t pa_idx);
     void Disconnect();
 	int AccessPageOnMemoryPool(KeyType PageID);
 	int RemovePageOnMemoryPool(KeyType PageID);
@@ -93,14 +93,14 @@ MemPoolClient::MemPoolClient(){
 	}
     for(int i = 0; i < memnode_cnt; i++)
         if(!has_failed[i] && is_first_mpc_connection[i]){
-            if(AppendToPAT(i, 0))
+            if(AppendToRAT(i, 0))
                 is_first_mpc_connection[i] = false;
         }
 exit:
 	LWLockRelease(mempool_client_connection_lock);
 }
 
-bool MemPoolClient::AppendToPAT(size_t memnode_id, size_t pa_idx){
+bool MemPoolClient::AppendToRAT(size_t memnode_id, size_t pa_idx){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
@@ -157,7 +157,7 @@ MemPoolClient* MemPoolClient::Get_Instance(){
                 if(client->rdma_mg->Client_Set_Up_One_Connection(2 * i + 1)){
                     client->has_failed[i] = false;
                     if(is_first_mpc_connection[i]){
-                        if(client->AppendToPAT(i, 0))
+                        if(client->AppendToRAT(i, 0))
                             is_first_mpc_connection[i] = false;
                     }
                     AsyncGetNewestPageAddressTable(0);
@@ -493,14 +493,14 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
         rat.get_memnode_id(i, memnode_id, memnode_pa_idx);
         if(has_failed[memnode_id])
             continue;
-		for(size_t j = 0, max_j = rat.page_array_size(i); j < max_j; j += SYNC_PAT_SIZE){
+		for(size_t j = 0, max_j = rat.page_array_size(i); j < max_j; j += SYNC_RAT_SIZE){
 			rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
 			has_failed[memnode_id] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, memnode_id * 2 + 1);
             if(has_failed[memnode_id]) break;
 			rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 			auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
-			auto req = &send_pointer->content.sync_pat;
-			send_pointer->command = DSMEngine::sync_pat_;
+			auto req = &send_pointer->content.sync_rat;
+			send_pointer->command = DSMEngine::sync_rat_;
 			send_pointer->buffer = recv_mr.addr;
 			send_pointer->rkey = recv_mr.rkey;
 			req->pa_idx = memnode_pa_idx;
@@ -515,15 +515,15 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 			has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, false, memnode_id * 2 + 1);
             if(has_failed[memnode_id]) break;
 			
-			auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.sync_pat;
-			for(size_t k = 0; j + k < max_j && k < SYNC_PAT_SIZE; k++)
+			auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.sync_rat;
+			for(size_t k = 0; j + k < max_j && k < SYNC_RAT_SIZE; k++)
 				rat.update(i, j + k, res->page_id_array[k]);
 
 			rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 			rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 		}
     }
-    *to_async_pat = 0;
+    *to_async_rat = 0;
 }
 
 int mempool::MemPoolClient::AsyncFlushPageToMemoryPool(char* src, KeyType PageID){
@@ -1883,7 +1883,7 @@ vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 void MemPoolSyncMain(){
     int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, GetLogWrtResultLsn());
 
-    size_t interval_us[6] = {CheckSyncPAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
+    size_t interval_us[6] = {CheckSyncRAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
     size_t min_interval_us = interval_us[0];
     for(int i = 0; i < 6; i++)
         min_interval_us = std::min(min_interval_us, interval_us[i]);
@@ -1914,12 +1914,12 @@ void MemPoolSyncMain(){
         }
 #endif
 
-#ifndef MEMPOOL_CENTRALIZED_PAT
+#ifndef MEMPOOL_CENTRALIZED_RAT
         if(IsRpcClient >= 2){
             now = std::chrono::steady_clock::now();
             if(now - last[0] >= interval[0]){
                 last[0] = now;
-                if(whetherSyncPAT()){
+                if(whetherSyncRAT()){
                     auto client = mempool::MemPoolClient::Get_Instance();
                     if(client == NULL) goto skip_mempool_sync;
                     client->GetNewestPageAddressTable();

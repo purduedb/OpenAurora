@@ -7,11 +7,11 @@
 LWLock *mempool_client_lw_lock;
 size_t *node_id_cnt;
 
-size_t *to_async_pat;
-std::chrono::steady_clock::time_point *last_sync_pat;
+size_t *to_async_rat;
+std::chrono::steady_clock::time_point *last_sync_rat;
 int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt, *mpNtwkBndwdth;
 
-// For PAT
+// For RAT
 size_t *mpc_pa_cnt, *mpc_pa_size, *mpc_pa_cnt_per_memnode, *mpc_pa_to_memnode, *mpc_memnode_to_pa;
 KeyType *mpc_idx_to_pid;
 ibv_mr *mpc_idx_to_mr;
@@ -43,12 +43,12 @@ void MemPoolClientShmemInit(){
 		ShmemInitStruct("MemPool Client node ID counter",
 						sizeof(size_t),
 						found_any, found_all);
-	to_async_pat = (size_t*)
-		ShmemInitStruct("MemPool Client To Async PAT",
+	to_async_rat = (size_t*)
+		ShmemInitStruct("MemPool Client To Async RAT",
 						sizeof(size_t),
 						found_any, found_all);
-	last_sync_pat = (std::chrono::steady_clock::time_point*)
-		ShmemInitStruct("MemPool Client Last SyncPAT",
+	last_sync_rat = (std::chrono::steady_clock::time_point*)
+		ShmemInitStruct("MemPool Client Last SyncRAT",
 						sizeof(std::chrono::steady_clock::time_point),
 						found_any, found_all);
 	mpc_pa_cnt = (size_t*)
@@ -90,7 +90,7 @@ void MemPoolClientShmemInit(){
     HASHCTL info;
     MemSet(&info, 0, sizeof(info));
     info.keysize = sizeof(KeyType);
-    info.entrysize = sizeof(PATLookupEntry);
+    info.entrysize = sizeof(RATLookupEntry);
     info.num_partitions = PAGE_ARRAY_TABLE_PARTITION_NUM;
 	info.hash = [](const void *key, Size keysize)->uint32 {
 		return DSMEngine::Hash((KeyType*)key, 0);
@@ -124,8 +124,8 @@ void MemPoolClientShmemInit(){
 		for(int i = 0; i < NUMBER_OF_mempool_client_lw_lock; i++)
 			LWLockInitialize(&mempool_client_lw_lock[i], LWTRANCHE_MEMPOOL_CLIENT);
 		*node_id_cnt = 0;
-		*to_async_pat = 0;
-		*last_sync_pat = std::chrono::steady_clock::now();
+		*to_async_rat = 0;
+		*last_sync_rat = std::chrono::steady_clock::now();
 		*is_first_mpc = true;
 		*mpLocalCnt = *mpMemCnt = *mpStoCnt = *mpNtwkBndwdth = 0;
 	}
@@ -163,7 +163,7 @@ Size MemPoolClientShmemSize(void)
 
 	size = add_size(size, mul_size(MAX_MEMNODE_NODE, sizeof(bool)));
 
-	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(PATLookupEntry)));
+	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(RATLookupEntry)));
 	
 	size = add_size(size, hash_estimate_size_vm(1 << 18, 1 << 22));
 
@@ -178,17 +178,17 @@ size_t get_MemPoolClient_node_id(){
 	return id;
 }
 
-#define Max_SyncPAT_Interval_Multiplier 10
-#define Async_SyncPAT_Threshold 1000
+#define Max_SyncRAT_Interval_Multiplier 10
+#define Async_SyncRAT_Threshold 1000
 void AsyncGetNewestPageAddressTable(int increment){
-	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
+	LWLockAcquire(mempool_client_sync_rat_lock, LW_EXCLUSIVE);
 	if(increment > 0)
-		(*to_async_pat)+= increment;
+		(*to_async_rat)+= increment;
 	else
-		*to_async_pat = Async_SyncPAT_Threshold;
-	LWLockRelease(mempool_client_sync_pat_lock);
+		*to_async_rat = Async_SyncRAT_Threshold;
+	LWLockRelease(mempool_client_sync_rat_lock);
 }
-bool whetherSyncPAT(){
+bool whetherSyncRAT(){
 	static double last_mempool_hit_ratio = 1;
     LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
     int64_t tmpLocalCnt = *mpLocalCnt, tmpMemCnt = *mpMemCnt, tmpStoCnt = *mpStoCnt;
@@ -197,19 +197,19 @@ bool whetherSyncPAT(){
         last_mempool_hit_ratio = (double)tmpMemCnt / totalCnt;
     LWLockRelease(mempool_client_stat_lock);
 
-	double multiplier = last_mempool_hit_ratio < pow(Max_SyncPAT_Interval_Multiplier, -2) ? Max_SyncPAT_Interval_Multiplier : 1 / sqrt(last_mempool_hit_ratio);
+	double multiplier = last_mempool_hit_ratio < pow(Max_SyncRAT_Interval_Multiplier, -2) ? Max_SyncRAT_Interval_Multiplier : 1 / sqrt(last_mempool_hit_ratio);
 
-	LWLockAcquire(mempool_client_sync_pat_lock, LW_EXCLUSIVE);
+	LWLockAcquire(mempool_client_sync_rat_lock, LW_EXCLUSIVE);
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-	std::chrono::steady_clock::duration elapsed = now - *last_sync_pat;
+	std::chrono::steady_clock::duration elapsed = now - *last_sync_rat;
 	long long elapsed_seconds = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-	if(elapsed_seconds >= SyncPAT_Interval_us * multiplier || *to_async_pat >= Async_SyncPAT_Threshold){
-		*last_sync_pat = now;
-		LWLockRelease(mempool_client_sync_pat_lock);
+	if(elapsed_seconds >= SyncRAT_Interval_us * multiplier || *to_async_rat >= Async_SyncRAT_Threshold){
+		*last_sync_rat = now;
+		LWLockRelease(mempool_client_sync_rat_lock);
 		return true;
 	}
 	else{
-		LWLockRelease(mempool_client_sync_pat_lock);
+		LWLockRelease(mempool_client_sync_rat_lock);
 		return false;
 	}
 }

@@ -34,14 +34,14 @@ struct remove_page_request{
 	KeyType page_id;
 };
 
-struct sync_pat_request{
+struct sync_rat_request{
 	size_t pa_idx;
 	size_t pa_ofs;
 };
 // Now only support fixed size
-#define SYNC_PAT_SIZE 256
-struct sync_pat_response{
-	KeyType page_id_array[SYNC_PAT_SIZE];
+#define SYNC_RAT_SIZE 256
+struct sync_rat_response{
+	KeyType page_id_array[SYNC_RAT_SIZE];
 };
 
 struct mr_info_request{

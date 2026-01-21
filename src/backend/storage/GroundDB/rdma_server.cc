@@ -380,20 +380,20 @@ void MemPoolManager::async_remove_page_handler(void* args){
     delete Args;
 }
 
-void MemPoolManager::sync_pat_handler(void* args){
+void MemPoolManager::sync_rat_handler(void* args){
     auto Args = (request_handler_args*)args;
     auto request = &Args->request;
     auto client_ip = Args->client_ip;
     auto target_node_id = Args->compute_node_id;
-    auto req = &request->content.sync_pat;
+    auto req = &request->content.sync_rat;
 
     ibv_mr send_mr;
     rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
     auto send_pointer = (DSMEngine::RDMA_Reply*)send_mr.addr;
-    auto res = &send_pointer->content.sync_pat;
+    auto res = &send_pointer->content.sync_rat;
 
     auto&page_array = page_arrays[req->pa_idx];
-    for(int i = 0; req->pa_ofs + i < page_array.size && i < SYNC_PAT_SIZE; i++)
+    for(int i = 0; req->pa_ofs + i < page_array.size && i < SYNC_RAT_SIZE; i++)
         res->page_id_array[i] = *(KeyType*)(page_array.pida_buf + (req->pa_ofs + i) * sizeof(KeyType));
 
     send_pointer->received = true;

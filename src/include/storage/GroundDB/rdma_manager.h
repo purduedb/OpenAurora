@@ -131,7 +131,7 @@ enum RDMA_Command_Type {
     async_flush_page_,
     access_page_,
     async_remove_page_,
-    sync_pat_,
+    sync_rat_,
     mr_info_,
     disconnect_,
     flush_xlog_info_,
@@ -178,7 +178,7 @@ union RDMA_Request_Content {
     mempool::flush_page_request flush_page;
     mempool::access_page_request access_page;
     mempool::remove_page_request remove_page;
-    mempool::sync_pat_request sync_pat;
+    mempool::sync_rat_request sync_rat;
     mempool::mr_info_request mr_info;
     mempool::flush_xlog_info_request flush_xlog_info;
     mempool::flush_update_vm_info_request flush_update_vm_info;
@@ -189,7 +189,7 @@ union RDMA_Request_Content {
     Registered_qp_config qp_config;
 };
 union RDMA_Reply_Content {
-    mempool::sync_pat_response sync_pat;
+    mempool::sync_rat_response sync_rat;
     mempool::mr_info_response mr_info;
     mempool::fetch_xlog_info_response fetch_xlog_info;
     mempool::fetch_update_vm_info_response fetch_update_vm_info;

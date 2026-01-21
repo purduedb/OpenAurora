@@ -34,9 +34,9 @@ extern "C" {
 // #define USE_MEMPOOL_STAT
 // #define MEMPOOL_CACHE_POLICY_COVERING
 // #define MEMPOOL_CACHE_POLICY_DISJOINT
-// #define MEMPOOL_CENTRALIZED_PAT
-#define SyncPAT_Interval_us 1000000
-#define CheckSyncPAT_Interval_us (SyncPAT_Interval_us / 100)
+// #define MEMPOOL_CENTRALIZED_RAT
+#define SyncRAT_Interval_us 1000000
+#define CheckSyncRAT_Interval_us (SyncRAT_Interval_us / 100)
 #define SyncXLogInfo_Interval_us 1000
 #define SyncUpdateVersionMapInfo_Interval_us 500
 #define NeonHeartbeatInterval_us 1000000
