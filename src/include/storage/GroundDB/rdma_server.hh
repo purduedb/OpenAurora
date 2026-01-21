@@ -5,7 +5,7 @@
 #include "storage/GroundDB/lru.hh"
 #include "storage/GroundDB/request_buffer.h"
 #include "storage/GroundDB/ThreadPool.h"
-#include "storage/GroundDB/cache.h"
+#include "storage/GroundDB/mempool_lru.h"
 #include "storage/GroundDB/rdma_manager.h"
 
 namespace DSMEngine{

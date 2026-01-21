@@ -6,7 +6,7 @@
 #include "storage/GroundDB/mempool_server.h"
 #include "storage/GroundDB/rdma_server.hh"
 #include "storage/GroundDB/ThreadPool.h"
-#include "storage/GroundDB/cache.h"
+#include "storage/GroundDB/mempool_lru.h"
 #include "storage/GroundDB/request_buffer.h"
 #include <mutex>
 
