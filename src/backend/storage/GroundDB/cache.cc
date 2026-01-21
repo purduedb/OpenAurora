@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "storage/DSMEngine/cache.h"
+#include "storage/GroundDB/cache.h"
 
 #include <cassert>
 #include <cstdio>
@@ -11,8 +11,8 @@
 
 #include "port/port.h"
 #include "port/thread_annotations.h"
-#include "storage/DSMEngine/HugePageAlloc.h"
-#include "utils/DSMEngine/hash.h"
+#include "storage/GroundDB/HugePageAlloc.h"
+#include "utils/GroundDB/hash.h"
 // #include "rdma.h"
 // #include "storage/page.h"
 

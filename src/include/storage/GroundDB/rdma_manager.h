@@ -24,11 +24,11 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include "utils/DSMEngine/thread_local.h"
-#include "storage/DSMEngine/Common.h"
+#include "utils/GroundDB/thread_local.h"
+#include "storage/GroundDB/Common.h"
 #include "port/port_posix.h"
-#include "utils/DSMEngine/mutexlock.h"
-#include "storage/DSMEngine/ThreadPool.h"
+#include "utils/GroundDB/mutexlock.h"
+#include "storage/GroundDB/ThreadPool.h"
 #include <atomic>
 #include <chrono>
 #include <iostream>

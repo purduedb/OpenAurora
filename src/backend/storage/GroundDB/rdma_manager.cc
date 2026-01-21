@@ -1,9 +1,8 @@
 #include <fstream>
 #include <cstdint>
-#include "storage/DSMEngine/rdma_manager.h"
+#include "storage/GroundDB/rdma_manager.h"
 // #include "storage/page.h"
-#include "storage/DSMEngine/HugePageAlloc.h"
-// #include "DSMEngine/cache.h"
+#include "storage/GroundDB/HugePageAlloc.h"
 
 namespace DSMEngine {
 uint16_t RDMA_Manager::node_id = 0;

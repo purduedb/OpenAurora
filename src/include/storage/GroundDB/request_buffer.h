@@ -3,7 +3,7 @@
 #include <functional>
 #include <mutex>
 #include "storage/GroundDB/rdma.hh"
-#include "storage/DSMEngine/ThreadPool.h"
+#include "storage/GroundDB/ThreadPool.h"
 
 namespace DSMEngine{
 struct RDMA_Request;

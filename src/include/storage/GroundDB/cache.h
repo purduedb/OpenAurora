@@ -23,11 +23,11 @@
 
 #include "c.h"
 #include "access/logindex_hashmap.h"
-#include "storage/DSMEngine/export.h"
+#include "storage/GroundDB/export.h"
 #include <shared_mutex>
 
-#include "storage/DSMEngine/Config.h"
-#include "utils/DSMEngine/mutexlock.h"
+#include "storage/GroundDB/Config.h"
+#include "utils/GroundDB/mutexlock.h"
 #include "storage/GroundDB/lru.hh"
 
 namespace DSMEngine {

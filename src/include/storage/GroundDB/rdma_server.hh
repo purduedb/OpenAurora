@@ -4,9 +4,9 @@
 #include <unordered_map>
 #include "storage/GroundDB/lru.hh"
 #include "storage/GroundDB/request_buffer.h"
-#include "storage/DSMEngine/ThreadPool.h"
-#include "storage/DSMEngine/cache.h"
-#include "storage/DSMEngine/rdma_manager.h"
+#include "storage/GroundDB/ThreadPool.h"
+#include "storage/GroundDB/cache.h"
+#include "storage/GroundDB/rdma_manager.h"
 
 namespace DSMEngine{
     class RDMA_Manager;

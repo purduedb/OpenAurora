@@ -1,7 +1,7 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#include "storage/DSMEngine/Common.h"
+#include "storage/GroundDB/Common.h"
 
 class CacheConfig {
 public:

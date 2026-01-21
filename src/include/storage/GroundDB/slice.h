@@ -20,8 +20,8 @@
 #include <cstring>
 #include <string>
 
-#include "storage/DSMEngine/export.h"
-#include "storage/DSMEngine/Common.h"
+#include "storage/GroundDB/export.h"
+#include "storage/GroundDB/Common.h"
 namespace DSMEngine {
 //TODO: make the size of slice extensible from outside.
 class DSMEngine_EXPORT Slice {

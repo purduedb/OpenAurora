@@ -1,9 +1,9 @@
 #include <mutex>
 #include "storage/GroundDB/mempool_client.h"
 #include "storage/GroundDB/rdma.hh"
-#include "storage/DSMEngine/rdma_manager.h"
+#include "storage/GroundDB/rdma_manager.h"
 #include "storage/rpcclient.h"
-#include "utils/DSMEngine/hash.h"
+#include "utils/GroundDB/hash.h"
 #include "utils/version_map.h"
 
 extern int IsRpcClient;

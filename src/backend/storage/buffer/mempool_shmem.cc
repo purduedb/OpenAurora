@@ -2,7 +2,7 @@
 #include <cmath>
 #include "postgres.h"
 #include "storage/GroundDB/mempool_shmem.h"
-#include "utils/DSMEngine/hash.h"
+#include "utils/GroundDB/hash.h"
 
 LWLock *mempool_client_lw_lock;
 size_t *node_id_cnt;

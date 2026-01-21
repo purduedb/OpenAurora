@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "utils/DSMEngine/hash.h"
+#include "utils/GroundDB/hash.h"
 
 #include <cstring>
 
-#include "utils/DSMEngine/coding.h"
+#include "utils/GroundDB/coding.h"
 #include "access/logindex_hashmap.h"
 
 // The FALLTHROUGH_INTENDED macro can be used to annotate implicit fall-through

@@ -5,8 +5,8 @@
 #include "storage/bufpage.h"
 #include "storage/GroundDB/mempool_server.h"
 #include "storage/GroundDB/rdma_server.hh"
-#include "storage/DSMEngine/ThreadPool.h"
-#include "storage/DSMEngine/cache.h"
+#include "storage/GroundDB/ThreadPool.h"
+#include "storage/GroundDB/cache.h"
 #include "storage/GroundDB/request_buffer.h"
 #include <mutex>
 
