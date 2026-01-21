@@ -16,7 +16,7 @@ OBJS = \
 	cache.o \
 	mempool_client.o \
 	mempool_server.o \
-	pat.o \
+	raddr_tbl.o \
 	rdma_manager.o \
 	rdma_server.o \
 	ThreadPool.o

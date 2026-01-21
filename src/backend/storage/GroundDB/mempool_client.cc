@@ -35,7 +35,7 @@ public:
     bool NoAliveConnection();
 
     DSMEngine::RDMA_Manager* rdma_mg;
-    PageAddressTable pat;
+    PageAddressTable rat;
     // todo (te): asyncly do it with multiprocessing
     // DSMEngine::ThreadPool* thrd_pool;
 
@@ -78,7 +78,7 @@ MemPoolClient::MemPoolClient(){
     // thrd_pool->SetBackgroundThreads(5);
 
 	if(*is_first_mpc){
-        pat.init(memnode_cnt);
+        rat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
         for(*update_vm_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
@@ -124,7 +124,7 @@ bool MemPoolClient::AppendToPAT(size_t memnode_id, size_t pa_idx){
     if(has_failed[memnode_id]) return false;
 
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.mr_info;
-	pat.append_page_array(memnode_id, pa_idx, res->pa_mr.length / BLCKSZ, res->pa_mr, res->pida_mr);
+	rat.append_page_array(memnode_id, pa_idx, res->pa_mr.length / BLCKSZ, res->pa_mr, res->pida_mr);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
@@ -232,7 +232,7 @@ bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info) {
     if(client == NULL) return false;
     size_t memnode_id = DSMEngine::Hash(&PageID, 0) % client->memnode_cnt;
     if(client->has_failed[memnode_id]) return false;
-	client->pat.at(PageID, *rdma_read_info);
+	client->rat.at(PageID, *rdma_read_info);
 	return rdma_read_info->pa_ofs != -1;
 }
 
@@ -485,15 +485,15 @@ void AsyncRemovePageOnMemoryPool(KeyType PageID){
 }
 
 void mempool::MemPoolClient::GetNewestPageAddressTable(){
-	auto& pat = this->pat;
+	auto& rat = this->rat;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr recv_mr, send_mr;
-	for(size_t i = 0, max_i = pat.page_array_count(); i < max_i; i++){
+	for(size_t i = 0, max_i = rat.page_array_count(); i < max_i; i++){
         size_t memnode_id, memnode_pa_idx;
-        pat.get_memnode_id(i, memnode_id, memnode_pa_idx);
+        rat.get_memnode_id(i, memnode_id, memnode_pa_idx);
         if(has_failed[memnode_id])
             continue;
-		for(size_t j = 0, max_j = pat.page_array_size(i); j < max_j; j += SYNC_PAT_SIZE){
+		for(size_t j = 0, max_j = rat.page_array_size(i); j < max_j; j += SYNC_PAT_SIZE){
 			rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
 			has_failed[memnode_id] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, memnode_id * 2 + 1);
             if(has_failed[memnode_id]) break;
@@ -517,7 +517,7 @@ void mempool::MemPoolClient::GetNewestPageAddressTable(){
 			
 			auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.sync_pat;
 			for(size_t k = 0; j + k < max_j && k < SYNC_PAT_SIZE; k++)
-				pat.update(i, j + k, res->page_id_array[k]);
+				rat.update(i, j + k, res->page_id_array[k]);
 
 			rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 			rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
@@ -780,10 +780,10 @@ bool mempool::MemPoolClient::RegisterPageOnMemPool(KeyType PageID, RDMAReadPageI
     if(has_failed[memnode_id]) return false;
 
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.register_page;
-    pat.update(res->pa_idx, res->pa_ofs, PageID);
+    rat.update(res->pa_idx, res->pa_ofs, PageID);
     bool exists = res->exists;
 	if(exists)
-        pat.at(PageID, *rdma_read_info);
+        rat.at(PageID, *rdma_read_info);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
@@ -810,7 +810,7 @@ void mempool::MemPoolClient::UnregisterPageOnMemPool(KeyType PageID){
 	std::string qp_type("main");
 	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
     if(has_failed[memnode_id]) return;
-    pat.erase(PageID);
+    rat.erase(PageID);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 }
