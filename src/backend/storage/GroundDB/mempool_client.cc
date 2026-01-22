@@ -1256,12 +1256,11 @@ void pvt_heap_delete_save(XLogReaderState *record, XLogRecPtr lsn)
 void pvt_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecPtr lsn)
 {
     BlockNumber oldblk, newblk;
-    BufferTag old_cleared_pvt, new_cleared_pvt;
+    BufferTag old_cleared_vm, new_cleared_vm;
     xl_heap_update *xlrec = (xl_heap_update *)(record->main_data);
 
-    CLEAR_BUFFERTAG(old_cleared_pvt);
-    CLEAR_BUFFERTAG(new_cleared_pvt);
-
+    CLEAR_BUFFERTAG(old_cleared_vm);
+    CLEAR_BUFFERTAG(new_cleared_vm);
     XLogRecGetBlockTag(record, 0, NULL, NULL, &newblk);
 
     if (XLogRecGetBlockTag(record, 1, NULL, NULL, &oldblk))
@@ -1274,9 +1273,9 @@ void pvt_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecP
 
     if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
     {
-        uint8 pvt_block = (oldblk == newblk) ? 2 : 3;
-        ParseXLogBlocksLsn_pvt(record, pvt_block, lsn);
-        POLAR_GET_LOG_TAG(record, old_cleared_pvt, pvt_block);
+        uint8 vm_block = (oldblk == newblk) ? 2 : 3;
+        ParseXLogBlocksLsn_pvt(record, vm_block, lsn);
+        POLAR_GET_LOG_TAG(record, old_cleared_vm, vm_block);
     }
 
     ParseXLogBlocksLsn_pvt(record, (oldblk == newblk) ? 0 : 1, lsn);
@@ -1288,9 +1287,9 @@ void pvt_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecP
         if (xlrec->flags & XLH_UPDATE_NEW_ALL_VISIBLE_CLEARED)
         {
             /* Avoid add the same vm page to logindex twice with the same lsn value */
-            POLAR_GET_LOG_TAG(record, new_cleared_pvt, 2);
+            POLAR_GET_LOG_TAG(record, new_cleared_vm, 2);
 
-            if (!BUFFERTAGS_EQUAL(old_cleared_pvt, new_cleared_pvt))
+            if (!BUFFERTAGS_EQUAL(old_cleared_vm, new_cleared_vm))
                 ParseXLogBlocksLsn_pvt(record, 2, lsn);
         }
     }
