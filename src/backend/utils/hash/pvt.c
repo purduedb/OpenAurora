@@ -12,7 +12,7 @@
  * concurrency bottleneck, so we also support "partitioned" locking wherein
  * there are multiple LWLocks guarding distinct subsets of the table.  To use
  * a hash table in partitioned mode, the HASH_PARTITION flag must be given
- * to hash_create_vm.  This prevents any attempt to split buckets on-the-fly.
+ * to hash_create_pvt.  This prevents any attempt to split buckets on-the-fly.
  * Therefore, each hash bucket chain operates independently, and no fields
  * of the hash header change after init except nentries and freeList.
  * (A partitioned table uses multiple copies of those fields, guarded by
@@ -34,7 +34,7 @@
  *
  * 2. Arbitrary binary data of size keysize, compared as though by memcmp().
  * (Caller must ensure there are no undefined padding bits in the keys!)
- * This is selected by specifying HASH_BLOBS flag to hash_create_vm.
+ * This is selected by specifying HASH_BLOBS flag to hash_create_pvt.
  *
  * 3. More complex key behavior can be selected by specifying user-supplied
  * hashing, comparison, and/or key-copying functions.  At least a hashing
@@ -92,7 +92,7 @@
 #include "storage/spin.h"
 #include "utils/dynahash.h"
 #include "utils/memutils.h"
-#include "utils/version_map.h"
+#include "utils/pvt.h"
 
 
 /*
@@ -118,7 +118,7 @@
 #define NUM_FREELISTS			32
 
 /* A hash bucket is a linked list of HASHELEMENTs */
-typedef HASHELEMENT_VM *HASHBUCKET_VM;
+typedef HASHELEMENT_PVT *HASHBUCKET_PVT;
 
 /*
  * Per-freelist data.
@@ -141,18 +141,18 @@ typedef struct
 {
 	slock_t		mutex;			/* spinlock for this freelist */
 	long		nentries;		/* number of entries in associated buckets */
-	HASHELEMENT_VM *freeList;		/* chain of free elements */
-} FreeListData_VM;
+	HASHELEMENT_PVT *freeList;		/* chain of free elements */
+} FreeListData_PVT;
 
 /*
  * Header structure for a hash table --- contains all changeable info
  *
- * In a shared-memory hash table, the HASHHDR_VM is in shared memory, while
- * each backend has a local HTAB_VM struct.  For a non-shared table, there isn't
- * any functional difference between HASHHDR_VM and HTAB_VM, but we separate them
+ * In a shared-memory hash table, the HASHHDR_PVT is in shared memory, while
+ * each backend has a local HTAB_PVT struct.  For a non-shared table, there isn't
+ * any functional difference between HASHHDR_PVT and HTAB_PVT, but we separate them
  * anyway to share code between shared and non-shared tables.
  */
-struct HASHHDR_VM
+struct HASHHDR_PVT
 {
 	/*
 	 * The freelist can become a point of contention in high-concurrency hash
@@ -164,11 +164,11 @@ struct HASHHDR_VM
 	 * If the hash table is not partitioned, only freeList[0] is used and its
 	 * spinlock is not used at all; callers' locking is assumed sufficient.
 	 */
-	FreeListData_VM freeList[NUM_FREELISTS];
+	FreeListData_PVT freeList[NUM_FREELISTS];
 
-	INDEX_ORDER_ITEM_VM* index_order;
+	INDEX_ORDER_ITEM_PVT* index_order;
 	Size ord_begin, ord_end;
-	HASHBUCKET_VM* hash_table;
+	HASHBUCKET_PVT* hash_table;
 
 	long segment_cnt;
 	long hashtable_cnt;
@@ -196,11 +196,11 @@ struct HASHHDR_VM
  * Top control structure for a hashtable --- in a shared table, each backend
  * has its own copy (OK since no fields change at runtime)
  */
-struct HTAB_VM
+struct HTAB_PVT
 {
-	HASHHDR_VM *hctl;			/* => shared control information */
-	INDEX_ORDER_ITEM_VM* index_order;
-	HASHBUCKET_VM* hash_table;
+	HASHHDR_PVT *hctl;			/* => shared control information */
+	INDEX_ORDER_ITEM_PVT* index_order;
+	HASHBUCKET_PVT* hash_table;
 	HashValueFunc hash;			/* hash function */
 	HashCompareFunc match;		/* key comparison function */
 	HashCopyFunc keycopy;		/* key copying function */
@@ -218,15 +218,15 @@ struct HTAB_VM
 };
 
 /*
- * Key (also entry) part of a HASHELEMENT_VM
+ * Key (also entry) part of a HASHELEMENT_PVT
  */
-#define ELEMENTKEY(helem)  (((char *)(helem)) + MAXALIGN(sizeof(HASHELEMENT_VM)))
+#define ELEMENTKEY(helem)  (((char *)(helem)) + MAXALIGN(sizeof(HASHELEMENT_PVT)))
 
 /*
  * Obtain element pointer given pointer to key
  */
 #define ELEMENT_FROM_KEY(key)  \
-	((HASHELEMENT_VM *) (((char *) (key)) - MAXALIGN(sizeof(HASHELEMENT_VM))))
+	((HASHELEMENT_PVT *) (((char *) (key)) - MAXALIGN(sizeof(HASHELEMENT_PVT))))
 
 /*
  * Fast MOD arithmetic, assuming that y is a power of 2 !
@@ -237,19 +237,19 @@ struct HTAB_VM
  * Private function prototypes
  */
 static void *DynaHashAlloc(Size size);
-static void *seg_alloc(HTAB_VM *hashp);
-static bool element_alloc(HTAB_VM *hashp, int nelem, int freelist_idx);
-static bool expand_table(HTAB_VM *hashp);
-static HASHBUCKET_VM get_hash_entry(HTAB_VM *hashp, int freelist_idx);
-static void hdefault(HTAB_VM *hashp);
+static void *seg_alloc(HTAB_PVT *hashp);
+static bool element_alloc(HTAB_PVT *hashp, int nelem, int freelist_idx);
+static bool expand_table(HTAB_PVT *hashp);
+static HASHBUCKET_PVT get_hash_entry(HTAB_PVT *hashp, int freelist_idx);
+static void hdefault(HTAB_PVT *hashp);
 static int	choose_nelem_alloc(Size entrysize);
-static bool init_htab(HTAB_VM *hashp, long nelem);
-static void hash_corrupted(HTAB_VM *hashp);
+static bool init_htab(HTAB_PVT *hashp, long nelem);
+static void hash_corrupted(HTAB_PVT *hashp);
 static long next_pow2_long(long num);
 static int	next_pow2_int(long num);
-static void register_seq_scan(HTAB_VM *hashp);
-static void deregister_seq_scan(HTAB_VM *hashp);
-static bool has_seq_scans(HTAB_VM *hashp);
+static void register_seq_scan(HTAB_PVT *hashp);
+static void deregister_seq_scan(HTAB_PVT *hashp);
+static bool has_seq_scans(HTAB_PVT *hashp);
 
 
 /*
@@ -282,7 +282,7 @@ string_compare(const char *key1, const char *key2, Size keysize)
 /************************** CREATE ROUTINES **********************/
 
 /*
- * hash_create_vm -- create a new dynamic hash table
+ * hash_create_pvt -- create a new dynamic hash table
  *
  *	tabname: a name for the table (for debugging purposes)
  *	nelem: maximum number of elements expected
@@ -295,11 +295,11 @@ string_compare(const char *key1, const char *key2, Size keysize)
  * on the small side and let the table grow if it's exceeded.  An overly
  * large nelem will penalize hash_seq_search speed without buying much.
  */
-HTAB_VM *
-hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flags)
+HTAB_PVT *
+hash_create_pvt(const char *tabname, long nelem, const HASHCTL_PVT *info, int flags)
 {
-	HTAB_VM	   *hashp;
-	HASHHDR_VM    *hctl;
+	HTAB_PVT	   *hashp;
+	HASHHDR_PVT    *hctl;
 
 	/*
 	 * Hash tables now allocate space for key and data, but you have to say
@@ -310,12 +310,12 @@ hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flag
 	Assert(info->entrysize >= info->keysize);
 
 	/*
-	 * For shared hash tables, we have a local hash header (HTAB_VM struct) that
+	 * For shared hash tables, we have a local hash header (HTAB_PVT struct) that
 	 * we allocate in TopMemoryContext; all else is in shared memory.
 	 *
 	 * For non-shared hash tables, everything including the hash header is in
 	 * a memory context created specially for the hash table --- this makes
-	 * hash_destroy_vm very simple.  The memory context is made a child of either
+	 * hash_destroy_pvt very simple.  The memory context is made a child of either
 	 * a context specified by the caller, or TopMemoryContext if nothing is
 	 * specified.
 	 */
@@ -337,8 +337,8 @@ hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flag
 	}
 
 	/* Initialize the hash header, plus a copy of the table name */
-	hashp = (HTAB_VM *) DynaHashAlloc(sizeof(HTAB_VM) + strlen(tabname) + 1);
-	MemSet(hashp, 0, sizeof(HTAB_VM));
+	hashp = (HTAB_PVT *) DynaHashAlloc(sizeof(HTAB_PVT) + strlen(tabname) + 1);
+	MemSet(hashp, 0, sizeof(HTAB_PVT));
 
 	hashp->tabname = (char *) (hashp + 1);
 	strcpy(hashp->tabname, tabname);
@@ -416,8 +416,8 @@ hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flag
 	if (flags & HASH_SHARED_MEM)
 	{
 		hashp->hctl = info->hctl;
-		hashp->index_order = (INDEX_ORDER_ITEM_VM *) (((char *) info->hctl) + MAXALIGN(sizeof(HASHHDR_VM)));
-		hashp->hash_table = (HASHBUCKET_VM*)(hashp->index_order + info->segment_cnt * SLOT_CNT_VM);
+		hashp->index_order = (INDEX_ORDER_ITEM_PVT *) (((char *) info->hctl) + MAXALIGN(sizeof(HASHHDR_PVT)));
+		hashp->hash_table = (HASHBUCKET_PVT*)(hashp->index_order + info->segment_cnt * SLOT_CNT_PVT);
 		hashp->hcxt = NULL;
 		hashp->isshared = true;
 
@@ -443,7 +443,7 @@ hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flag
 
 	if (!hashp->hctl)
 	{
-		hashp->hctl = (HASHHDR_VM *) hashp->alloc(sizeof(HASHHDR_VM));
+		hashp->hctl = (HASHHDR_PVT *) hashp->alloc(sizeof(HASHHDR_PVT));
 		if (!hashp->hctl)
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
@@ -540,21 +540,21 @@ hash_create_vm(const char *tabname, long nelem, const HASHCTL_VM *info, int flag
 }
 
 /*
- * Set default HASHHDR_VM parameters.
+ * Set default HASHHDR_PVT parameters.
  */
 static void
-hdefault(HTAB_VM *hashp)
+hdefault(HTAB_PVT *hashp)
 {
-	HASHHDR_VM    *hctl = hashp->hctl;
+	HASHHDR_PVT    *hctl = hashp->hctl;
 
-	MemSet(hctl, 0, sizeof(HASHHDR_VM));
+	MemSet(hctl, 0, sizeof(HASHHDR_PVT));
 
 	hctl->hashtable_cnt = 1ull << 13;
 	hctl->segment_cnt = 1ull << 15;
 
 	/* rather pointless defaults for key & entry size */
 	hctl->keysize = sizeof(KeyType);
-	hctl->entrysize = sizeof(SEGMENT_ITEM_VM);
+	hctl->entrysize = sizeof(SEGMENT_ITEM_PVT);
 
 	hctl->num_partitions = 0;	/* not partitioned */
 
@@ -571,9 +571,9 @@ choose_nelem_alloc(Size entrysize)
 	Size		elementSize;
 	Size		allocSize;
 
-	/* Each element has a HASHELEMENT_VM header plus user data. */
+	/* Each element has a HASHELEMENT_PVT header plus user data. */
 	/* NB: this had better match element_alloc() */
-	elementSize = MAXALIGN(sizeof(HASHELEMENT_VM)) + MAXALIGN(entrysize);
+	elementSize = MAXALIGN(sizeof(HASHELEMENT_PVT)) + MAXALIGN(entrysize);
 
 	/*
 	 * The idea here is to choose nelem_alloc at least 32, but round up so
@@ -598,9 +598,9 @@ choose_nelem_alloc(Size entrysize)
  * arrays
  */
 static bool
-init_htab(HTAB_VM *hashp, long nelem)
+init_htab(HTAB_PVT *hashp, long nelem)
 {
-	HASHHDR_VM    *hctl = hashp->hctl;
+	HASHHDR_PVT    *hctl = hashp->hctl;
 	int			i;
 
 	/*
@@ -625,8 +625,8 @@ init_htab(HTAB_VM *hashp, long nelem)
 
 	if(!(hashp->index_order)){
 		CurrentDynaHashCxt = hashp->hcxt;
-		hashp->index_order = (INDEX_ORDER_ITEM_VM *)
-			hashp->alloc(hctl->segment_cnt * SLOT_CNT_VM * sizeof(INDEX_ORDER_ITEM_VM));
+		hashp->index_order = (INDEX_ORDER_ITEM_PVT *)
+			hashp->alloc(hctl->segment_cnt * SLOT_CNT_PVT * sizeof(INDEX_ORDER_ITEM_PVT));
 		hctl->ord_begin = hctl->ord_end = 0;
 		if (!hashp->index_order)
 			return false;
@@ -634,8 +634,8 @@ init_htab(HTAB_VM *hashp, long nelem)
 	if (!(hashp->hash_table))
 	{
 		CurrentDynaHashCxt = hashp->hcxt;
-		hashp->hash_table = (HASHBUCKET_VM *)
-			hashp->alloc(nbuckets * sizeof(HASHBUCKET_VM));
+		hashp->hash_table = (HASHBUCKET_PVT *)
+			hashp->alloc(nbuckets * sizeof(HASHBUCKET_PVT));
 		if (!hashp->hash_table)
 			return false;
 	}
@@ -657,52 +657,52 @@ init_htab(HTAB_VM *hashp, long nelem)
  * Estimate the space needed for a hashtable containing the given number
  * of entries of given size.
  * NOTE: this is used to estimate the footprint of hashtables in shared
- * memory; therefore it does not count HTAB_VM which is in local memory.
+ * memory; therefore it does not count HTAB_PVT which is in local memory.
  * NB: assumes that all hash structure parameters have default values!
  */
 Size
-hash_estimate_size_vm(long hashtable_cnt, long segment_cnt)
+hash_estimate_size_pvt(long hashtable_cnt, long segment_cnt)
 {
 	Size		size;
 	long		nBuckets,
 				nElementAllocs,
 				elementSize,
 				elementAllocCnt;
-	Size entrysize = sizeof(SEGMENT_ITEM_VM);
+	Size entrysize = sizeof(SEGMENT_ITEM_PVT);
 
 	/* estimate number of buckets wanted */
 	nBuckets = next_pow2_long(hashtable_cnt);
 
 	/* fixed control info */
-	size = MAXALIGN(sizeof(HASHHDR_VM));	/* but not HTAB_VM, per above */
-	size = add_size(size, mul_size(mul_size(segment_cnt, SLOT_CNT_VM), MAXALIGN(sizeof(INDEX_ORDER_ITEM_VM))));
-	size = add_size(size, mul_size(hashtable_cnt, MAXALIGN(sizeof(HASHBUCKET_VM))));
+	size = MAXALIGN(sizeof(HASHHDR_PVT));	/* but not HTAB_PVT, per above */
+	size = add_size(size, mul_size(mul_size(segment_cnt, SLOT_CNT_PVT), MAXALIGN(sizeof(INDEX_ORDER_ITEM_PVT))));
+	size = add_size(size, mul_size(hashtable_cnt, MAXALIGN(sizeof(HASHBUCKET_PVT))));
 	/* elements --- allocated in groups of choose_nelem_alloc() entries */
 	elementAllocCnt = choose_nelem_alloc(entrysize);
 	nElementAllocs = (segment_cnt - 1) / elementAllocCnt + 1;
-	elementSize = MAXALIGN(sizeof(HASHELEMENT_VM)) + MAXALIGN(entrysize);
+	elementSize = MAXALIGN(sizeof(HASHELEMENT_PVT)) + MAXALIGN(entrysize);
 	size = add_size(size, mul_size(nElementAllocs, CACHELINEALIGN(mul_size(elementAllocCnt, elementSize))));
 	return size;
 }
 
 /*
  * Compute the required initial memory allocation for a shared-memory
- * hashtable with the given parameters.  We need space for the HASHHDR_VM
+ * hashtable with the given parameters.  We need space for the HASHHDR_PVT
  * and for the (non expansible) directory.
  */
 Size
-hash_get_shared_size_vm(HASHCTL_VM *info, int flags)
+hash_get_shared_size_pvt(HASHCTL_PVT *info, int flags)
 {
-	return MAXALIGN(sizeof(HASHHDR_VM))
-		+ info->segment_cnt * SLOT_CNT_VM * MAXALIGN(sizeof(INDEX_ORDER_ITEM_VM))
-		+ info->hashtable_cnt * MAXALIGN(sizeof(HASHBUCKET_VM));
+	return MAXALIGN(sizeof(HASHHDR_PVT))
+		+ info->segment_cnt * SLOT_CNT_PVT * MAXALIGN(sizeof(INDEX_ORDER_ITEM_PVT))
+		+ info->hashtable_cnt * MAXALIGN(sizeof(HASHBUCKET_PVT));
 }
 
 
 /********************** DESTROY ROUTINES ************************/
 
 void
-hash_destroy_vm(HTAB_VM *hashp)
+hash_destroy_pvt(HTAB_PVT *hashp)
 {
 	if (hashp != NULL)
 	{
@@ -722,21 +722,21 @@ hash_destroy_vm(HTAB_VM *hashp)
 
 
 /*
- * get_hash_value_vm -- exported routine to calculate a key's hash value
+ * get_hash_value_pvt -- exported routine to calculate a key's hash value
  *
  * We export this because for partitioned tables, callers need to compute
  * the partition number (from the low-order bits of the hash value) before
  * searching.
  */
 uint32
-get_hash_value_vm(HTAB_VM *hashp, const void *keyPtr)
+get_hash_value_pvt(HTAB_PVT *hashp, const void *keyPtr)
 {
 	return hashp->hash(keyPtr, hashp->keysize);
 }
 
 /* Convert a hash value to a bucket number */
 static inline uint32
-calc_bucket(HASHHDR_VM *hctl, uint32 hash_val)
+calc_bucket(HASHHDR_PVT *hctl, uint32 hash_val)
 {
 	uint32		bucket;
 
@@ -748,8 +748,8 @@ calc_bucket(HASHHDR_VM *hctl, uint32 hash_val)
 }
 
 /*
- * hash_search_vm -- look up key in table and perform action
- * hash_search_with_hash_value_vm -- same, with key's hash value already computed
+ * hash_search_pvt -- look up key in table and perform action
+ * hash_search_with_hash_value_pvt -- same, with key's hash value already computed
  *
  * action is one of:
  *		HASH_FIND: look up key in table
@@ -771,16 +771,16 @@ calc_bucket(HASHHDR_VM *hctl, uint32 hash_val)
  * existing entry in the table, false otherwise.  This is needed in the
  * HASH_ENTER case, but is redundant with the return value otherwise.
  *
- * For hash_search_with_hash_value_vm, the hashvalue parameter must have been
- * calculated with get_hash_value_vm().
+ * For hash_search_with_hash_value_pvt, the hashvalue parameter must have been
+ * calculated with get_hash_value_pvt().
  */
 void *
-hash_search_vm(HTAB_VM *hashp,
+hash_search_pvt(HTAB_PVT *hashp,
 			const void *keyPtr,
 			HASHACTION action,
 			bool *foundPtr, bool *head)
 {
-	return hash_search_with_hash_value_vm(hashp,
+	return hash_search_with_hash_value_pvt(hashp,
 									   keyPtr,
 									   hashp->hash(keyPtr, hashp->keysize),
 									   action,
@@ -788,22 +788,22 @@ hash_search_vm(HTAB_VM *hashp,
 }
 
 void *
-hash_search_with_hash_value_vm(HTAB_VM *hashp,
+hash_search_with_hash_value_pvt(HTAB_PVT *hashp,
 							const void *keyPtr,
 							uint32 hashvalue,
 							HASHACTION action,
 							bool *foundPtr, bool *head)
 {
-	HASHHDR_VM    *hctl = hashp->hctl;
+	HASHHDR_PVT    *hctl = hashp->hctl;
 	int			freelist_idx = FREELIST_IDX(hctl, hashvalue);
 	Size		keysize;
 	uint32		bucket;
 	long		segment_num;
 	long		segment_ndx;
-	HASHBUCKET_VM currBucket;
-	HASHBUCKET_VM *prevBucketPtr;
-	HASHBUCKET_VM currSeg;
-	HASHBUCKET_VM *prevSegPtr;
+	HASHBUCKET_PVT currBucket;
+	HASHBUCKET_PVT *prevBucketPtr;
+	HASHBUCKET_PVT currSeg;
+	HASHBUCKET_PVT *prevSegPtr;
 	HashCompareFunc match;
 
 	/*
@@ -823,9 +823,9 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 	while(currBucket != NULL)
 	{
 		if (currBucket->hashvalue == hashvalue &&
-			match(&((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->PageID, keyPtr, keysize) == 0)
+			match(&((ITEMHEAD_PVT*)ELEMENTKEY(currBucket))->PageID, keyPtr, keysize) == 0)
 			break;
-		prevBucketPtr = &(((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->next_item);
+		prevBucketPtr = &(((ITEMHEAD_PVT*)ELEMENTKEY(currBucket))->next_item);
 		currBucket = *prevBucketPtr;
 	}
 
@@ -885,11 +885,11 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			prevSegPtr = prevBucketPtr;
 			currSeg = currBucket;
 			while(currSeg != NULL && (*head
-				? (((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->lsn[ITEMHEAD_SLOT_CNT_VM - 1] != InvalidXLogRecPtr)
-				: (((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[ITEMSEG_SLOT_CNT_VM - 1] != InvalidXLogRecPtr))){
+				? (((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->lsn[ITEMHEAD_SLOT_CNT_PVT - 1] != InvalidXLogRecPtr)
+				: (((ITEMSEG_PVT*)ELEMENTKEY(currSeg))->lsn[ITEMSEG_SLOT_CNT_PVT - 1] != InvalidXLogRecPtr))){
 				prevSegPtr = *head
-					? (&((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_seg)
-					: (&((ITEMSEG_VM*)ELEMENTKEY(currSeg))->next_seg);
+					? (&((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->next_seg)
+					: (&((ITEMSEG_PVT*)ELEMENTKEY(currSeg))->next_seg);
 				currSeg = *prevSegPtr;
 				*head = false;
 			}
@@ -925,18 +925,18 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 			/* copy key into record */
 			currSeg->hashvalue = hashvalue;
 			if(*head){
-				hashp->keycopy(&((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->PageID, keyPtr, keysize);
-				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_item = NULL;
-				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->next_seg = NULL;
-				((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->tail_seg = currSeg;
-				for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
-					((ITEMHEAD_VM*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
+				hashp->keycopy(&((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->PageID, keyPtr, keysize);
+				((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->next_item = NULL;
+				((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->next_seg = NULL;
+				((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->tail_seg = currSeg;
+				for(int i = 0; i < ITEMHEAD_SLOT_CNT_PVT; i++)
+					((ITEMHEAD_PVT*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
 			}
 			else{
-				((ITEMSEG_VM*)ELEMENTKEY(currSeg))->next_seg = NULL;
-				for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
-					((ITEMSEG_VM*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
-				((ITEMHEAD_VM*)ELEMENTKEY(currBucket))->tail_seg = currSeg;
+				((ITEMSEG_PVT*)ELEMENTKEY(currSeg))->next_seg = NULL;
+				for(int i = 0; i < ITEMSEG_SLOT_CNT_PVT; i++)
+					((ITEMSEG_PVT*)ELEMENTKEY(currSeg))->lsn[i] = InvalidXLogRecPtr;
+				((ITEMHEAD_PVT*)ELEMENTKEY(currBucket))->tail_seg = currSeg;
 			}
 
 			/*
@@ -955,7 +955,7 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
 }
 
 /*
- * hash_update_hash_key_vm -- change the hash key of an existing table entry
+ * hash_update_hash_key_pvt -- change the hash key of an existing table entry
  *
  * This is equivalent to removing the entry, making a new entry, and copying
  * over its data, except that the entry never goes to the table's freelist.
@@ -974,16 +974,16 @@ hash_search_with_hash_value_vm(HTAB_VM *hashp,
  * partitions, if the new hash key would belong to a different partition.
  */
 bool
-hash_update_hash_key_vm(HTAB_VM *hashp,
+hash_update_hash_key_pvt(HTAB_PVT *hashp,
 					 void *existingEntry,
 					 const void *newKeyPtr)
 {
 	Assert(false);
 }
 
-void* hash_next_segment_vm(void* item, bool head){
-	HASHELEMENT_VM* next_seg = head ? ((ITEMHEAD_VM*)item)->next_seg : ((ITEMSEG_VM*)item)->next_seg;
-	return next_seg != NULL ? (char *)next_seg + MAXALIGN(sizeof(HASHELEMENT_VM)) : NULL;
+void* hash_next_segment_pvt(void* item, bool head){
+	HASHELEMENT_PVT* next_seg = head ? ((ITEMHEAD_PVT*)item)->next_seg : ((ITEMSEG_PVT*)item)->next_seg;
+	return next_seg != NULL ? (char *)next_seg + MAXALIGN(sizeof(HASHELEMENT_PVT)) : NULL;
 }
 
 /*
@@ -991,11 +991,11 @@ void* hash_next_segment_vm(void* item, bool head){
  * (Or, if the underlying space allocator throws error for out-of-memory,
  * we won't return at all.)
  */
-static HASHBUCKET_VM
-get_hash_entry(HTAB_VM *hashp, int freelist_idx)
+static HASHBUCKET_PVT
+get_hash_entry(HTAB_PVT *hashp, int freelist_idx)
 {
-	HASHHDR_VM    *hctl = hashp->hctl;
-	HASHBUCKET_VM	newElement;
+	HASHHDR_PVT    *hctl = hashp->hctl;
+	HASHBUCKET_PVT	newElement;
 
 	for (;;)
 	{
@@ -1074,10 +1074,10 @@ get_hash_entry(HTAB_VM *hashp, int freelist_idx)
 }
 
 /*
- * hash_get_num_entries_vm -- get the number of entries in a hashtable
+ * hash_get_num_entries_pvt -- get the number of entries in a hashtable
  */
 long
-hash_get_num_entries_vm(HTAB_VM *hashp)
+hash_get_num_entries_pvt(HTAB_PVT *hashp)
 {
 	int			i;
 	long		sum = hashp->hctl->freeList[0].nentries;
@@ -1097,7 +1097,7 @@ hash_get_num_entries_vm(HTAB_VM *hashp)
 }
 
 /*
- * hash_freeze_vm
+ * hash_freeze_pvt
  *			Freeze a hashtable against future insertions (deletions are
  *			still allowed)
  *
@@ -1106,11 +1106,11 @@ hash_get_num_entries_vm(HTAB_VM *hashp)
  * and thus caller need not be careful about ensuring hash_seq_term gets
  * called at the right times.
  *
- * Multiple calls to hash_freeze_vm() are allowed, but you can't freeze a table
+ * Multiple calls to hash_freeze_pvt() are allowed, but you can't freeze a table
  * with active scans (since hash_seq_term would then do the wrong thing).
  */
 void
-hash_freeze_vm(HTAB_VM *hashp)
+hash_freeze_pvt(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
@@ -1122,19 +1122,19 @@ hash_freeze_vm(HTAB_VM *hashp)
  * Expand the table by adding one more hash bucket.
  */
 static bool
-expand_table(HTAB_VM *hashp)
+expand_table(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
 
 static bool
-dir_realloc(HTAB_VM *hashp)
+dir_realloc(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
 
 static void*
-seg_alloc(HTAB_VM *hashp)
+seg_alloc(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
@@ -1143,23 +1143,23 @@ seg_alloc(HTAB_VM *hashp)
  * allocate some new elements and link them into the indicated free list
  */
 static bool
-element_alloc(HTAB_VM *hashp, int nelem, int freelist_idx)
+element_alloc(HTAB_PVT *hashp, int nelem, int freelist_idx)
 {
-	HASHHDR_VM    *hctl = hashp->hctl;
+	HASHHDR_PVT    *hctl = hashp->hctl;
 	Size		elementSize;
-	HASHELEMENT_VM *firstElement;
-	HASHELEMENT_VM *tmpElement;
-	HASHELEMENT_VM *prevElement;
+	HASHELEMENT_PVT *firstElement;
+	HASHELEMENT_PVT *tmpElement;
+	HASHELEMENT_PVT *prevElement;
 	int			i;
 
 	if (hashp->isfixed)
 		return false;
 
-	/* Each element has a HASHELEMENT_VM header plus user data. */
-	elementSize = MAXALIGN(sizeof(HASHELEMENT_VM)) + MAXALIGN(hctl->entrysize);
+	/* Each element has a HASHELEMENT_PVT header plus user data. */
+	elementSize = MAXALIGN(sizeof(HASHELEMENT_PVT)) + MAXALIGN(hctl->entrysize);
 
 	CurrentDynaHashCxt = hashp->hcxt;
-	firstElement = (HASHELEMENT_VM *) hashp->alloc(nelem * elementSize);
+	firstElement = (HASHELEMENT_PVT *) hashp->alloc(nelem * elementSize);
 
 	if (!firstElement)
 		return false;
@@ -1171,7 +1171,7 @@ element_alloc(HTAB_VM *hashp, int nelem, int freelist_idx)
 	{
 		tmpElement->link = prevElement;
 		prevElement = tmpElement;
-		tmpElement = (HASHELEMENT_VM *) (((char *) tmpElement) + elementSize);
+		tmpElement = (HASHELEMENT_PVT *) (((char *) tmpElement) + elementSize);
 	}
 
 	/* if partitioned, must lock to touch freeList */
@@ -1190,7 +1190,7 @@ element_alloc(HTAB_VM *hashp, int nelem, int freelist_idx)
 
 /* complain when we have detected a corrupted hashtable */
 static void
-hash_corrupted(HTAB_VM *hashp)
+hash_corrupted(HTAB_PVT *hashp)
 {
 	/*
 	 * If the corruption is in a shared hashtable, we'd better force a
@@ -1204,7 +1204,7 @@ hash_corrupted(HTAB_VM *hashp)
 
 /* calculate ceil(log base 2) of num */
 int
-my_log2_vm(long num)
+my_log2_pvt(long num)
 {
 	/*
 	 * guard against too-large input, which would be invalid for
@@ -1224,8 +1224,8 @@ my_log2_vm(long num)
 static long
 next_pow2_long(long num)
 {
-	/* my_log2_vm's internal range check is sufficient */
-	return 1L << my_log2_vm(num);
+	/* my_log2_pvt's internal range check is sufficient */
+	return 1L << my_log2_pvt(num);
 }
 
 /* calculate first power of 2 >= num, bounded to what will fit in an int */
@@ -1234,7 +1234,7 @@ next_pow2_int(long num)
 {
 	if (num > INT_MAX / 2)
 		num = INT_MAX / 2;
-	return 1 << my_log2_vm(num);
+	return 1 << my_log2_pvt(num);
 }
 
 
@@ -1268,28 +1268,28 @@ next_pow2_int(long num)
 
 #define MAX_SEQ_SCANS 100
 
-static HTAB_VM *seq_scan_tables[MAX_SEQ_SCANS];	/* tables being scanned */
+static HTAB_PVT *seq_scan_tables[MAX_SEQ_SCANS];	/* tables being scanned */
 static int	seq_scan_level[MAX_SEQ_SCANS];	/* subtransaction nest level */
 static int	num_seq_scans = 0;
 
 
 /* Register a table as having an active hash_seq_search scan */
 static void
-register_seq_scan(HTAB_VM *hashp)
+register_seq_scan(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
 
 /* Deregister an active scan */
 static void
-deregister_seq_scan(HTAB_VM *hashp)
+deregister_seq_scan(HTAB_PVT *hashp)
 {
 	Assert(false);
 }
 
 /* Check if a table has any active scan */
 static bool
-has_seq_scans(HTAB_VM *hashp)
+has_seq_scans(HTAB_PVT *hashp)
 {
 	Assert(false);
 }

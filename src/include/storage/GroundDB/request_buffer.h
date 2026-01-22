@@ -59,16 +59,16 @@ struct fetch_xlog_info_response{
     XLogInfo xlog_info;
 };
 
-struct flush_update_vm_info_request{
+struct flush_update_pvt_info_request{
     UpdateVersionMapInfo info;
 };
-struct fetch_update_vm_info_request{
+struct fetch_update_pvt_info_request{
     size_t ptr;
 };
-struct fetch_update_vm_info_response{
+struct fetch_update_pvt_info_response{
     UpdateVersionMapInfo info;
 };
-struct get_first_update_vm_info_idx_response{
+struct get_first_update_pvt_info_idx_response{
     size_t idx;
 };
 

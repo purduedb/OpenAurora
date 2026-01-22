@@ -136,9 +136,9 @@ enum RDMA_Command_Type {
     disconnect_,
     flush_xlog_info_,
     fetch_xlog_info_,
-    flush_update_vm_info_,
-    fetch_update_vm_info_,
-    get_first_update_vm_info_idx_,
+    flush_update_pvt_info_,
+    fetch_update_pvt_info_,
+    get_first_update_pvt_info_idx_,
     register_page_,
     unregister_page_,
 /*******/
@@ -181,8 +181,8 @@ union RDMA_Request_Content {
     mempool::sync_rat_request sync_rat;
     mempool::mr_info_request mr_info;
     mempool::flush_xlog_info_request flush_xlog_info;
-    mempool::flush_update_vm_info_request flush_update_vm_info;
-    mempool::fetch_update_vm_info_request fetch_update_vm_info;
+    mempool::flush_update_pvt_info_request flush_update_pvt_info;
+    mempool::fetch_update_pvt_info_request fetch_update_pvt_info;
     mempool::register_page_request register_page;
     mempool::unregister_page_request unregister_page;
 /******/
@@ -192,8 +192,8 @@ union RDMA_Reply_Content {
     mempool::sync_rat_response sync_rat;
     mempool::mr_info_response mr_info;
     mempool::fetch_xlog_info_response fetch_xlog_info;
-    mempool::fetch_update_vm_info_response fetch_update_vm_info;
-    mempool::get_first_update_vm_info_idx_response get_first_update_vm_info_idx;
+    mempool::fetch_update_pvt_info_response fetch_update_pvt_info;
+    mempool::get_first_update_pvt_info_idx_response get_first_update_pvt_info_idx;
     mempool::register_page_response register_page;
 /********/
     Registered_qp_config qp_config;

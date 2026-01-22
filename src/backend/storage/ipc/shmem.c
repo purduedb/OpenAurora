@@ -74,7 +74,7 @@
 #include "storage/shmem.h"
 #include "storage/spin.h"
 #include "utils/builtins.h"
-#include "utils/version_map.h"
+#include "utils/pvt.h"
 
 static void *ShmemAllocRaw(Size size, Size *allocated_size);
 
@@ -377,11 +377,11 @@ ShmemInitHash(const char *name,		/* table string name for shmem index */
 	return hash_create(name, init_size, infoP, hash_flags);
 }
 
-HTAB_VM *
-ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
+HTAB_PVT *
+ShmemInitPageVersionTracker(const char *name,		/* table string name for shmem index */
 			  long hashtable_cnt,
 			  long segment_cnt,
-			  HASHCTL_VM *infoP,	/* info about key and bucket size */
+			  HASHCTL_PVT *infoP,	/* info about key and bucket size */
 			  int hash_flags)	/* info about infoP */
 {
 	bool		found;
@@ -396,14 +396,14 @@ ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
 	 */
 	infoP->alloc = ShmemAllocNoError;
     infoP->keysize = sizeof(KeyType);
-    infoP->entrysize = sizeof(SEGMENT_ITEM_VM);
+    infoP->entrysize = sizeof(SEGMENT_ITEM_PVT);
 	infoP->hashtable_cnt = hashtable_cnt;
 	infoP->segment_cnt = segment_cnt;
 	hash_flags |= HASH_SHARED_MEM | HASH_ALLOC;
 
 	/* look it up in the shmem index */
 	location = ShmemInitStruct(name,
-							   hash_get_shared_size_vm(infoP, hash_flags),
+							   hash_get_shared_size_pvt(infoP, hash_flags),
 							   &found);
 
 	/*
@@ -414,9 +414,9 @@ ShmemInitVersionMap(const char *name,		/* table string name for shmem index */
 		hash_flags |= HASH_ATTACH;
 
 	/* Pass location of hashtable header to hash_create */
-	infoP->hctl = (HASHHDR_VM *) location;
+	infoP->hctl = (HASHHDR_PVT *) location;
 
-	return hash_create_vm(name, infoP->segment_cnt, infoP, hash_flags);
+	return hash_create_pvt(name, infoP->segment_cnt, infoP, hash_flags);
 }
 
 /*

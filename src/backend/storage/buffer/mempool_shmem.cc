@@ -17,8 +17,8 @@ KeyType *mpc_idx_to_pid;
 ibv_mr *mpc_idx_to_mr;
 HTAB *mpc_pid_to_idx;
 
-HTAB_VM *version_map;
-size_t *update_vm_info_ptr;
+HTAB_PVT *pvt;
+size_t *update_pvt_info_ptr;
 
 bool *is_first_mpc, *is_first_mpc_connection;
 
@@ -103,15 +103,15 @@ void MemPoolClientShmemInit(){
 		ShmemInitHash("MemPool Client PageID-to-index map",
 						MAX_TOTAL_PAGE_ARRAY_SIZE, MAX_TOTAL_PAGE_ARRAY_SIZE,
 						&info, HASH_ELEM | HASH_BLOBS | HASH_PARTITION | HASH_FUNCTION | HASH_COMPARE);
-    HASHCTL_VM info_vm;
-    MemSet(&info_vm, 0, sizeof(info_vm));
-	info_vm.hash = info.hash;
-	info_vm.match = info.match;
-	version_map =
-		ShmemInitVersionMap("MemPool Client VersionMap",
+    HASHCTL_PVT info_pvt;
+    MemSet(&info_pvt, 0, sizeof(info_pvt));
+	info_pvt.hash = info.hash;
+	info_pvt.match = info.match;
+	pvt =
+		ShmemInitPageVersionTracker("MemPool Client VersionMap",
 						1 << 18, 1 << 20,
-						&info_vm, HASH_ELEM | HASH_BLOBS | HASH_FUNCTION | HASH_COMPARE);
-	update_vm_info_ptr = (size_t*)
+						&info_pvt, HASH_ELEM | HASH_BLOBS | HASH_FUNCTION | HASH_COMPARE);
+	update_pvt_info_ptr = (size_t*)
 		ShmemInitStruct("MemPool Client VersionMap Info Pointer",
 						sizeof(size_t),
 						found_any, found_all);
@@ -165,7 +165,7 @@ Size MemPoolClientShmemSize(void)
 
 	size = add_size(size, hash_estimate_size(MAX_TOTAL_PAGE_ARRAY_SIZE, sizeof(RATLookupEntry)));
 	
-	size = add_size(size, hash_estimate_size_vm(1 << 18, 1 << 22));
+	size = add_size(size, hash_estimate_size_pvt(1 << 18, 1 << 22));
 
 	size = add_size(size, sizeof(size_t));
 

@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 #include "utils/hsearch.h"
-#include "utils/version_map.h"
+#include "utils/pvt.h"
 
 
 /* shmqueue.c */
@@ -53,8 +53,8 @@ extern void InitShmemIndex(void);
 extern HTAB *ShmemInitHash(const char *name, long init_size, long max_size,
                            HASHCTL *infoP, int hash_flags);
 
-extern HTAB_VM *ShmemInitVersionMap(const char *name, long hashtable_cnt, long segment_cnt,
-                           HASHCTL_VM *infoP, int hash_flags);
+extern HTAB_PVT *ShmemInitPageVersionTracker(const char *name, long hashtable_cnt, long segment_cnt,
+                           HASHCTL_PVT *infoP, int hash_flags);
 
 extern void *ShmemInitStruct(const char *name, Size size, bool *foundPtr);
 

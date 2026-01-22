@@ -4,7 +4,7 @@
 #include "storage/GroundDB/rdma_manager.h"
 #include "storage/rpcclient.h"
 #include "utils/GroundDB/hash.h"
-#include "utils/version_map.h"
+#include "utils/pvt.h"
 
 extern int IsRpcClient;
 extern uint64_t RpcXLogFlushedLsn;
@@ -81,9 +81,9 @@ MemPoolClient::MemPoolClient(){
         rat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
-        for(*update_vm_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
-            if(FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
-                (*update_vm_info_ptr)++;
+        for(*update_pvt_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
+            if(FetchUpdateVersionMapInfoFromMemoryPool(*update_pvt_info_ptr))
+                (*update_pvt_info_ptr)++;
             else
                 break;
         }
@@ -276,28 +276,28 @@ void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr
 	lsn_list.clear();
 	bool found, head;
 	auto result = 
-		hash_search_vm(version_map, &PageID, HASH_FIND, &found, &head);
+		hash_search_pvt(pvt, &PageID, HASH_FIND, &found, &head);
 	if(!found)
 		return;
 	while(result != NULL){
 		if(head){
-			auto item_head = (ITEMHEAD_VM*)result;
-			for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
+			auto item_head = (ITEMHEAD_PVT*)result;
+			for(int i = 0; i < ITEMHEAD_SLOT_CNT_PVT; i++)
 				if(item_head->lsn[i] == InvalidXLogRecPtr)
 					break;
 				else if(current_lsn < item_head->lsn[i] && item_head->lsn[i] <= target_lsn)
 					lsn_list.push_back(item_head->lsn[i]);
-			result = hash_next_segment_vm(item_head, true);
+			result = hash_next_segment_pvt(item_head, true);
 			head = false;
 		}
 		else{
-			auto item_seg = (ITEMSEG_VM*)result;
-			for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
+			auto item_seg = (ITEMSEG_PVT*)result;
+			for(int i = 0; i < ITEMSEG_SLOT_CNT_PVT; i++)
 				if(item_seg->lsn[i] == InvalidXLogRecPtr)
 					break;
 				else if(current_lsn < item_seg->lsn[i] && item_seg->lsn[i] <= target_lsn)
 					lsn_list.push_back(item_seg->lsn[i]);
-			result = hash_next_segment_vm(item_seg, false);
+			result = hash_next_segment_pvt(item_seg, false);
 		}
 	}
 	sort(lsn_list.begin(), lsn_list.end());
@@ -382,9 +382,9 @@ void ApplyLSNListToPage(KeyType PageID, char* block, std::vector<XLogRecPtr>& ls
 bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr current_lsn, XLogRecPtr target_lsn){
     MempoolClientReplaying = true;
 	std::vector<XLogRecPtr> lsn_list;
-	LWLockAcquire(mempool_client_version_map_lock, LW_SHARED);
+	LWLockAcquire(mempool_client_pvt_lock, LW_SHARED);
 	GetLSNListfromVersionMap(PageID, current_lsn, target_lsn, lsn_list);
-	LWLockRelease(mempool_client_version_map_lock);
+	LWLockRelease(mempool_client_pvt_lock);
 	if(lsn_list.size() > 0){
 		ApplyLSNListToPage(PageID, block, lsn_list);
         MempoolClientReplaying = false;
@@ -662,8 +662,8 @@ void mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_
     if(has_failed[0]) return;
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
-	auto req = &send_pointer->content.flush_update_vm_info;
-	send_pointer->command = DSMEngine::flush_update_vm_info_;
+	auto req = &send_pointer->content.flush_update_pvt_info;
+	send_pointer->command = DSMEngine::flush_update_pvt_info_;
 	send_pointer->buffer = recv_mr.addr;
 	send_pointer->rkey = recv_mr.rkey;
 	req->info.page_id = page_id;
@@ -690,8 +690,8 @@ int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_
     if(has_failed[0]) return ret;
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
-	auto req = &send_pointer->content.fetch_update_vm_info;
-	send_pointer->command = DSMEngine::fetch_update_vm_info_;
+	auto req = &send_pointer->content.fetch_update_pvt_info;
+	send_pointer->command = DSMEngine::fetch_update_pvt_info_;
 	send_pointer->buffer = recv_mr.addr;
 	send_pointer->rkey = recv_mr.rkey;
     req->ptr = info_idx;
@@ -705,7 +705,7 @@ int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_
 	has_failed[0] |= rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
     if(has_failed[0]) return ret;
 
-	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.fetch_update_vm_info;
+	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.fetch_update_pvt_info;
 	if(!KeyTypeEqualFunction()(res->info.page_id, nullKeyType)){
         ret = 1;
         InsertIntoVersionMap(res->info.page_id, res->info.lsn);
@@ -724,7 +724,7 @@ size_t mempool::MemPoolClient::GetFirstUpdateVersionMapInfoIndex(){
     if(has_failed[0]) return ret;
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
-	send_pointer->command = DSMEngine::get_first_update_vm_info_idx_;
+	send_pointer->command = DSMEngine::get_first_update_pvt_info_idx_;
 	send_pointer->buffer = recv_mr.addr;
 	send_pointer->rkey = recv_mr.rkey;
 	has_failed[0] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
@@ -737,8 +737,8 @@ size_t mempool::MemPoolClient::GetFirstUpdateVersionMapInfoIndex(){
 	has_failed[0] |= rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
     if(has_failed[0]) return ret;
 
-	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.get_first_update_vm_info_idx;
-    *update_vm_info_ptr = res->idx;
+	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.get_first_update_pvt_info_idx;
+    *update_pvt_info_ptr = res->idx;
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
@@ -821,30 +821,30 @@ void UnregisterPageOnMemPool(KeyType PageID){
 }
 
 void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn){
-	LWLockAcquire(mempool_client_version_map_lock, LW_EXCLUSIVE);
+	LWLockAcquire(mempool_client_pvt_lock, LW_EXCLUSIVE);
 	bool found, head;
 	auto result = 
-		hash_search_vm(version_map, &page_id, HASH_ENTER, &found, &head);
+		hash_search_pvt(pvt, &page_id, HASH_ENTER, &found, &head);
 	if(head){
-		auto item_head = (ITEMHEAD_VM*)result;
-		for(int i = 0; i < ITEMHEAD_SLOT_CNT_VM; i++)
+		auto item_head = (ITEMHEAD_PVT*)result;
+		for(int i = 0; i < ITEMHEAD_SLOT_CNT_PVT; i++)
 			if(item_head->lsn[i] == InvalidXLogRecPtr){
 				item_head->lsn[i] = lsn;
 				break;
 			}
 	}
 	else{
-		auto item_seg = (ITEMSEG_VM*)result;
-		for(int i = 0; i < ITEMSEG_SLOT_CNT_VM; i++)
+		auto item_seg = (ITEMSEG_PVT*)result;
+		for(int i = 0; i < ITEMSEG_SLOT_CNT_PVT; i++)
 			if(item_seg->lsn[i] == InvalidXLogRecPtr){
 				item_seg->lsn[i] = lsn;
 				break;
 			}
 	}
 	// can only insert to the end of list
-	LWLockRelease(mempool_client_version_map_lock);
+	LWLockRelease(mempool_client_pvt_lock);
 }
-void ParseXLogBlocksLsn_vm(XLogReaderState *record, int recordBlockId, XLogRecPtr lsn){
+void ParseXLogBlocksLsn_pvt(XLogReaderState *record, int recordBlockId, XLogRecPtr lsn){
 	auto& blk = record->blocks[recordBlockId];
 	KeyType page_id = {
 		blk.rnode.spcNode,
@@ -876,17 +876,17 @@ ResetDecoder(XLogReaderState *state)
 	}
 	state->max_block_id = -1;
 }
-bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_seq_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-bool vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_seq_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
+bool pvt_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define COPY_HEADER_FIELD(_dst, _size)								\
@@ -1029,7 +1029,7 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 				blk->rnode = *rnode;
 			}
 			COPY_HEADER_FIELD(&blk->blkno, sizeof(BlockNumber));
-			// ParseXLogBlocksLsn_vm(state, block_id, lsn); // todo (te): remove
+			// ParseXLogBlocksLsn_pvt(state, block_id, lsn); // todo (te): remove
 		}
 		else
 			Assert(false);
@@ -1062,7 +1062,7 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 			}
 			COPY_HEADER_FIELD(blk->data, blk->data_len);
 		}
-		// ParseXLogBlocksLsn_vm(state, block_id, lsn);
+		// ParseXLogBlocksLsn_pvt(state, block_id, lsn);
 	}
 
 	if (state->main_data_len > 0)
@@ -1121,43 +1121,43 @@ void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
 	bool parsed = false;
 	switch (record.xl_rmid) {
 		case RM_XLOG_ID:
-			parsed = vm_xlog_idx_save(state, lsn);
+			parsed = pvt_xlog_idx_save(state, lsn);
 			break;
 		case RM_HEAP2_ID:
-			parsed = vm_heap2_idx_save(state, lsn);
+			parsed = pvt_heap2_idx_save(state, lsn);
 			break;
 		case RM_HEAP_ID:
-			parsed = vm_heap_idx_save(state, lsn);
+			parsed = pvt_heap_idx_save(state, lsn);
 			break;
 		case RM_BTREE_ID:
-			parsed = vm_btree_idx_save(state, lsn);
+			parsed = pvt_btree_idx_save(state, lsn);
 			break;
 		case RM_HASH_ID:
-			parsed = vm_hash_idx_save(state, lsn);
+			parsed = pvt_hash_idx_save(state, lsn);
 			break;
 		case RM_GIN_ID:
-			parsed = vm_gin_idx_save(state, lsn);
+			parsed = pvt_gin_idx_save(state, lsn);
 			break;
 		case RM_GIST_ID:
-			parsed = vm_gist_idx_save(state, lsn);
+			parsed = pvt_gist_idx_save(state, lsn);
 			break;
 		case RM_SEQ_ID:
-			parsed = vm_seq_idx_save(state, lsn);
+			parsed = pvt_seq_idx_save(state, lsn);
 			break;
 		case RM_SPGIST_ID:
-			parsed = vm_spg_idx_save(state, lsn);
+			parsed = pvt_spg_idx_save(state, lsn);
 			break;
 		case RM_BRIN_ID:
-			parsed = vm_brin_idx_save(state, lsn);
+			parsed = pvt_brin_idx_save(state, lsn);
 			break;
 		case RM_GENERIC_ID:
-			parsed = vm_generic_idx_save(state, lsn);
+			parsed = pvt_generic_idx_save(state, lsn);
 			break;
 		default:
 			break;
 	}
 }
-bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+bool pvt_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
 	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 	uint8		block_id;
@@ -1171,7 +1171,7 @@ bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 		case XLOG_FPI:
 		case XLOG_FPI_FOR_HINT:
 			for (block_id = 0; block_id <= record->max_block_id; block_id++)
-                ParseXLogBlocksLsn_vm(record, block_id, lsn);
+                ParseXLogBlocksLsn_pvt(record, block_id, lsn);
 			break;
 
 		default:
@@ -1179,25 +1179,25 @@ bool vm_xlog_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 	}
     return true;
 }
-void vm_heap_multi_insert_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_heap_multi_insert_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     xl_heap_multi_insert *xlrec = (xl_heap_multi_insert *)record->main_data;
 
     if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
-void vm_heap_lock_update_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_heap_lock_update_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     xl_heap_lock_updated *xlrec = (xl_heap_lock_updated *)record->main_data;
 
     if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
-bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+bool pvt_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
@@ -1206,20 +1206,20 @@ bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn)
         case XLOG_HEAP2_PRUNE:
         case XLOG_HEAP2_VACUUM:
         case XLOG_HEAP2_FREEZE_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HEAP2_VISIBLE:
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HEAP2_MULTI_INSERT:
-            vm_heap_multi_insert_save(record, lsn);
+            pvt_heap_multi_insert_save(record, lsn);
             break;
 
         case XLOG_HEAP2_LOCK_UPDATED:
-            vm_heap_lock_update_save(record, lsn);
+            pvt_heap_lock_update_save(record, lsn);
             break;
 
         case XLOG_HEAP2_NEW_CID:
@@ -1230,37 +1230,37 @@ bool vm_heap2_idx_save(XLogReaderState *record, XLogRecPtr lsn)
             break;
 
         default:
-            elog(PANIC, "vm_heap2_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_heap2_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
-void vm_heap_insert_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_heap_insert_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     xl_heap_insert *xlrec = (xl_heap_insert *)record->main_data;
 
     if (xlrec->flags & XLH_INSERT_ALL_VISIBLE_CLEARED)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
-void vm_heap_delete_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_heap_delete_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     xl_heap_delete *xlrec = (xl_heap_delete *)record->main_data;
 
     if (xlrec->flags & XLH_DELETE_ALL_VISIBLE_CLEARED)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
-void vm_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecPtr lsn)
+void pvt_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecPtr lsn)
 {
     BlockNumber oldblk, newblk;
-    BufferTag old_cleared_vm, new_cleared_vm;
+    BufferTag old_cleared_pvt, new_cleared_pvt;
     xl_heap_update *xlrec = (xl_heap_update *)(record->main_data);
 
-    CLEAR_BUFFERTAG(old_cleared_vm);
-    CLEAR_BUFFERTAG(new_cleared_vm);
+    CLEAR_BUFFERTAG(old_cleared_pvt);
+    CLEAR_BUFFERTAG(new_cleared_pvt);
 
     XLogRecGetBlockTag(record, 0, NULL, NULL, &newblk);
 
@@ -1274,456 +1274,456 @@ void vm_heap_xlog_update_save(XLogReaderState *record, bool hotupdate, XLogRecPt
 
     if (xlrec->flags & XLH_UPDATE_OLD_ALL_VISIBLE_CLEARED)
     {
-        uint8 vm_block = (oldblk == newblk) ? 2 : 3;
-        ParseXLogBlocksLsn_vm(record, vm_block, lsn);
-        POLAR_GET_LOG_TAG(record, old_cleared_vm, vm_block);
+        uint8 pvt_block = (oldblk == newblk) ? 2 : 3;
+        ParseXLogBlocksLsn_pvt(record, pvt_block, lsn);
+        POLAR_GET_LOG_TAG(record, old_cleared_pvt, pvt_block);
     }
 
-    ParseXLogBlocksLsn_vm(record, (oldblk == newblk) ? 0 : 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, (oldblk == newblk) ? 0 : 1, lsn);
 
     if (oldblk != newblk)
     {
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
         if (xlrec->flags & XLH_UPDATE_NEW_ALL_VISIBLE_CLEARED)
         {
             /* Avoid add the same vm page to logindex twice with the same lsn value */
-            POLAR_GET_LOG_TAG(record, new_cleared_vm, 2);
+            POLAR_GET_LOG_TAG(record, new_cleared_pvt, 2);
 
-            if (!BUFFERTAGS_EQUAL(old_cleared_vm, new_cleared_vm))
-                ParseXLogBlocksLsn_vm(record, 2, lsn);
+            if (!BUFFERTAGS_EQUAL(old_cleared_pvt, new_cleared_pvt))
+                ParseXLogBlocksLsn_pvt(record, 2, lsn);
         }
     }
 }
-void vm_heap_lock_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_heap_lock_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     xl_heap_lock *xlrec = (xl_heap_lock *)record->main_data;
 
     if (xlrec->flags & XLH_LOCK_ALL_FROZEN_CLEARED)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
-bool vm_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+bool pvt_heap_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info & XLOG_HEAP_OPMASK)
     {
         case XLOG_HEAP_INSERT:
-            vm_heap_insert_save(record, lsn);
+            pvt_heap_insert_save(record, lsn);
             break;
 
         case XLOG_HEAP_DELETE:
-            vm_heap_delete_save(record, lsn);
+            pvt_heap_delete_save(record, lsn);
             break;
 
         case XLOG_HEAP_UPDATE:
-            vm_heap_xlog_update_save(record, false, lsn);
+            pvt_heap_xlog_update_save(record, false, lsn);
             break;
 
         case XLOG_HEAP_TRUNCATE:
             break;
 
         case XLOG_HEAP_HOT_UPDATE:
-            vm_heap_xlog_update_save(record, true, lsn);
+            pvt_heap_xlog_update_save(record, true, lsn);
             break;
 
         case XLOG_HEAP_CONFIRM:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HEAP_LOCK:
-            vm_heap_lock_save(record, lsn);
+            pvt_heap_lock_save(record, lsn);
             break;
 
         case XLOG_HEAP_INPLACE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         default:
-            elog(PANIC, "vm_heap_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_heap_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
-void vm_btree_xlog_insert_save(bool isleaf, bool ismeta, XLogReaderState *record, XLogRecPtr lsn)
+void pvt_btree_xlog_insert_save(bool isleaf, bool ismeta, XLogReaderState *record, XLogRecPtr lsn)
 {
     if (!isleaf)
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (ismeta)
-        ParseXLogBlocksLsn_vm(record, 2, lsn);
+        ParseXLogBlocksLsn_pvt(record, 2, lsn);
 }
-void vm_btree_xlog_split_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_btree_xlog_split_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 1, lsn);
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (XLogRecHasBlockRef(record, 2))
-        ParseXLogBlocksLsn_vm(record, 2, lsn);
+        ParseXLogBlocksLsn_pvt(record, 2, lsn);
 }
-void vm_btree_xlog_unlink_page_save(uint8 info, XLogReaderState *record, XLogRecPtr lsn)
+void pvt_btree_xlog_unlink_page_save(uint8 info, XLogReaderState *record, XLogRecPtr lsn)
 {
-    ParseXLogBlocksLsn_vm(record, 2, lsn);
+    ParseXLogBlocksLsn_pvt(record, 2, lsn);
 
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 
     if (info == XLOG_BTREE_UNLINK_PAGE_META)
-        ParseXLogBlocksLsn_vm(record, 4, lsn);
+        ParseXLogBlocksLsn_pvt(record, 4, lsn);
 }
-void vm_btree_xlog_newroot_save(XLogReaderState *record, XLogRecPtr lsn)
+void pvt_btree_xlog_newroot_save(XLogReaderState *record, XLogRecPtr lsn)
 {
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
-    ParseXLogBlocksLsn_vm(record, 2, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, 2, lsn);
 }
-bool vm_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+bool pvt_btree_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info)
     {
         case XLOG_BTREE_INSERT_LEAF:
-            vm_btree_xlog_insert_save(true, false, record, lsn);
+            pvt_btree_xlog_insert_save(true, false, record, lsn);
             break;
 
         case XLOG_BTREE_INSERT_UPPER:
-            vm_btree_xlog_insert_save(false, false, record, lsn);
+            pvt_btree_xlog_insert_save(false, false, record, lsn);
             break;
 
         case XLOG_BTREE_INSERT_META:
-            vm_btree_xlog_insert_save(false, true, record, lsn);
+            pvt_btree_xlog_insert_save(false, true, record, lsn);
             break;
 
         case XLOG_BTREE_SPLIT_L:
         case XLOG_BTREE_SPLIT_R:
-            vm_btree_xlog_split_save(record, lsn);
+            pvt_btree_xlog_split_save(record, lsn);
             break;
 
         case XLOG_BTREE_INSERT_POST:
-            vm_btree_xlog_insert_save(true, false, record, lsn);
+            pvt_btree_xlog_insert_save(true, false, record, lsn);
             break;
         case XLOG_BTREE_DEDUP:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_BTREE_VACUUM:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_BTREE_DELETE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_BTREE_MARK_PAGE_HALFDEAD:
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_BTREE_UNLINK_PAGE:
         case XLOG_BTREE_UNLINK_PAGE_META:
-            vm_btree_xlog_unlink_page_save(info, record, lsn);
+            pvt_btree_xlog_unlink_page_save(info, record, lsn);
             break;
 
         case XLOG_BTREE_NEWROOT:
-            vm_btree_xlog_newroot_save(record, lsn);
+            pvt_btree_xlog_newroot_save(record, lsn);
             break;
 
         case XLOG_BTREE_REUSE_PAGE:
             break;
 
         case XLOG_BTREE_META_CLEANUP:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         default:
-            elog(PANIC, "vm_btree_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_btree_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
 void
-vm_hash_xlog_add_ovfl_page_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_hash_xlog_add_ovfl_page_save(XLogReaderState *record, XLogRecPtr lsn)
 {
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
-    ParseXLogBlocksLsn_vm(record, 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
     if (XLogRecHasBlockRef(record, 2))
-        ParseXLogBlocksLsn_vm(record, 2, lsn);
+        ParseXLogBlocksLsn_pvt(record, 2, lsn);
 
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 4, lsn);
+    ParseXLogBlocksLsn_pvt(record, 4, lsn);
 }
 void
-vm_hash_xlog_move_page_contents_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_hash_xlog_move_page_contents_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 0))
     {
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
     }
     else
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 2, lsn);
+    ParseXLogBlocksLsn_pvt(record, 2, lsn);
 }
 void
-vm_hash_xlog_squeeze_page_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_hash_xlog_squeeze_page_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 0))
     {
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
     }
     else
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 2, lsn);
+    ParseXLogBlocksLsn_pvt(record, 2, lsn);
 
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 
     if (XLogRecHasBlockRef(record, 4))
-        ParseXLogBlocksLsn_vm(record, 4, lsn);
+        ParseXLogBlocksLsn_pvt(record, 4, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 5, lsn);
+    ParseXLogBlocksLsn_pvt(record, 5, lsn);
 
     if (XLogRecHasBlockRef(record, 6))
-        ParseXLogBlocksLsn_vm(record, 6, lsn);
+        ParseXLogBlocksLsn_pvt(record, 6, lsn);
 }
 void
-vm_hash_xlog_delete_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_hash_xlog_delete_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 0))
     {
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
     }
     else
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 }
 bool
-vm_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_hash_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info)
     {
         case XLOG_HASH_INIT_META_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HASH_INIT_BITMAP_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         case XLOG_HASH_INSERT:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         case XLOG_HASH_ADD_OVFL_PAGE:
-            vm_hash_xlog_add_ovfl_page_save(record, lsn);
+            pvt_hash_xlog_add_ovfl_page_save(record, lsn);
             break;
 
         case XLOG_HASH_SPLIT_ALLOCATE_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
-            ParseXLogBlocksLsn_vm(record, 2, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 2, lsn);
             break;
 
         case XLOG_HASH_SPLIT_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HASH_SPLIT_COMPLETE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         case XLOG_HASH_MOVE_PAGE_CONTENTS:
-            vm_hash_xlog_move_page_contents_save(record, lsn);
+            pvt_hash_xlog_move_page_contents_save(record, lsn);
             break;
 
         case XLOG_HASH_SQUEEZE_PAGE:
-            vm_hash_xlog_squeeze_page_save(record, lsn);
+            pvt_hash_xlog_squeeze_page_save(record, lsn);
             break;
 
         case XLOG_HASH_DELETE:
-            vm_hash_xlog_delete_save(record, lsn);
+            pvt_hash_xlog_delete_save(record, lsn);
             break;
 
         case XLOG_HASH_SPLIT_CLEANUP:
         case XLOG_HASH_UPDATE_META_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_HASH_VACUUM_ONE_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         default:
-            elog(PANIC, "vm_hash_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_hash_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
 void
-vm_gin_redo_insert_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gin_redo_insert_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
 void
-vm_gin_redo_split_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gin_redo_split_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
-    ParseXLogBlocksLsn_vm(record, 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
     if (XLogRecHasBlockRef(record, 2))
-        ParseXLogBlocksLsn_vm(record, 2, lsn);
+        ParseXLogBlocksLsn_pvt(record, 2, lsn);
 }
 void
-vm_gin_redo_update_metapage_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gin_redo_update_metapage_save(XLogReaderState *record, XLogRecPtr lsn)
 {
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 }
 void
-vm_gin_redo_delete_list_pages_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gin_redo_delete_list_pages_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     int i = 1;
 
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     for (i = 1; i <= GIN_NDELETE_AT_ONCE; i++)
     {
         if (XLogRecHasBlockRef(record, i))
-            ParseXLogBlocksLsn_vm(record, i, lsn);
+            ParseXLogBlocksLsn_pvt(record, i, lsn);
         else
             break;
     }
 }
 bool
-vm_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gin_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info)
     {
         case XLOG_GIN_CREATE_PTREE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_GIN_INSERT:
-            vm_gin_redo_insert_save(record, lsn);
+            pvt_gin_redo_insert_save(record, lsn);
             break;
 
         case XLOG_GIN_SPLIT:
-            vm_gin_redo_split_save(record, lsn);
+            pvt_gin_redo_split_save(record, lsn);
             break;
 
         case XLOG_GIN_VACUUM_PAGE:
         case XLOG_GIN_VACUUM_DATA_LEAF_PAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_GIN_DELETE_PAGE:
-            ParseXLogBlocksLsn_vm(record, 2, lsn);
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 2, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         case XLOG_GIN_UPDATE_META_PAGE:
-            vm_gin_redo_update_metapage_save(record, lsn);
+            pvt_gin_redo_update_metapage_save(record, lsn);
             break;
 
         case XLOG_GIN_INSERT_LISTPAGE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_GIN_DELETE_LISTPAGE:
-            vm_gin_redo_delete_list_pages_save(record, lsn);
+            pvt_gin_redo_delete_list_pages_save(record, lsn);
             break;
 
         default:
             return false;
-            elog(PANIC, "vm_gin_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_gin_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
 void
-vm_gist_redo_page_update_record_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gist_redo_page_update_record_save(XLogReaderState *record, XLogRecPtr lsn)
 {
-    ParseXLogBlocksLsn_vm(record, 0, lsn);
+    ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 }
 void
-vm_gist_redo_page_split_record_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_gist_redo_page_split_record_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     int block_id;
 
-    ParseXLogBlocksLsn_vm(record, 1, lsn);
+    ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
     for (block_id = 2; block_id <= XLR_MAX_BLOCK_ID; block_id++)
     {
         if (XLogRecHasBlockRef(record, block_id))
-            ParseXLogBlocksLsn_vm(record, block_id, lsn);
+            ParseXLogBlocksLsn_pvt(record, block_id, lsn);
         else
             break;
     }
 
     if (XLogRecHasBlockRef(record, 0))
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
 }
 bool
-vm_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn) {
+pvt_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn) {
     uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
     switch (info)
     {
         case XLOG_GIST_PAGE_UPDATE:
-            vm_gist_redo_page_update_record_save(record, lsn);
+            pvt_gist_redo_page_update_record_save(record, lsn);
             break;
         case XLOG_GIST_DELETE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
         case XLOG_GIST_PAGE_REUSE:
             // todo
 			// gistRedoPageReuse(record);
             break;
         case XLOG_GIST_PAGE_SPLIT:
-            vm_gist_redo_page_split_record_save(record, lsn);
+            pvt_gist_redo_page_split_record_save(record, lsn);
             break;
         case XLOG_GIST_PAGE_DELETE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
         case XLOG_GIST_ASSIGN_LSN:
             /* nop. See gistGetFakeLSN(). */
@@ -1736,146 +1736,146 @@ vm_gist_idx_save(XLogReaderState *record, XLogRecPtr lsn) {
 }
 
 bool
-vm_seq_idx_save( XLogReaderState *record, XLogRecPtr lsn)
+pvt_seq_idx_save( XLogReaderState *record, XLogRecPtr lsn)
 {
 	uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
 	switch (info)
 	{
 		case XLOG_SEQ_LOG:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
 			break;
 
 		default:
-			elog(PANIC, "vm_seq_idx_save: unknown op code %u", info);
+			elog(PANIC, "pvt_seq_idx_save: unknown op code %u", info);
 			break;
 	}
     return true;
 }
 void
-vm_spg_redo_pick_split_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_spg_redo_pick_split_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (XLogRecHasBlockRef(record, 0))
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
     if (XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-    ParseXLogBlocksLsn_vm(record, 2, lsn);
+    ParseXLogBlocksLsn_pvt(record, 2, lsn);
 
     if (XLogRecHasBlockRef(record, 3))
-        ParseXLogBlocksLsn_vm(record, 3, lsn);
+        ParseXLogBlocksLsn_pvt(record, 3, lsn);
 }
 void
-vm_spg_redo_add_node_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_spg_redo_add_node_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     if (!XLogRecHasBlockRef(record, 1))
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
     else
     {
-        ParseXLogBlocksLsn_vm(record, 1, lsn);
-        ParseXLogBlocksLsn_vm(record, 0, lsn);
+        ParseXLogBlocksLsn_pvt(record, 1, lsn);
+        ParseXLogBlocksLsn_pvt(record, 0, lsn);
 
         if (XLogRecHasBlockRef(record, 2))
-            ParseXLogBlocksLsn_vm(record, 2, lsn);
+            ParseXLogBlocksLsn_pvt(record, 2, lsn);
     }
 }
 bool
-vm_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     uint8       info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info)
     {
         case XLOG_SPGIST_ADD_LEAF:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             if (XLogRecHasBlockRef(record, 1))
-                ParseXLogBlocksLsn_vm(record, 1, lsn);
+                ParseXLogBlocksLsn_pvt(record, 1, lsn);
             break;
 
         case XLOG_SPGIST_MOVE_LEAFS:
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 2, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 2, lsn);
             break;
 
         case XLOG_SPGIST_ADD_NODE:
-            vm_spg_redo_add_node_save(record, lsn);
+            pvt_spg_redo_add_node_save(record, lsn);
             break;
 
         case XLOG_SPGIST_SPLIT_TUPLE:
             if (XLogRecHasBlockRef(record, 1))
-                ParseXLogBlocksLsn_vm(record, 1, lsn);
+                ParseXLogBlocksLsn_pvt(record, 1, lsn);
 
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         case XLOG_SPGIST_PICKSPLIT:
-            vm_spg_redo_pick_split_save(record, lsn);
+            pvt_spg_redo_pick_split_save(record, lsn);
             break;
 
         case XLOG_SPGIST_VACUUM_LEAF:
         case XLOG_SPGIST_VACUUM_ROOT:
         case XLOG_SPGIST_VACUUM_REDIRECT:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             break;
 
         default:
-            elog(PANIC, "vm_spg_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_spg_idx_save: unknown op code %u", info);
             break;
     }
     return true;
 }
 bool
-vm_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn) {
+pvt_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn) {
     uint8 info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
     switch (info & XLOG_BRIN_OPMASK)
     {
         case XLOG_BRIN_CREATE_INDEX:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             return true;
 
         case XLOG_BRIN_INSERT:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             return true;
 
         case XLOG_BRIN_UPDATE:
-            ParseXLogBlocksLsn_vm(record, 2, lsn);
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 2, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             return true;
 
         case XLOG_BRIN_SAMEPAGE_UPDATE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
             return true;
 
         case XLOG_BRIN_REVMAP_EXTEND:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             return true;
 
         case XLOG_BRIN_DESUMMARIZE:
-            ParseXLogBlocksLsn_vm(record, 0, lsn);
-            ParseXLogBlocksLsn_vm(record, 1, lsn);
+            ParseXLogBlocksLsn_pvt(record, 0, lsn);
+            ParseXLogBlocksLsn_pvt(record, 1, lsn);
             return true;
 
         default:
             return false;
-            elog(PANIC, "vm_brin_idx_save: unknown op code %u", info);
+            elog(PANIC, "pvt_brin_idx_save: unknown op code %u", info);
     }
     return false;
 }
 bool
-vm_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
+pvt_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 {
     int block_id;
 
     for (block_id = 0; block_id <= MAX_GENERIC_XLOG_PAGES; block_id++)
     {
         if (XLogRecHasBlockRef(record, block_id))
-            ParseXLogBlocksLsn_vm(record, block_id, lsn);
+            ParseXLogBlocksLsn_pvt(record, block_id, lsn);
     }
     return true;
 }
@@ -1954,8 +1954,8 @@ void MemPoolSyncMain(){
             //     while(true){
             //         auto client = mempool::MemPoolClient::Get_Instance();
             //         if(client == NULL) goto skip_mempool_sync;
-            //         if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_vm_info_ptr))
-            //             (*update_vm_info_ptr)++;
+            //         if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_pvt_info_ptr))
+            //             (*update_pvt_info_ptr)++;
             //         else
             //             break;
             //     }

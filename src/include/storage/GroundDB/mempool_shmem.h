@@ -16,7 +16,7 @@ extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt, *mpNtwkBndwdth;
 
 #define NUMBER_OF_mempool_client_lw_lock 5
 #define mempool_client_connection_lock (&mempool_client_lw_lock[0])
-#define mempool_client_version_map_lock (&mempool_client_lw_lock[1])
+#define mempool_client_pvt_lock (&mempool_client_lw_lock[1])
 #define mempool_client_rat_lock (&mempool_client_lw_lock[2])
 #define mempool_client_sync_rat_lock (&mempool_client_lw_lock[3])
 #define mempool_client_stat_lock (&mempool_client_lw_lock[4])
@@ -40,8 +40,8 @@ typedef struct{
 } RATLookupEntry;
 
 extern PGDLLIMPORT bool *is_first_mpc, *is_first_mpc_connection;
-extern PGDLLIMPORT HTAB_VM *version_map;
-extern PGDLLIMPORT size_t *update_vm_info_ptr;
+extern PGDLLIMPORT HTAB_PVT *pvt;
+extern PGDLLIMPORT size_t *update_pvt_info_ptr;
 
 extern void MemPoolClientShmemInit();
 
