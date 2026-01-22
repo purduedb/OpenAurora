@@ -991,7 +991,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		blockNum
 	};
 	RDMAReadPageInfo rdma_read_info;
-#ifdef MEMPOOL_CENTRALIZED_PAT
+#ifdef MEMPOOL_CENTRALIZED_RAT
 	// Register the page on the remote memory pool
 	bool exists_in_mempool = false;
 	if(IsRpcClient > 1)
@@ -1055,14 +1055,14 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 			if(IsRpcClient){
 				if(IsRpcClient > 1){
 					bool read_from_mempool = false;
-#ifdef MEMPOOL_CENTRALIZED_PAT
+#ifdef MEMPOOL_CENTRALIZED_RAT
 					if(exists_in_mempool){
 #else
 					if(PageExistsInMemPool(page_id, &rdma_read_info)){
 #endif
 						Assert(DataChecksumsEnabled());
 						if(FetchPageFromMemoryPool((char*)bufBlock, page_id, &rdma_read_info)
-#ifdef MEMPOOL_CENTRALIZED_PAT
+#ifdef MEMPOOL_CENTRALIZED_RAT
 						&& !PageIsNew(bufBlock)
 #endif
 						&& PageFromMemPoolIsVerified((Page)bufBlock, blockNum)){
@@ -1071,7 +1071,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 								read_from_mempool = true;
 								*hit = 2;
 								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
-#ifndef MEMPOOL_CENTRALIZED_PAT
+#ifndef MEMPOOL_CENTRALIZED_RAT
 #ifndef MEMPOOL_CACHE_POLICY_DISJOINT
 								AsyncAccessPageOnMemoryPool(page_id);
 #else
@@ -1639,7 +1639,7 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	if (oldPartitionLock != NULL)
 	{
-#ifdef MEMPOOL_CENTRALIZED_PAT
+#ifdef MEMPOOL_CENTRALIZED_RAT
 		UnregisterPageOnMemPool((KeyType){
 			oldTag.rnode.spcNode,
 			oldTag.rnode.dbNode,
