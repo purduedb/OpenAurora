@@ -49,6 +49,7 @@ public:
 
     void init_thread_pool(size_t thrd_num);
     void allocate_page_array(size_t pa_size);
+    void allocate_page_array_by_GB(size_t GB);
     void init_xlog_info();
     void init_pvtinfo_ring(size_t ring_size);
 

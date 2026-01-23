@@ -286,6 +286,9 @@ void MemPoolManager::allocate_page_array(size_t pa_size){
     }
     // todo (te): multiple page_array
 }
+void MemPoolManager::allocate_page_array_by_GB(size_t GB){
+    allocate_page_array(GB << 17); // GB * 1024 * 1024 / 8KB
+}
 
 void MemPoolManager::init_xlog_info(){
     xlog_info.valid = false;
