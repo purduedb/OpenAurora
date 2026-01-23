@@ -17,7 +17,7 @@ struct XLogInfo{
     XLogRecPtr ProcLastRecPtr, XactLastRecEnd, XactLastCommitEnd;
     XLogRecPtr LogwrtResult_Write, LogwrtResult_Flush;
 };
-struct UpdateVersionMapInfo{
+struct UpdatePVTInfo{
     KeyType page_id;
     XLogRecPtr lsn;
 };
@@ -60,13 +60,13 @@ struct fetch_xlog_info_response{
 };
 
 struct flush_update_pvt_info_request{
-    UpdateVersionMapInfo info;
+    UpdatePVTInfo info;
 };
 struct fetch_update_pvt_info_request{
     size_t ptr;
 };
 struct fetch_update_pvt_info_response{
-    UpdateVersionMapInfo info;
+    UpdatePVTInfo info;
 };
 struct get_first_update_pvt_info_idx_response{
     size_t idx;

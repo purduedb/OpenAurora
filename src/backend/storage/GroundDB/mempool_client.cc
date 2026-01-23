@@ -25,9 +25,9 @@ public:
 	int SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 	void FlushXLogInfoToMemoryPool();
 	void FetchXLogInfoFromMemoryPool();
-    void FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
-    int FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx);
-    size_t GetFirstUpdateVersionMapInfoIndex();
+    void FlushUpdatePVTInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn);
+    int FetchUpdatePVTInfoFromMemoryPool(size_t info_idx);
+    size_t GetFirstUpdatePVTInfoIndex();
     bool RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
     void UnregisterPageOnMemPool(KeyType PageID);
     static void Clear_Instance(bool disconnect);
@@ -81,8 +81,8 @@ MemPoolClient::MemPoolClient(){
         rat.init(memnode_cnt);
         for(int i = 0; i < memnode_cnt; i++)
             is_first_mpc_connection[i] = true;
-        for(*update_pvt_info_ptr = GetFirstUpdateVersionMapInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
-            if(FetchUpdateVersionMapInfoFromMemoryPool(*update_pvt_info_ptr))
+        for(*update_pvt_info_ptr = GetFirstUpdatePVTInfoIndex(); !has_failed[0];){ // todo (te): for secondary nodes, need to loop to fetch until reaching the lsn where StartupXLog() starts
+            if(FetchUpdatePVTInfoFromMemoryPool(*update_pvt_info_ptr))
                 (*update_pvt_info_ptr)++;
             else
                 break;
@@ -272,7 +272,7 @@ bool LsnIsSatisfied(XLogRecPtr PageLSN, XLogRecPtr TargetLSN){
 	return PageLSN <= TargetLSN;
 }
 
-void GetLSNListfromVersionMap(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr target_lsn, std::vector<XLogRecPtr>& lsn_list){
+void GetLSNListfromPVT(KeyType PageID, XLogRecPtr current_lsn, XLogRecPtr target_lsn, std::vector<XLogRecPtr>& lsn_list){
 	lsn_list.clear();
 	bool found, head;
 	auto result = 
@@ -383,7 +383,7 @@ bool ReplayXLog(KeyType PageID, BufferDesc* bufHdr, char* block, XLogRecPtr curr
     MempoolClientReplaying = true;
 	std::vector<XLogRecPtr> lsn_list;
 	LWLockAcquire(mempool_client_pvt_lock, LW_SHARED);
-	GetLSNListfromVersionMap(PageID, current_lsn, target_lsn, lsn_list);
+	GetLSNListfromPVT(PageID, current_lsn, target_lsn, lsn_list);
 	LWLockRelease(mempool_client_pvt_lock);
 	if(lsn_list.size() > 0){
 		ApplyLSNListToPage(PageID, block, lsn_list);
@@ -654,7 +654,7 @@ void mempool::MemPoolClient::FetchXLogInfoFromMemoryPool(){
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
-void mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn){
+void mempool::MemPoolClient::FlushUpdatePVTInfoToMemoryPool(KeyType page_id, XLogRecPtr lsn){
 	ibv_mr recv_mr, send_mr;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
@@ -681,7 +681,7 @@ void mempool::MemPoolClient::FlushUpdateVersionMapInfoToMemoryPool(KeyType page_
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
 }
-int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_idx){
+int mempool::MemPoolClient::FetchUpdatePVTInfoFromMemoryPool(size_t info_idx){
     int ret = 0;
 	ibv_mr recv_mr, send_mr;
 
@@ -708,14 +708,14 @@ int mempool::MemPoolClient::FetchUpdateVersionMapInfoFromMemoryPool(size_t info_
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.fetch_update_pvt_info;
 	if(!KeyTypeEqualFunction()(res->info.page_id, nullKeyType)){
         ret = 1;
-        InsertIntoVersionMap(res->info.page_id, res->info.lsn);
+        InsertIntoPVT(res->info.page_id, res->info.lsn);
     }
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
     return ret;
 }
-size_t mempool::MemPoolClient::GetFirstUpdateVersionMapInfoIndex(){
+size_t mempool::MemPoolClient::GetFirstUpdatePVTInfoIndex(){
     int ret = 0;
 	ibv_mr recv_mr, send_mr;
 
@@ -820,7 +820,7 @@ void UnregisterPageOnMemPool(KeyType PageID){
     client->UnregisterPageOnMemPool(PageID);
 }
 
-void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn){
+void InsertIntoPVT(KeyType page_id, XLogRecPtr lsn){
 	LWLockAcquire(mempool_client_pvt_lock, LW_EXCLUSIVE);
 	bool found, head;
 	auto result = 
@@ -853,10 +853,10 @@ void ParseXLogBlocksLsn_pvt(XLogReaderState *record, int recordBlockId, XLogRecP
 		blk.forknum,
 		blk.blkno
 	};
-    InsertIntoVersionMap(page_id, lsn);
+    InsertIntoPVT(page_id, lsn);
     auto client = mempool::MemPoolClient::Get_Instance();
     if(client == NULL) return;
-    client->FlushUpdateVersionMapInfoToMemoryPool(page_id, lsn);
+    client->FlushUpdatePVTInfoToMemoryPool(page_id, lsn);
 }
 void
 ResetDecoder(XLogReaderState *state)
@@ -887,7 +887,7 @@ bool pvt_seq_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 bool pvt_spg_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 bool pvt_brin_idx_save(XLogReaderState *record, XLogRecPtr lsn);
 bool pvt_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn);
-void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn){
+void UpdatePVT(XLogRecData* rdata, XLogRecPtr lsn){
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define COPY_HEADER_FIELD(_dst, _size)								\
 	do {															\
@@ -1882,7 +1882,7 @@ pvt_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 void MemPoolSyncMain(){
     int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, GetLogWrtResultLsn());
 
-    size_t interval_us[6] = {CheckSyncRAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdateVersionMapInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
+    size_t interval_us[6] = {CheckSyncRAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdatePVTInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
     size_t min_interval_us = interval_us[0];
     for(int i = 0; i < 6; i++)
         min_interval_us = std::min(min_interval_us, interval_us[i]);
@@ -1953,7 +1953,7 @@ void MemPoolSyncMain(){
             //     while(true){
             //         auto client = mempool::MemPoolClient::Get_Instance();
             //         if(client == NULL) goto skip_mempool_sync;
-            //         if(client->FetchUpdateVersionMapInfoFromMemoryPool(*update_pvt_info_ptr))
+            //         if(client->FetchUpdatePVTInfoFromMemoryPool(*update_pvt_info_ptr))
             //             (*update_pvt_info_ptr)++;
             //         else
             //             break;

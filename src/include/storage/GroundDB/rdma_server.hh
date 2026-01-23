@@ -34,13 +34,13 @@ public:
     std::vector<std::thread> main_comm_threads;
 
     XLogInfo xlog_info;
-    struct UpdateVersionMapInfoRing{
-        UpdateVersionMapInfo* ring;
+    struct UpdatePVTInfoRing{
+        UpdatePVTInfo* ring;
         size_t size;
         size_t ptr;
         std::mutex mtx;
     };
-    UpdateVersionMapInfoRing pvtinfo_ring;
+    UpdatePVTInfoRing pvtinfo_ring;
     
     void init_rdma_manager(int pr_s, DSMEngine::config_t &config);
     void Server_to_Client_Communication();

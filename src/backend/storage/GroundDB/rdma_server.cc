@@ -293,7 +293,7 @@ void MemPoolManager::init_xlog_info(){
 
 void MemPoolManager::init_pvtinfo_ring(size_t ring_size){
     assert(ring_size >= 128);
-    pvtinfo_ring.ring = new UpdateVersionMapInfo[ring_size]();
+    pvtinfo_ring.ring = new UpdatePVTInfo[ring_size]();
     for(size_t i = 0; i < ring_size; i++)
         pvtinfo_ring.ring[i].page_id = nullKeyType;
     pvtinfo_ring.size = ring_size;

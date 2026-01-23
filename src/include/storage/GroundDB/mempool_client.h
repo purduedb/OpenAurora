@@ -38,7 +38,7 @@ extern "C" {
 #define SyncRAT_Interval_us 1000000
 #define CheckSyncRAT_Interval_us (SyncRAT_Interval_us / 100)
 #define SyncXLogInfo_Interval_us 1000
-#define SyncUpdateVersionMapInfo_Interval_us 500
+#define SyncUpdatePVTInfo_Interval_us 500
 #define NeonHeartbeatInterval_us 1000000
 #define BandwidthUsageReportInterval_us 5000000
 
@@ -75,8 +75,8 @@ extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber bl
 extern void ASyncFlushPageToMemoryPool(char* src, KeyType PageID);;
 extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 
-extern void InsertIntoVersionMap(KeyType page_id, XLogRecPtr lsn);
-extern void UpdateVersionMap(XLogRecData* rdata, XLogRecPtr lsn);
+extern void InsertIntoPVT(KeyType page_id, XLogRecPtr lsn);
+extern void UpdatePVT(XLogRecData* rdata, XLogRecPtr lsn);
 
 bool RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 void UnregisterPageOnMemPool(KeyType PageID);

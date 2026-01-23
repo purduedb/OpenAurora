@@ -1342,7 +1342,7 @@ XLogInsertRecord(XLogRecData *rdata,
 		rechdr->xl_crc = rdata_crc;
 
 		if(IsRpcClient > 1)
-			UpdateVersionMap(rdata, StartPos);
+			UpdatePVT(rdata, StartPos);
 
 		/*
 		 * All the record data, including the header, is now ready to be
@@ -14514,7 +14514,7 @@ void ParseXLogBlocksLsn(XLogReaderState *record, int recordBlockId) {
     }
 #endif
 	if(IsRpcClient > 2)
-		InsertIntoVersionMap(key, record->ReadRecPtr);
+		InsertIntoPVT(key, record->ReadRecPtr);
 	else
     	HashMapInsertKey(pageVersionHashMap, key, record->ReadRecPtr, 0, true);
 

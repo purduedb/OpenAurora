@@ -108,11 +108,11 @@ void MemPoolClientShmemInit(){
 	info_pvt.hash = info.hash;
 	info_pvt.match = info.match;
 	pvt =
-		ShmemInitPageVersionTracker("MemPool Client VersionMap",
+		ShmemInitPageVersionTracker("MemPool Client PVT",
 						1 << 18, 1 << 20,
 						&info_pvt, HASH_ELEM | HASH_BLOBS | HASH_FUNCTION | HASH_COMPARE);
 	update_pvt_info_ptr = (size_t*)
-		ShmemInitStruct("MemPool Client VersionMap Info Pointer",
+		ShmemInitStruct("MemPool Client PVT Info Pointer",
 						sizeof(size_t),
 						found_any, found_all);
 
