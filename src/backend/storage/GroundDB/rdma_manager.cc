@@ -8,9 +8,6 @@ namespace DSMEngine {
 uint16_t RDMA_Manager::node_id = 0;
 uint16_t allocated_compute_node_id = 0;
 
-thread_local int RDMA_Manager::thread_id = 0;
-thread_local int RDMA_Manager::qp_inc_ticket = 0;
-
 int ibv_post_send_debug(ibv_qp *qp, ibv_send_wr *wr, ibv_send_wr **bad_wr){
     for(int i = 0; i < wr->num_sge; i++)
         *mpNtwkBndwdth += wr->sg_list[i].length;
@@ -105,15 +102,6 @@ RDMA_Manager::~RDMA_Manager() {
         }
     }
 
-    if (!remote_mem_pool.empty()) {
-        for (auto p : remote_mem_pool) {
-            for(auto iter : *p.second){
-                delete iter;
-            }
-            delete p.second; // remote buffer is not registered on this machine so just delete the structure
-        }
-        remote_mem_pool.clear();
-    }
     if (!res->cq_map.empty())
         for (auto it = res->cq_map.begin(); it != res->cq_map.end(); it++) {
             if (ibv_destroy_cq(it->second.first)) {
@@ -147,12 +135,6 @@ RDMA_Manager::~RDMA_Manager() {
         for(auto iter : pool.second){
             delete iter.second;
         }
-    }
-    for(auto iter : Remote_Leaf_Node_Bitmap){
-        for(auto iter1 : *iter.second){
-            delete iter1.second;
-        }
-        delete iter.second;
     }
     delete res;
     for(auto iter :qp_local_write_flush ){
@@ -619,14 +601,6 @@ void RDMA_Manager::Initialize_threadlocal_map(){
         cq_data_default.insert({target_node_id, new ThreadLocalPtr(&UnrefHandle_cq)});
         local_read_qp_info.insert({target_node_id, new ThreadLocalPtr(&General_Destroy<Registered_qp_config*>)});
         async_counter.insert({target_node_id, new ThreadLocalPtr(&General_Destroy<uint32_t*>)});
-        Remote_Leaf_Node_Bitmap.insert({target_node_id, new std::map<void*, In_Use_Array*>()});
-        remote_mem_pool.insert({target_node_id, new std::vector<ibv_mr*>()});
-        top.insert({target_node_id,0});
-        mtx_imme_map.insert({target_node_id, new std::mutex});
-        imm_gen_map.insert({target_node_id, new std::atomic<uint32_t>{0}});
-        imme_data_map.insert({target_node_id, new    uint32_t{0}});
-        byte_len_map.insert({target_node_id, new    uint32_t{0}});
-        cv_imme_map.insert({target_node_id, new std::condition_variable});
     }
 }
 /******************************************************************************
@@ -775,19 +749,6 @@ bool RDMA_Manager::Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id) {
         assert(local_read_qp_info.at(target_node_id) != nullptr);
         local_read_qp_info.at(target_node_id)->Reset(remote_con_data);
     }
-    else if(qp_type == "write_local_compact"){
-        assert(local_write_compact_qp_info.at(target_node_id) != nullptr);
-        local_write_compact_qp_info.at(target_node_id)->Reset(remote_con_data);
-    }
-//        ((QP_Info_Map*)local_write_compact_qp_info->Get())->insert({shard_target_node_id, remote_con_data});
-    //        local_write_compact_qp_info->Reset(remote_con_data);
-    else if(qp_type == "write_local_flush"){
-        assert(local_write_flush_qp_info.at(target_node_id) != nullptr);
-        local_write_flush_qp_info.at(target_node_id)->Reset(remote_con_data);
-    }
-//        ((QP_Info_Map*)local_write_flush_qp_info->Get())->insert({shard_target_node_id, remote_con_data});
-    //        local_write_flush_qp_info->Reset(remote_con_data);
-
     else
         res->qp_main_connection_info.insert({target_node_id,remote_con_data});
     l.unlock();
@@ -849,14 +810,6 @@ ibv_qp * RDMA_Manager::create_qp(uint16_t target_node_id, bool seperated_cq, std
         assert(cq_data_default[target_node_id] != nullptr);
         cq_data_default[target_node_id]->Reset(cq1);
     }
-    else if(qp_type == "write_local_compact"){
-        assert(cq_local_write_compact[target_node_id]!= nullptr);
-        cq_local_write_compact[target_node_id]->Reset(cq1);
-    }
-    else if(qp_type == "write_local_flush"){
-        assert(cq_local_write_flush[target_node_id]!= nullptr);
-        cq_local_write_flush[target_node_id]->Reset(cq1);
-        }
     else if (seperated_cq)
         res->cq_map.insert({target_node_id, std::make_pair(cq1, cq2)});
     else
@@ -884,64 +837,12 @@ ibv_qp * RDMA_Manager::create_qp(uint16_t target_node_id, bool seperated_cq, std
         assert(qp_data_default[target_node_id] != nullptr);
         qp_data_default[target_node_id]->Reset(qp);
     }
-    else if(qp_type == "write_local_flush"){
-        assert(qp_local_write_flush[target_node_id]!= nullptr);
-        qp_local_write_flush[target_node_id]->Reset(qp);
-        }
-    else if(qp_type == "write_local_compact"){
-        assert(qp_local_write_compact[target_node_id]!= nullptr);
-        qp_local_write_compact[target_node_id]->Reset(qp);
-    }
     else
         res->qp_map[target_node_id] = qp;
     // fprintf(stdout, "QP was created, QP number=0x%x\n", qp->qp_num);
     return qp;
 }
 
-void RDMA_Manager::create_qp_xcompute(uint16_t target_node_id, std::array<ibv_cq *, NUM_QP_ACCROSS_COMPUTE * 2> *cq_arr,
-                                                                         std::array<ibv_qp *, NUM_QP_ACCROSS_COMPUTE> *qp_arr) {
-    struct ibv_qp_init_attr qp_init_attr;
-    assert(target_node_id%2 == 0);
-    /* each side will send only one WR, so Completion Queue with 1 entry is enough
-        */
-    int cq_size = 1024;
-    // cq1 send queue, cq2 receive queue
-    std::unique_lock<std::shared_mutex> l(qp_cq_map_mutex);
-
-//                ibv_cq ** cq_arr = new    ibv_cq*[NUM_QP_ACCROSS_COMPUTE*2];
-//                ibv_qp ** qp_arr = new    ibv_qp*[NUM_QP_ACCROSS_COMPUTE];
-    auto* qp_info = new Registered_qp_config_xcompute();
-    for (int i = 0; i < NUM_QP_ACCROSS_COMPUTE; ++i) {
-        ibv_cq* cq1 = ibv_create_cq(res->ib_ctx, cq_size, NULL, NULL, 0);
-        ibv_cq* cq2 = ibv_create_cq(res->ib_ctx, cq_size, NULL, NULL, 0);
-        if (!cq1 | !cq2) {
-            fprintf(stderr, "failed to create CQ with %u entries\n", cq_size);
-        }
-//                        res->cq_map.insert({target_node_id, std::make_pair(cq1, cq2)});
-        (*cq_arr)[2*i] = cq1;
-        (*cq_arr)[2*i+1] = cq2;
-        /* create the Queue Pair */
-        memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-        qp_init_attr.qp_type = IBV_QPT_RC;
-        qp_init_attr.sq_sig_all = 0;
-        qp_init_attr.send_cq = cq1;
-        qp_init_attr.recv_cq = cq2;
-
-        qp_init_attr.cap.max_send_wr = 32; // THis should be larger that he maixum core number for the machine.
-        qp_init_attr.cap.max_recv_wr = RECEIVE_OUTSTANDING_SIZE;
-        qp_init_attr.cap.max_send_sge = 2;
-        qp_init_attr.cap.max_recv_sge = 2;
-        //    qp_init_attr.cap.max_inline_data = -1;
-        ibv_qp* qp = ibv_create_qp(res->pd, &qp_init_attr);
-        (*qp_arr)[i] = qp;
-        if (!qp) {
-            fprintf(stderr, "failed to create QP\n");
-        }
-//                        qp_xcompute_info.insert()
-
-        fprintf(stdout, "Xcompute QPs were created, QP number=0x%x\n", qp->qp_num);
-    }
-}
 /******************************************************************************
 * Function: connect_qp
 *
@@ -965,10 +866,6 @@ int RDMA_Manager::connect_qp(ibv_qp* qp, std::string& qp_type, uint16_t target_n
 
     if (qp_type == "default" )
         remote_con_data = (Registered_qp_config*)local_read_qp_info[target_node_id]->Get();
-    else if(qp_type == "write_local_compact")
-        remote_con_data = (Registered_qp_config*)local_write_compact_qp_info[target_node_id]->Get();
-    else if(qp_type == "write_local_flush")
-        remote_con_data = (Registered_qp_config*)local_write_flush_qp_info[target_node_id]->Get();
     else
         remote_con_data = res->qp_main_connection_info.at(target_node_id);
     l.unlock();
@@ -1005,21 +902,6 @@ connect_qp_exit:
 }
 int RDMA_Manager::connect_qp(ibv_qp* qp, Registered_qp_config* remote_con_data) {
     int rc;
-    //    ibv_qp* qp;
-    //    if (qp_id == "read_local" ){
-    //        qp = static_cast<ibv_qp*>(qp_data_default->Get());
-    //        assert(qp!= nullptr);
-    //    }
-    //    else if(qp_id == "write_local"){
-    //        qp = static_cast<ibv_qp*>(qp_local_write_flush->Get());
-    //
-    //    }
-    //    else{
-    //        qp = res->qp_map[qp_id];
-    //        assert(qp!= nullptr);
-    //    }
-    // protect the res->qp_main_connection_info outside this function
-
 
     if (rdma_config.gid_idx >= 0) {
         uint8_t* p = remote_con_data->gid;
@@ -1052,45 +934,6 @@ int RDMA_Manager::connect_qp(ibv_qp* qp, Registered_qp_config* remote_con_data) 
     connect_qp_exit:
     return rc;
 }
-
-int RDMA_Manager::connect_qp_xcompute(std::array<ibv_qp *, NUM_QP_ACCROSS_COMPUTE> *qp_arr,
-                                                                            DSMEngine::Registered_qp_config_xcompute *remote_con_data) {
-    int rc = 0;
-    if (rdma_config.gid_idx >= 0) {
-        uint8_t* p = remote_con_data->gid;
-        fprintf(stdout,
-                        "Remote xcompute GID    =%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n ",
-                        p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10],
-                        p[11], p[12], p[13], p[14], p[15]);
-    }
-    for (int i = 0; i < NUM_QP_ACCROSS_COMPUTE; ++i) {
-        /* modify the QP to init */
-        rc = modify_qp_to_init((*qp_arr)[i]);
-        if (rc) {
-            fprintf(stderr, "change QP xcompute state to INIT failed\n");
-            goto connect_qp_exit;
-        }
-        fprintf(stderr, "received QP xcompute number is 0x%x\n", remote_con_data->qp_num[i]);
-        /* modify the QP to RTR */
-        rc = modify_qp_to_rtr((*qp_arr)[i], remote_con_data->qp_num[i], remote_con_data->lid,
-                                                    remote_con_data->gid);
-        if (rc) {
-            fprintf(stderr, "failed to modify QP xcompute state to RTR\n");
-            goto connect_qp_exit;
-        }
-        rc = modify_qp_to_rts((*qp_arr)[i]);
-        if (rc) {
-            fprintf(stderr, "failed to modify QP xcompute state to RTS\n");
-            goto connect_qp_exit;
-        }
-        fprintf(stdout, "QP xcompute %p state was change to RTS\n", (*qp_arr)[i]);
-    }
-
-    /* sync to make sure that both sides are in states that they can connect to prevent packet loose */
-    connect_qp_exit:
-    return rc;
-}
-
 
 int RDMA_Manager::modify_qp_to_reset(ibv_qp* qp) {
     struct ibv_qp_attr attr;
@@ -1312,10 +1155,6 @@ RDMA_Manager::RDMA_Read(GlobalAddress remote_ptr, ibv_mr *local_mr, size_t msg_s
             qp = static_cast<ibv_qp*>(qp_data_default.at(remote_ptr.nodeID)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        assert(false);
-    }else if (qp_type == "write_local_compact"){
-        assert(false);
     } else {
         assert(false);
 //        std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
@@ -1464,21 +1303,6 @@ int RDMA_Manager::RDMA_Write(GlobalAddress remote_ptr, ibv_mr *local_mr, size_t 
             qp = static_cast<ibv_qp*>(qp_data_default.at(remote_ptr.nodeID)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(remote_ptr.nodeID)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,remote_ptr.nodeID);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(remote_ptr.nodeID)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(remote_ptr.nodeID)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,remote_ptr.nodeID);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(remote_ptr.nodeID)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
     } else {
         assert(false);
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
@@ -1550,21 +1374,6 @@ int RDMA_Manager::RDMA_Write(ibv_mr *remote_mr, ibv_mr *local_mr, size_t msg_siz
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
     } else {
             assert(false);
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
@@ -1630,21 +1439,6 @@ int RDMA_Manager::RDMA_Write(void* addr, uint32_t rkey, ibv_mr* local_mr,
         if (qp == NULL) {
             Remote_Query_Pair_Connection(qp_type,target_node_id);
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
     } else {
@@ -1725,21 +1519,6 @@ int RDMA_Manager::post_send(ibv_mr* mr, std::string qp_type, size_t size,
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
     } else {
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
         rc = ibv_post_send(res->qp_map.at(target_node_id), &sr, &bad_wr);
@@ -1804,21 +1583,6 @@ int RDMA_Manager::post_send(ibv_mr** mr_list, size_t sge_size,
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
         }
         rc = ibv_post_send(qp, &sr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        }
-        rc = ibv_post_send(qp, &sr, &bad_wr);
     } else {
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
         rc = ibv_post_send(res->qp_map.at(target_node_id), &sr, &bad_wr);
@@ -1877,21 +1641,6 @@ int RDMA_Manager::post_receive(ibv_mr** mr_list, size_t sge_size, std::string qp
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
         }
         rc = ibv_post_recv(qp, &rr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_recv(qp, &rr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        }
-        rc = ibv_post_recv(qp, &rr, &bad_wr);
     } else {
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
         rc = ibv_post_recv(res->qp_map.at(target_node_id), &rr, &bad_wr);
@@ -1902,93 +1651,6 @@ int RDMA_Manager::post_receive(ibv_mr** mr_list, size_t sge_size, std::string qp
     else
         fprintf(stdout, "Receive Request was posted\n");
     return rc;
-}
-int RDMA_Manager::post_receive_xcompute(ibv_mr *mr, uint16_t target_node_id, int num_of_qp) {
-        struct ibv_recv_wr rr;
-        struct ibv_sge sge;
-        struct ibv_recv_wr* bad_wr;
-        int rc;
-        //    if (!rdma_config.server_name) {
-        //        /* prepare the scatter/gather entry */
-
-        memset(&sge, 0, sizeof(sge));
-        sge.addr = (uintptr_t)mr->addr;
-        assert(mr->length != 0);
-//        printf("The length of the mr is %lu", mr->length);
-        sge.length = mr->length;
-        sge.lkey = mr->lkey;
-
-        //    }
-        //    else {
-        //        /* prepare the scatter/gather entry */
-        //        memset(&sge, 0, sizeof(sge));
-        //        sge.addr = (uintptr_t)res->receive_buf;
-        //        sge.length = sizeof(T);
-        //        sge.lkey = res->mr_receive->lkey;
-        //    }
-
-        /* prepare the receive work request */
-        memset(&rr, 0, sizeof(rr));
-        rr.next = NULL;
-        rr.wr_id = 0;
-        rr.sg_list = &sge;
-        rr.num_sge = 1;
-        /* post the Receive Request to the RQ */
-        ibv_qp* qp;
-//        try
-        {
-//                std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-                qp = static_cast<ibv_qp*>((*qp_xcompute.at(target_node_id))[num_of_qp]);
-        }
-//        catch (...)
-//        {
-//                printf("An exception occurred. target node is %hu, number of qp is    %d \n", target_node_id, num_of_qp);
-//        }
-        rc = ibv_post_recv(qp, &rr, &bad_wr);
-
-        return rc;
-}
-int RDMA_Manager::post_send_xcompute(ibv_mr *mr, uint16_t target_node_id, int num_of_qp) {
-        struct ibv_send_wr sr;
-        struct ibv_sge sge;
-        struct ibv_send_wr* bad_wr = NULL;
-        int rc;
-        //    if (!rdma_config.server_name) {
-        //        /* prepare the scatter/gather entry */
-
-        memset(&sge, 0, sizeof(sge));
-        sge.addr = (uintptr_t)mr->addr;
-        assert(mr->length != 0);
-//        printf("The length of the mr is %lu", mr->length);
-        sge.length = mr->length;
-        sge.lkey = mr->lkey;
-        //    }
-        //    else {
-        //        /* prepare the scatter/gather entry */
-        //        memset(&sge, 0, sizeof(sge));
-        //        sge.addr = (uintptr_t)res->receive_buf;
-        //        sge.length = sizeof(T);
-        //        sge.lkey = res->mr_receive->lkey;
-        //    }
-
-        /* prepare the send work request */
-        memset(&sr, 0, sizeof(sr));
-        sr.next = NULL;
-        sr.wr_id = 0;
-        sr.sg_list = &sge;
-        sr.num_sge = 1;
-        sr.opcode = static_cast<ibv_wr_opcode>(IBV_WR_SEND);
-        sr.send_flags = IBV_SEND_SIGNALED;
-//        std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-        /* post the Send Request to the RQ */
-        ibv_qp* qp = static_cast<ibv_qp*>((*qp_xcompute.at(target_node_id))[num_of_qp]);
-//        l.unlock();
-        rc = ibv_post_send(qp, &sr, &bad_wr);
-        if (rc) {
-                assert(false);
-                fprintf(stderr, "failed to post SR, return is %d\n", rc);
-        }
-        return rc;
 }
 int RDMA_Manager::post_receive(ibv_mr* mr, std::string qp_type, size_t size,
                                                              uint16_t target_node_id) {
@@ -2033,21 +1695,6 @@ int RDMA_Manager::post_receive(ibv_mr* mr, std::string qp_type, size_t size,
             qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
         }
         rc = ibv_post_recv(qp, &rr, &bad_wr);
-    }else if (qp_type == "write_local_flush"){
-        qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-        }
-        rc = ibv_post_recv(qp, &rr, &bad_wr);
-
-    }else if (qp_type == "write_local_compact"){
-        qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        if (qp == NULL) {
-            Remote_Query_Pair_Connection(qp_type,target_node_id);
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-        }
-        rc = ibv_post_recv(qp, &rr, &bad_wr);
     } else {
         std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
         rc = ibv_post_recv(res->qp_map.at(target_node_id), &rr, &bad_wr);
@@ -2087,16 +1734,7 @@ int RDMA_Manager::poll_completion(ibv_wc* wc_p, int num_entries,
     ibv_cq* cq;
     /* poll the completion for a while before giving up of doing it .. */
     std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-    if (qp_type == "write_local_flush"){
-        cq = (ibv_cq*)cq_local_write_flush.at(target_node_id)->Get();
-        assert(cq != nullptr);
-    }else if (qp_type == "write_local_compact"){
-        cq = (ibv_cq*)cq_local_write_compact.at(target_node_id)->Get();
-//        cq = ((CQ_Map*)cq_local_write_compact->Get())->at(shard_target_node_id);
-//        cq = static_cast<ibv_cq*>(cq_local_write_compact->Get());
-        assert(cq != nullptr);
-
-    }else if (qp_type == "default"){
+    if (qp_type == "default"){
         cq = (ibv_cq*)cq_data_default.at(target_node_id)->Get();
 //        cq = ((CQ_Map*)cq_data_default->Get())->at(shard_target_node_id);
 //        cq = static_cast<ibv_cq*>(cq_data_default->Get());
@@ -2162,14 +1800,7 @@ int RDMA_Manager::try_poll_completions(ibv_wc* wc_p, int num_entries, std::strin
     int poll_num = 0;
     ibv_cq* cq;
     std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-    if (qp_type == "write_local_flush"){
-        cq = (ibv_cq*)cq_local_write_flush.at(target_node_id)->Get();
-        assert(cq != nullptr);
-    } else if (qp_type == "write_local_compact"){
-        cq = (ibv_cq*)cq_local_write_compact.at(target_node_id)->Get();
-        assert(cq != nullptr);
-
-    } else if (qp_type == "default"){
+    if (qp_type == "default"){
         cq = (ibv_cq*)cq_data_default.at(target_node_id)->Get();
         assert(cq != nullptr);
     }
@@ -2196,36 +1827,6 @@ int RDMA_Manager::try_poll_completions(ibv_wc* wc_p, int num_entries, std::strin
     return poll_result;
 }
 
-int RDMA_Manager::try_poll_completions_xcompute(ibv_wc *wc_p, int num_entries, bool send_cq, uint16_t target_node_id,
-                                                                                                int num_of_cp) {
-        assert(target_node_id%2 == 0);
-        int poll_result = 0;
-        int poll_num = 0;
-        /* poll the completion for a while before giving up of doing it .. */
-        // gettimeofday(&cur_time, NULL);
-        // start_time_msec = (cur_time.tv_sec * 1000) + (cur_time.tv_usec / 1000);
-        ibv_cq* cq;
-        std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-        if (send_cq)
-                cq = (*cq_xcompute.at(target_node_id))[num_of_cp*2];
-        else
-                cq = (*cq_xcompute.at(target_node_id))[num_of_cp*2+1];
-        l.unlock();
-        poll_result = ibv_poll_cq(cq, num_entries, &wc_p[poll_num]);
-#ifndef NDEBUG
-        if (poll_result > 0){
-                if (wc_p[poll_result-1].status !=
-                        IBV_WC_SUCCESS)    // TODO:: could be modified into check all the entries in the array
-                {
-                        fprintf(stderr,
-                                        "number %d got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
-                                        poll_result-1, wc_p[poll_result-1].status, wc_p[poll_result-1].vendor_err);
-                        assert(false);
-                }
-        }
-#endif
-        return poll_result;
-}
 /******************************************************************************
 * Function: print_config
 *
@@ -2349,16 +1950,6 @@ bool RDMA_Manager::Remote_Query_Pair_Connection(std::string& qp_type, uint16_t t
     std::shared_lock<std::shared_mutex> l1(qp_cq_map_mutex);
     if (qp_type == "default" )
         local_read_qp_info.at(target_node_id)->Reset(temp_buff);
-//        ((QP_Info_Map*)local_read_qp_info->Get())->insert({shard_target_node_id, temp_buff});
-//        local_read_qp_info->Reset(temp_buff);
-    else if(qp_type == "write_local_compact")
-        local_write_compact_qp_info.at(target_node_id)->Reset(temp_buff);
-//        ((QP_Info_Map*)local_write_compact_qp_info->Get())->insert({shard_target_node_id, temp_buff});
-//        local_write_compact_qp_info->Reset(temp_buff);
-    else if(qp_type == "write_local_flush")
-        local_write_flush_qp_info.at(target_node_id)->Reset(temp_buff);
-//        ((QP_Info_Map*)local_write_flush_qp_info->Get())->insert({shard_target_node_id, temp_buff});
-//        local_write_flush_qp_info->Reset(temp_buff);
     else
         res->qp_main_connection_info.insert({target_node_id,temp_buff});
     l1.unlock();
@@ -2537,69 +2128,6 @@ bool RDMA_Manager::Deallocate_Local_RDMA_Slot(void* p, Chunk_type buff_type) {
     return false;
 }
 
-bool RDMA_Manager::CheckInsideLocalBuff(
-        void* p,
-        std::_Rb_tree_iterator<std::pair<void* const, In_Use_Array>>& mr_iter,
-        std::map<void*, In_Use_Array>* Bitmap) {
-    std::shared_lock<std::shared_mutex> read_lock(local_mem_mutex);
-    if (Bitmap != nullptr) {
-        mr_iter = Bitmap->upper_bound(p);
-        if (mr_iter == Bitmap->begin()) {
-            return false;
-        } else if (mr_iter == Bitmap->end()) {
-            mr_iter--;
-            size_t buff_offset =
-                    static_cast<char*>(p) - static_cast<char*>(mr_iter->first);
-            //            assert(buff_offset>=0);
-            if (buff_offset < mr_iter->second.get_mr_ori()->length)
-                return true;
-            else
-                return false;
-        } else {
-            size_t buff_offset =
-                    static_cast<char*>(p) - static_cast<char*>(mr_iter->first);
-            //            assert(buff_offset>=0);
-            if (buff_offset < mr_iter->second.get_mr_ori()->length) return true;
-        }
-    } else {
-        // TODO: Implement a iteration to check that address in all the mempool, in case that the block size has been changed.
-        return false;
-    }
-    return false;
-}
-bool RDMA_Manager::CheckInsideRemoteBuff(void* p, uint16_t target_node_id) {
-    std::shared_lock<std::shared_mutex> read_lock(remote_mem_mutex);
-    std::map<void*, In_Use_Array*>* Bitmap;
-    Bitmap = Remote_Leaf_Node_Bitmap.at(target_node_id);
-    auto mr_iter = Bitmap->upper_bound(p);
-    if (mr_iter == Bitmap->begin()) {
-        return false;
-    } else if (mr_iter == Bitmap->end()) {
-        mr_iter--;
-        size_t buff_offset =
-                static_cast<char*>(p) - static_cast<char*>(mr_iter->first);
-        //            assert(buff_offset>=0);
-        if (buff_offset < mr_iter->second->get_mr_ori()->length){
-            assert(buff_offset % mr_iter->second->get_chunk_size() == 0);
-            return true;
-        }
-        else
-            return false;
-    } else {
-        mr_iter--;
-        size_t buff_offset =
-                static_cast<char*>(p) - static_cast<char*>(mr_iter->first);
-        //            assert(buff_offset>=0);
-        if (buff_offset < mr_iter->second->get_mr_ori()->length){
-            assert(buff_offset % mr_iter->second->get_chunk_size() == 0);
-            return true;
-        }else{
-            return false;
-        }
-
-    }
-    return false;
-}
 bool RDMA_Manager::Mempool_initialize(Chunk_type pool_name, size_t size, size_t allocated_size) {
 
     if (name_to_mem_pool.find(pool_name) != name_to_mem_pool.end()) return false;
@@ -2610,200 +2138,6 @@ bool RDMA_Manager::Mempool_initialize(Chunk_type pool_name, size_t size, size_t 
     name_to_chunksize.insert({pool_name, size});
     name_to_allocated_size.insert({pool_name, allocated_size});
     return true;
-}
-// serialization for Memory regions
-void RDMA_Manager::mr_serialization(char*& temp, size_t& size, ibv_mr* mr) {
-    void* p = mr->addr;
-    memcpy(temp, &p, sizeof(void*));
-    temp = temp + sizeof(void*);
-    uint32_t rkey = mr->rkey;
-    uint32_t rkey_net = htonl(rkey);
-    memcpy(temp, &rkey_net, sizeof(uint32_t));
-    temp = temp + sizeof(uint32_t);
-    uint32_t lkey = mr->lkey;
-    uint32_t lkey_net = htonl(lkey);
-    memcpy(temp, &lkey_net, sizeof(uint32_t));
-    temp = temp + sizeof(uint32_t);
-}
-
-void RDMA_Manager::mr_deserialization(char*& temp, size_t& size, ibv_mr*& mr) {
-    void* addr_p = nullptr;
-    memcpy(&addr_p, temp, sizeof(void*));
-    temp = temp + sizeof(void*);
-
-    uint32_t rkey_net;
-    memcpy(&rkey_net, temp, sizeof(uint32_t));
-    uint32_t rkey = htonl(rkey_net);
-    temp = temp + sizeof(uint32_t);
-
-    uint32_t lkey_net;
-    memcpy(&lkey_net, temp, sizeof(uint32_t));
-    uint32_t lkey = htonl(lkey_net);
-    temp = temp + sizeof(uint32_t);
-
-    mr->addr = addr_p;
-    mr->rkey = rkey;
-    mr->lkey = lkey;
-}
-void RDMA_Manager::fs_deserilization(
-        char*& buff, size_t& size, std::string& db_name,
-        std::unordered_map<std::string, SST_Metadata*>& file_to_sst_meta,
-        std::map<void*, In_Use_Array*>& remote_mem_bitmap, ibv_mr* local_mr) {
-    auto start = std::chrono::high_resolution_clock::now();
-    char* temp = buff;
-    size_t namenumber_net;
-    memcpy(&namenumber_net, temp, sizeof(size_t));
-    size_t namenumber = htonl(namenumber_net);
-    temp = temp + sizeof(size_t);
-
-    char dbname_[namenumber + 1];
-    memcpy(dbname_, temp, namenumber);
-    dbname_[namenumber] = '\0';
-    temp = temp + namenumber;
-
-    assert(db_name == std::string(dbname_));
-    size_t filenumber_net;
-    memcpy(&filenumber_net, temp, sizeof(size_t));
-    size_t filenumber = htonl(filenumber_net);
-    temp = temp + sizeof(size_t);
-
-    for (size_t i = 0; i < filenumber; i++) {
-        size_t filename_length_net;
-        memcpy(&filename_length_net, temp, sizeof(size_t));
-        size_t filename_length = ntohl(filename_length_net);
-        temp = temp + sizeof(size_t);
-
-        char filename[filename_length + 1];
-        memcpy(filename, temp, filename_length);
-        filename[filename_length] = '\0';
-        temp = temp + filename_length;
-
-        unsigned int file_size_net = 0;
-        memcpy(&file_size_net, temp, sizeof(unsigned int));
-        unsigned int file_size = ntohl(file_size_net);
-        temp = temp + sizeof(unsigned int);
-
-        size_t list_len_net = 0;
-        memcpy(&list_len_net, temp, sizeof(size_t));
-        size_t list_len = htonl(list_len_net);
-        temp = temp + sizeof(size_t);
-
-        SST_Metadata* meta_head;
-        SST_Metadata* meta = new SST_Metadata();
-
-        meta->file_size = file_size;
-
-        meta_head = meta;
-        size_t length_map_net = 0;
-        memcpy(&length_map_net, temp, sizeof(size_t));
-        size_t length_map = htonl(length_map_net);
-        temp = temp + sizeof(size_t);
-
-        void* context_p = nullptr;
-        // TODO: It can not be changed into net stream.
-        memcpy(&context_p, temp, sizeof(void*));
-        //        void* p_net = htonll(context_p);
-        temp = temp + sizeof(void*);
-
-        void* pd_p = nullptr;
-        memcpy(&pd_p, temp, sizeof(void*));
-        temp = temp + sizeof(void*);
-
-        uint32_t handle_net;
-        memcpy(&handle_net, temp, sizeof(uint32_t));
-        uint32_t handle = htonl(handle_net);
-        temp = temp + sizeof(uint32_t);
-
-        size_t length_mr_net = 0;
-        memcpy(&length_mr_net, temp, sizeof(size_t));
-        size_t length_mr = htonl(length_mr_net);
-        temp = temp + sizeof(size_t);
-
-        for (size_t j = 0; j < list_len; j++) {
-            meta->mr = new ibv_mr;
-            meta->mr->context = static_cast<ibv_context*>(context_p);
-            meta->mr->pd = static_cast<ibv_pd*>(pd_p);
-            meta->mr->handle = handle;
-            meta->mr->length = length_mr;
-            // below could be problematic.
-            meta->fname = std::string(filename);
-            mr_deserialization(temp, size, meta->mr);
-            meta->map_pointer = new ibv_mr;
-            *(meta->map_pointer) = *(meta->mr);
-
-            void* start_key;
-            memcpy(&start_key, temp, sizeof(void*));
-            temp = temp + sizeof(void*);
-
-            meta->map_pointer->length = length_map;
-            meta->map_pointer->addr = start_key;
-            if (j != list_len - 1) {
-                meta->next_ptr = new SST_Metadata();
-                meta = meta->next_ptr;
-            }
-        }
-        file_to_sst_meta.insert({std::string(filename), meta_head});
-    }
-    // desirialize the Bit map
-    size_t bitmap_number_net = 0;
-    memcpy(&bitmap_number_net, temp, sizeof(size_t));
-    size_t bitmap_number = htonl(bitmap_number_net);
-    temp = temp + sizeof(size_t);
-    for (size_t i = 0; i < bitmap_number; i++) {
-        void* p_key;
-        memcpy(&p_key, temp, sizeof(void*));
-        temp = temp + sizeof(void*);
-        size_t element_size_net = 0;
-        memcpy(&element_size_net, temp, sizeof(size_t));
-        size_t element_size = htonl(element_size_net);
-        temp = temp + sizeof(size_t);
-        size_t chunk_size_net = 0;
-        memcpy(&chunk_size_net, temp, sizeof(size_t));
-        size_t chunk_size = htonl(chunk_size_net);
-        temp = temp + sizeof(size_t);
-        auto* in_use = new std::atomic<bool>[element_size];
-
-        void* context_p = nullptr;
-        // TODO: It can not be changed into net stream.
-        memcpy(&context_p, temp, sizeof(void*));
-        //        void* p_net = htonll(context_p);
-        temp = temp + sizeof(void*);
-
-        void* pd_p = nullptr;
-        memcpy(&pd_p, temp, sizeof(void*));
-        temp = temp + sizeof(void*);
-
-        uint32_t handle_net;
-        memcpy(&handle_net, temp, sizeof(uint32_t));
-        uint32_t handle = htonl(handle_net);
-        temp = temp + sizeof(uint32_t);
-
-        size_t length_mr_net = 0;
-        memcpy(&length_mr_net, temp, sizeof(size_t));
-        size_t length_mr = htonl(length_mr_net);
-        temp = temp + sizeof(size_t);
-        auto* mr_inuse = new ibv_mr{0};
-        mr_inuse->context = static_cast<ibv_context*>(context_p);
-        mr_inuse->pd = static_cast<ibv_pd*>(pd_p);
-        mr_inuse->handle = handle;
-        mr_inuse->length = length_mr;
-        bool bit_temp;
-        for (size_t j = 0; j < element_size; j++) {
-            memcpy(&bit_temp, temp, sizeof(bool));
-            in_use[j] = bit_temp;
-            temp = temp + sizeof(bool);
-        }
-
-        mr_deserialization(temp, size, mr_inuse);
-        In_Use_Array* in_use_array = new In_Use_Array(element_size, chunk_size, mr_inuse, in_use);
-        remote_mem_bitmap.insert({p_key, in_use_array});
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration =
-            std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-    printf("fs pure deserialization time elapse: %ld\n", duration.count());
-    ibv_dereg_mr(local_mr);
-    free(buff);
 }
 
 }

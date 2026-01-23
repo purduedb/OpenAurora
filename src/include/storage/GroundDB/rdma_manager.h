@@ -91,14 +91,6 @@ struct Registered_qp_config {
     uint16_t node_id;
 } __attribute__((packed));
 
-
-struct Registered_qp_config_xcompute {
-    uint32_t qp_num[NUM_QP_ACCROSS_COMPUTE]; /* QP numbers */
-    uint16_t lid;        /* LID of the IB port */
-    uint8_t gid[16]; /* gid */
-    uint32_t node_id_pairs; // this node (16 bytes) & target nodeid <<16 (16 bytes)
-} __attribute__((packed));
-
 using QP_Map = std::map<uint16_t, ibv_qp*>;
 using QP_Info_Map = std::map<uint16_t, Registered_qp_config*>;
 using CQ_Map = std::map<uint16_t, ibv_cq*>;
@@ -218,32 +210,7 @@ struct RDMA_Reply {
     uint32_t rkey_large;
     volatile bool received;
 } __attribute__((packed));
-// Structure for the file handle in RDMA file system. it could be a link list
-// for large files
-struct SST_Metadata {
-    std::shared_mutex file_lock;
-    std::string fname;
-    ibv_mr* mr;
-    ibv_mr* map_pointer;
-    SST_Metadata* last_ptr = nullptr;
-    SST_Metadata* next_ptr = nullptr;
-    unsigned int file_size = 0;
-};
 
-template <typename T>
-struct atomwrapper {
-    std::atomic<T> _a;
-
-    atomwrapper() : _a() {}
-
-    atomwrapper(const std::atomic<T>& a) : _a(a.load()) {}
-
-    atomwrapper(const atomwrapper& other) : _a(other._a.load()) {}
-
-    atomwrapper& operator=(const atomwrapper& other) {
-        _a.store(other._a.load());
-    }
-};
 #define ALLOCATOR_SHARD_NUM 16
 class In_Use_Array {
 public:
@@ -367,7 +334,6 @@ public:
                                                             uint16_t& target_node_id);
     // Local memory register will register RDMA memory in local machine,
     // Both Computing node and share memory will call this function.
-    // it also push the new block bit map to the Remote_Leaf_Node_Bitmap
 
     // Set the type of the memory pool. the mempool can be access by the pool name
     bool Mempool_initialize(Chunk_type pool_name, size_t size,
@@ -402,49 +368,22 @@ public:
     // For a thread-local queue pair, the send_cq does not matter.
     int poll_completion(ibv_wc* wc_p, int num_entries, std::string qp_type,
                                             bool send_cq, uint16_t target_node_id);
-    int poll_completion_xcompute(ibv_wc *wc_p, int num_entries, std::string qp_type, bool send_cq, uint16_t target_node_id,
-                                                         int num_of_cp);
     void BatchGarbageCollection(uint64_t* ptr, size_t size);
     bool Deallocate_Local_RDMA_Slot(ibv_mr* mr, ibv_mr* map_pointer,
                                                                     Chunk_type buffer_type);
     bool Deallocate_Local_RDMA_Slot(void* p, Chunk_type buff_type);
     void Allocate_Local_RDMA_Slot(ibv_mr& mr_input, Chunk_type pool_name);
     size_t Calculate_size_of_pool(Chunk_type pool_name);
-    // this function will determine whether the pointer is with in the registered memory
-    bool CheckInsideLocalBuff(
-            void* p,
-            std::_Rb_tree_iterator<std::pair<void* const, In_Use_Array>>& mr_iter,
-            std::map<void*, In_Use_Array>* Bitmap);
-    bool CheckInsideRemoteBuff(void* p, uint16_t target_node_id);
-    void mr_serialization(char*& temp, size_t& size, ibv_mr* mr);
-    void mr_deserialization(char*& temp, size_t& size, ibv_mr*& mr);
     int try_poll_completions(ibv_wc* wc_p, int num_entries,
                             std::string& qp_type, bool send_cq,
                             uint16_t target_node_id);
-    int try_poll_completions_xcompute(ibv_wc *wc_p, int num_entries, bool send_cq, uint16_t target_node_id,
-                                    int num_of_cp);
-    // Deserialization for linked file is problematic because different file may link to the same SSTdata
-    void fs_deserilization(
-            char*& buff, size_t& size, std::string& db_name,
-            std::unordered_map<std::string, SST_Metadata*>& file_to_sst_meta,
-            std::map<void*, In_Use_Array*>& remote_mem_bitmap, ibv_mr* local_mr);
-    //    void mem_pool_serialization
     bool poll_reply_buffer(RDMA_Reply* rdma_reply);
-    // TODO: Make all the variable more smart pointers.
-//#ifndef NDEBUG
-        static thread_local int thread_id;
-        static thread_local int qp_inc_ticket;
-//#endif
     resources* res = nullptr;
-    std::map<uint16_t,std::vector<ibv_mr*>*> remote_mem_pool; /* a vector for all the remote memory regions*/
     // TODO: seperate the pool for different shards
     std::vector<ibv_mr*> local_mem_regions; /* a vector for all the local memory regions.*/
     ibv_mr* preregistered_region;
     std::list<ibv_mr*> pre_allocated_pool;
-    // std::map<void*, In_Use_Array*>* Remote_Leaf_Node_Bitmap;
     //TODO: seperate the remote registered memory as different chunk types. similar to name_to_mem_pool
-    std::map<uint16_t, std::map<void*, In_Use_Array*>*> Remote_Leaf_Node_Bitmap;
-    std::map<uint16_t, std::map<void*, In_Use_Array*>*> Remote_Inner_Node_Bitmap;
     std::map<uint16_t, ibv_mr*> mr_map_data;
     std::map<uint16_t, uint32_t> rkey_map_data;
     std::map<uint16_t, uint64_t> base_addr_map_data;
@@ -468,9 +407,6 @@ public:
     std::map<uint16_t, ThreadLocalPtr*> qp_local_write_compact;
     std::map<uint16_t, ThreadLocalPtr*> cq_local_write_compact;
     std::map<uint16_t, ThreadLocalPtr*> local_write_compact_qp_info;
-    std::map<uint16_t, std::array<ibv_qp*, NUM_QP_ACCROSS_COMPUTE>*> qp_xcompute;
-    std::map<uint16_t, std::array<ibv_cq*, NUM_QP_ACCROSS_COMPUTE*2>*> cq_xcompute;
-//        std::map<uint16_t, Registered_qp_config_xcompute*> qp_xcompute_info;
     std::map<uint16_t, ThreadLocalPtr*> qp_data_default;
     std::map<uint16_t, ThreadLocalPtr*> cq_data_default;
     std::map<uint16_t, ThreadLocalPtr*> local_read_qp_info;
@@ -479,13 +415,9 @@ public:
     ThreadLocalPtr* send_message_buffer;
     ThreadLocalPtr* receive_message_buffer;
     ThreadLocalPtr* CAS_buffer;
-//    ThreadPool Invalidation_bg_threads;
-        std::vector<std::thread> Invalidation_bg_threads;
-        std::mutex invalidate_channel_mtx;
-        std::atomic<int> sync_invalidation_qp_info_put = 0;
-//        std::atomic<int> invalidation_threads_start_sync = 0;
-    // TODO: replace the std::map<void*, In_Use_Array*> as a thread local vector of In_Use_Array*, so that
-    // the conflict can be minimized.
+    std::vector<std::thread> Invalidation_bg_threads;
+    std::mutex invalidate_channel_mtx;
+    std::atomic<int> sync_invalidation_qp_info_put = 0;
     std::unordered_map<Chunk_type, std::map<void*, In_Use_Array*>> name_to_mem_pool;
     std::unordered_map<Chunk_type, size_t> name_to_chunksize;
     std::unordered_map<Chunk_type, size_t> name_to_allocated_size;
@@ -494,21 +426,8 @@ public:
     static uint16_t node_id;
     std::unordered_map<uint16_t, ibv_mr*> comm_thread_recv_mrs;
     std::unordered_map<uint16_t , int> comm_thread_buffer;
-//    std::map<uint16_t, uint64_t*> deallocation_buffers;
-//    std::map<uint16_t, std::mutex*> dealloc_mtx;
-//    std::map<uint16_t, std::condition_variable*> dealloc_cv;
 
     std::atomic<uint64_t> main_comm_thread_ready_num = 0;
-//    uint64_t deallocation_buffers[REMOTE_DEALLOC_BUFF_SIZE / sizeof(uint64_t)];
-//    std::map<uint16_t, ibv_mr*>    dealloc_mr;
-    std::map<uint16_t, size_t>    top;
-
-    // The variables for immutable notification RPC.
-    std::map<uint16_t, std::mutex*> mtx_imme_map;
-    std::map<uint16_t, std::atomic<uint32_t>*> imm_gen_map;
-    std::map<uint16_t, uint32_t*> imme_data_map;
-    std::map<uint16_t, uint32_t*> byte_len_map;
-    std::map<uint16_t, std::condition_variable* > cv_imme_map;
 
     std::map<uint16_t, std::string> compute_nodes{};
     std::map<uint16_t, std::string> memory_nodes{};
@@ -531,13 +450,6 @@ public:
     static std::atomic<uint64_t> RDMAMemoryAllocElapseSum;
     static std::atomic<uint64_t> ReadCount1;
 #endif
-    //    std::unordered_map<std::string, ibv_mr*> fs_image;
-    //    std::unordered_map<std::string, ibv_mr*> log_image;
-    //    std::unique_ptr<ibv_mr, IBV_Deleter> log_image_mr;
-    //    std::shared_mutex log_image_mutex;
-    //    std::shared_mutex fs_image_mutex;
-    // use thread local qp and cq instead of map, this could be lock free.
-    //    static __thread std::string thread_id;
     template <typename T>
     int post_send(ibv_mr* mr, uint16_t target_node_id, std::string qp_type = "main") {
         struct ibv_send_wr sr;
@@ -564,21 +476,6 @@ public:
             if (qp == NULL) {
                 Remote_Query_Pair_Connection(qp_type,target_node_id);
                 qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
-            }
-            rc = ibv_post_send(qp, &sr, &bad_wr);
-        }else if (qp_type == "write_local_flush"){
-            qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-            if (qp == NULL) {
-                Remote_Query_Pair_Connection(qp_type,target_node_id);
-                qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-            }
-            rc = ibv_post_send(qp, &sr, &bad_wr);
-
-        }else if (qp_type == "write_local_compact"){
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-            if (qp == NULL) {
-                Remote_Query_Pair_Connection(qp_type,target_node_id);
-                qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
             }
             rc = ibv_post_send(qp, &sr, &bad_wr);
         } else {
@@ -612,20 +509,14 @@ public:
     int modify_qp_to_rts(struct ibv_qp* qp);
     ibv_qp *create_qp(uint16_t target_node_id, bool seperated_cq, std::string &qp_type, uint32_t send_outstanding_num,
                     uint32_t recv_outstanding_num);
-    void create_qp_xcompute(uint16_t target_node_id, std::array<ibv_cq *, NUM_QP_ACCROSS_COMPUTE * 2> *cq_arr,
-                            std::array<ibv_qp *, NUM_QP_ACCROSS_COMPUTE> *qp_arr);
-    //q_id is for the remote qp informantion fetching
     int connect_qp(ibv_qp* qp, std::string& qp_type, uint16_t target_node_id);
     int connect_qp(ibv_qp* qp, Registered_qp_config* remote_con_data);
-    int connect_qp_xcompute(std::array<ibv_qp *, NUM_QP_ACCROSS_COMPUTE> *qp_arr, Registered_qp_config_xcompute* remote_con_data);
     int resources_destroy();
     void print_config(void);
     void usage(const char* argv0);
 
     int post_receive(ibv_mr** mr_list, size_t sge_size, std::string qp_type,
                     uint16_t target_node_id);
-    int post_receive_xcompute(ibv_mr *mr, uint16_t target_node_id, int num_of_qp);
-    int post_send_xcompute(ibv_mr *mr, uint16_t target_node_id, int num_of_qp);
 
     int post_send(ibv_mr** mr_list, size_t sge_size, std::string qp_type,
                 uint16_t target_node_id);
@@ -650,33 +541,9 @@ public:
         rr.num_sge = 1;
         /* post the Receive Request to the RQ */
         ibv_qp* qp;
-        if (qp_type == "read_local"){
-            qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
-            if (qp == NULL) {
-                Remote_Query_Pair_Connection(qp_type,target_node_id);
-                qp = static_cast<ibv_qp*>(qp_data_default.at(target_node_id)->Get());
-            }
-            rc = ibv_post_recv(qp, &rr, &bad_wr);
-        }else if (qp_type == "Xcompute"){
-            qp = static_cast<ibv_qp*>((*qp_xcompute.at(target_node_id))[0]);
-            if (qp == NULL) {
-                Remote_Query_Pair_Connection(qp_type,target_node_id);
-                qp = static_cast<ibv_qp*>(qp_local_write_flush.at(target_node_id)->Get());
-            }
-            rc = ibv_post_recv(qp, &rr, &bad_wr);
-
-        }else if (qp_type == "write_local_compact"){
-            qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-            if (qp == NULL) {
-                Remote_Query_Pair_Connection(qp_type,target_node_id);
-                qp = static_cast<ibv_qp*>(qp_local_write_compact.at(target_node_id)->Get());
-            }
-            rc = ibv_post_recv(qp, &rr, &bad_wr);
-        } else {
-            std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
-            rc = ibv_post_recv(res->qp_map.at(target_node_id), &rr, &bad_wr);
-            l.unlock();
-        }
+        std::shared_lock<std::shared_mutex> l(qp_cq_map_mutex);
+        rc = ibv_post_recv(res->qp_map.at(target_node_id), &rr, &bad_wr);
+        l.unlock();
         return rc;
     }    // For a non-thread-local queue pair, send_cq==true poll the cq of send queue, send_cq==false poll the cq of receive queue
 };
