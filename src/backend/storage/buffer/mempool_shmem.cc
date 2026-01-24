@@ -16,6 +16,7 @@ size_t *mpc_pa_cnt, *mpc_pa_size, *mpc_pa_cnt_per_memnode, *mpc_pa_to_memnode, *
 KeyType *mpc_idx_to_pid;
 ibv_mr *mpc_idx_to_mr;
 HTAB *mpc_pid_to_idx;
+size_t *rat_occupancy;
 
 HTAB_PVT *pvt;
 size_t *update_pvt_info_ptr;
@@ -87,6 +88,10 @@ void MemPoolClientShmemInit(){
 		ShmemInitStruct("MemPool Client first client flag per MemNode connection",
 						sizeof(bool) * MAX_MEMNODE_NODE,
 						found_any, found_all);
+	rat_occupancy = (size_t*)
+		ShmemInitStruct("MemPool Client RAT usage counter",
+						sizeof(size_t),
+						found_any, found_all);
     HASHCTL info;
     MemSet(&info, 0, sizeof(info));
     info.keysize = sizeof(KeyType);
@@ -128,6 +133,7 @@ void MemPoolClientShmemInit(){
 		*last_sync_rat = std::chrono::steady_clock::now();
 		*is_first_mpc = true;
 		*mpLocalCnt = *mpMemCnt = *mpStoCnt = *mpNtwkBndwdth = 0;
+		*rat_occupancy = 0;
 	}
 }
 

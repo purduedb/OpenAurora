@@ -36,6 +36,9 @@ void PageAddressTable::init(size_t memnode_cnt){
 	for(int i = 0; i < memnode_cnt; i++)
 		mpc_pa_cnt_per_memnode[i] = 0;
 }
+double PageAddressTable::occupancy(){
+	return (double)*rat_occupancy / (double)mpc_pa_size[*mpc_pa_cnt];
+}
 void PageAddressTable::append_page_array(size_t memnode_id, size_t pa_idx, size_t pa_size, const ibv_mr& pa_mr, const ibv_mr& pida_mr){
 	LWLockAcquire(mempool_client_rat_lock, LW_EXCLUSIVE);
 	if(pa_idx < mpc_pa_cnt_per_memnode[memnode_id]){
@@ -89,6 +92,7 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 											HASH_REMOVE,
 											NULL);
 			Assert(result != NULL);
+			(*rat_occupancy)--;
 		}
 		page_id = pid;
 		if(!KeyTypeEqualFunction()(pid, nullKeyType)){
@@ -100,6 +104,7 @@ void PageAddressTable::update(size_t pa_idx, size_t pa_ofs, KeyType pid){
 											NULL);
 			result->pa_idx = pa_idx;
 			result->pa_ofs = pa_ofs;
+			(*rat_occupancy)++;
 		}
 	}
 	LWLockRelease(mempool_client_rat_lock);
@@ -114,6 +119,7 @@ void PageAddressTable::erase(KeyType pid){
 									NULL);
 	mpc_idx_to_pid[mpc_pa_size[result->pa_idx] + result->pa_ofs] = nullKeyType;
 	Assert(result != NULL);
+	(*rat_occupancy)--;
 	LWLockRelease(mempool_client_rat_lock);
 }
 

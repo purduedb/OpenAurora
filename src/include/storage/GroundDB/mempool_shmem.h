@@ -13,6 +13,7 @@ extern "C" {
 
 extern size_t *to_async_rat;
 extern int64 *mpLocalCnt, *mpMemCnt, *mpStoCnt, *mpNtwkBndwdth;
+extern size_t *rat_occupancy;
 
 #define NUMBER_OF_mempool_client_lw_lock 5
 #define mempool_client_connection_lock (&mempool_client_lw_lock[0])

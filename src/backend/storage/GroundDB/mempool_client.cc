@@ -744,6 +744,11 @@ size_t mempool::MemPoolClient::GetFirstUpdatePVTInfoIndex(){
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
     return ret;
 }
+double MemPoolOccupancy(){
+    auto client = mempool::MemPoolClient::Get_Instance();
+    if(client == NULL) return 0;
+    return client->rat.occupancy();
+}
 void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync){
 #ifndef MEMPOOL_CACHE_POLICY_DISJOINT
     AsyncFlushPageToMemoryPool(buffer, (KeyType){

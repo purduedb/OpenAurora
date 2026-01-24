@@ -27,6 +27,7 @@ public:
 	void at(KeyType pid, RDMAReadPageInfo& info);
 	void update(size_t pa_idx, size_t pa_ofs, KeyType pid);
 	void erase(KeyType pid);
+	double occupancy();
 };
 
 } // namespace mempool

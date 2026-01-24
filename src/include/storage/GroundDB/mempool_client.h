@@ -83,6 +83,8 @@ void UnregisterPageOnMemPool(KeyType PageID);
 
 extern void MemPoolSyncMain();
 
+extern double MemPoolOccupancy();
+
 
 #ifdef __cplusplus
 }
