@@ -10,6 +10,8 @@
 #include "storage/GroundDB/request_buffer.h"
 #include <mutex>
 
+// #define MEMPOOL_SERVER_STATS
+
 namespace mempool {
 
 typedef struct request_handler_args{
@@ -227,7 +229,8 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
         } else if (receive_msg_buf.command == DSMEngine::disconnect_) {
             break;
         } else {
-            printf("corrupt message from client (node %d). %d\n", compute_node_id, receive_msg_buf.command);
+            fprintf(stderr, "corrupt message from client (node %d). %d\n", compute_node_id, receive_msg_buf.command);
+            fflush(stderr);
             assert(false);
             break;
         }
@@ -236,6 +239,15 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
             buffer_position = 0;
         else
             buffer_position++;
+
+#ifdef MEMPOOL_SERVER_STATS
+        static auto stats_time_last = std::chrono::steady_clock::now();
+        auto stats_time_now = std::chrono::steady_clock::now();
+        if(std::chrono::duration_cast<std::chrono::milliseconds>(stats_time_now - stats_time_last).count() > 2000){ // 2 seconds
+            stats_time_last = stats_time_now;
+            fprintf(stderr, "memory layer occupancy: %lf%% (%lld / %lld)\n", 100. * lru->TotalCharge() / lru->GetCapacity(), lru->TotalCharge(), lru->GetCapacity());
+        }
+#endif
     }
     std::unique_lock<std::shared_mutex> l(rdma_mg->qp_cq_map_mutex);
     if (rdma_mg->res->sock_map.count(compute_node_id)){
