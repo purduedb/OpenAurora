@@ -1065,7 +1065,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 #ifdef MEMPOOL_CENTRALIZED_RAT
 						&& !PageIsNew(bufBlock)
 #endif
-						&& PageFromMemPoolIsVerified((Page)bufBlock, blockNum)){
+						&& PageIsVerifiedExtended((Page)bufBlock, blockNum, 0)){
 							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
 							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
 								read_from_mempool = true;
