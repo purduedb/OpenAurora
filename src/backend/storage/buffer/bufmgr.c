@@ -1072,11 +1072,7 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 								*hit = 2;
 								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
 #ifndef MEMPOOL_CENTRALIZED_RAT
-#ifndef MEMPOOL_CACHE_POLICY_DISJOINT
 								AsyncAccessPageOnMemoryPool(page_id);
-#else
-								AsyncRemovePageOnMemoryPool(page_id);
-#endif
 #endif
 							}
 						}
@@ -1399,11 +1395,7 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 		 * won't prevent hint-bit updates).  We will recheck the dirty bit
 		 * after re-locking the buffer header.
 		 */
-#ifdef MEMPOOL_CACHE_POLICY_DISJOINT
-		if (IsRpcClient > 1 || (oldFlags & BM_DIRTY))
-#else
 		if (oldFlags & BM_DIRTY)
-#endif
 		{
 			/*
 			 * We need a share-lock on the buffer contents to write it out
@@ -1455,16 +1447,6 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 														  smgr->smgr_rnode.node.dbNode,
 														  smgr->smgr_rnode.node.relNode);
 
-#ifdef MEMPOOL_CACHE_POLICY_DISJOINT
-				if(IsRpcClient > 1)
-					SyncFlushPageToMemoryPool(BufHdrGetBlock(buf), (KeyType){
-						buf->tag.rnode.spcNode,
-						buf->tag.rnode.dbNode,
-						buf->tag.rnode.relNode,
-						buf->tag.forkNum,
-						buf->tag.blockNum,
-					});
-#endif
 				FlushBuffer(buf, NULL);
 				LWLockRelease(BufferDescriptorGetContentLock(buf));
 

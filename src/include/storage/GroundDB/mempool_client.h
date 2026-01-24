@@ -33,7 +33,6 @@ extern "C" {
 
 // #define USE_MEMPOOL_STAT
 // #define MEMPOOL_CACHE_POLICY_COVERING
-// #define MEMPOOL_CACHE_POLICY_DISJOINT
 // #define MEMPOOL_CENTRALIZED_RAT
 #define SyncRAT_Interval_us 1000000
 #define CheckSyncRAT_Interval_us (SyncRAT_Interval_us / 100)
@@ -72,7 +71,7 @@ extern void AsyncRemovePageOnMemoryPool(KeyType PageID);
 extern void AsyncGetNewestPageAddressTable(int increment);
 
 extern void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync);
-extern void ASyncFlushPageToMemoryPool(char* src, KeyType PageID);;
+extern void AsyncFlushPageToMemoryPool(char* src, KeyType PageID);;
 extern void SyncFlushPageToMemoryPool(char* src, KeyType PageID);
 
 extern void InsertIntoPVT(KeyType page_id, XLogRecPtr lsn);

@@ -750,7 +750,6 @@ double MemPoolOccupancy(){
     return client->rat.occupancy();
 }
 void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum, char *buffer, bool skipFsync){
-#ifndef MEMPOOL_CACHE_POLICY_DISJOINT
     AsyncFlushPageToMemoryPool(buffer, (KeyType){
         reln->smgr_rnode.node.spcNode,
         reln->smgr_rnode.node.dbNode,
@@ -758,7 +757,6 @@ void MemPoolmdwrite(SMgrRelation reln, ForkNumber forknum, BlockNumber blocknum,
         forknum,
         blocknum,
     });
-#endif
 }
 bool mempool::MemPoolClient::RegisterPageOnMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info){
 	ibv_mr recv_mr, send_mr;
