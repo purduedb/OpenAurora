@@ -122,7 +122,6 @@ enum RDMA_Command_Type {
     sync_flush_page_,
     async_flush_page_,
     access_page_,
-    async_remove_page_,
     sync_rat_,
     mr_info_,
     disconnect_,
@@ -169,7 +168,6 @@ struct WUnlock_message{
 union RDMA_Request_Content {
     mempool::flush_page_request flush_page;
     mempool::access_page_request access_page;
-    mempool::remove_page_request remove_page;
     mempool::sync_rat_request sync_rat;
     mempool::mr_info_request mr_info;
     mempool::flush_xlog_info_request flush_xlog_info;

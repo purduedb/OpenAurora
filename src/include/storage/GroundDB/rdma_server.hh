@@ -56,7 +56,6 @@ public:
     void async_flush_page_handler(void* args);
     void sync_flush_page_handler(void* args);
     void access_page_handler(void* args);
-    void async_remove_page_handler(void* args);
     void sync_rat_handler(void* args);
     void mr_info_handler(void* args);
     void flush_xlog_info_handler(void* args);

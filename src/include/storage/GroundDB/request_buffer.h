@@ -26,12 +26,10 @@ struct flush_page_request{
 	KeyType page_id;
 };
 
+#define PAGE_ACC_INFO_BATCH_SIZE 128
 struct access_page_request{
-	KeyType page_id;
-};
-
-struct remove_page_request{
-	KeyType page_id;
+    int batch_size;
+	KeyType page_id[PAGE_ACC_INFO_BATCH_SIZE];
 };
 
 struct sync_rat_request{

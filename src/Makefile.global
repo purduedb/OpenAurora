@@ -36,9 +36,9 @@ all:
 .SECONDARY:
 
 # PostgreSQL version number
-VERSION = 13.0
-MAJORVERSION = 13
-VERSION_NUM = 130000
+VERSION = 14.11
+MAJORVERSION = 14
+VERSION_NUM = 140011
 
 PACKAGE_URL = https://www.postgresql.org/
 

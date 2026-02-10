@@ -19,7 +19,6 @@ public:
     bool AppendToRAT(size_t memnode_id, size_t pa_idx);
     void Disconnect();
 	int AccessPageOnMemoryPool(KeyType PageID);
-	int RemovePageOnMemoryPool(KeyType PageID);
 	void GetNewestPageAddressTable();
 	int AsyncFlushPageToMemoryPool(char* src, KeyType PageID);
 	int SyncFlushPageToMemoryPool(char* src, KeyType PageID);
@@ -36,8 +35,8 @@ public:
 
     DSMEngine::RDMA_Manager* rdma_mg;
     PageAddressTable rat;
-    // todo (te): asyncly do it with multiprocessing
-    // DSMEngine::ThreadPool* thrd_pool;
+    std::vector<int> page_acc_info_batch_size, page_acc_info_index;
+    std::vector<std::vector<KeyType>> page_acc_info;
 
     size_t memnode_cnt;
     std::vector<int> has_failed;
@@ -73,9 +72,14 @@ MemPoolClient::MemPoolClient(){
     rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
     rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
 
-    // todo (te): asyncly do it with multiprocessing
-	// thrd_pool = new DSMEngine::ThreadPool();
-    // thrd_pool->SetBackgroundThreads(5);
+    page_acc_info_batch_size.resize(memnode_cnt);
+    page_acc_info_index.resize(memnode_cnt);
+    page_acc_info.resize(memnode_cnt);
+    for(int i = 0; i < memnode_cnt; i++){
+        page_acc_info_batch_size[i] = 1;
+        page_acc_info_index[i] = 0;
+        page_acc_info[i].resize(PAGE_ACC_INFO_BATCH_SIZE);
+    }
 
 	if(*is_first_mpc){
         rat.init(memnode_cnt);
@@ -413,75 +417,41 @@ void mempool::MemPoolClient::Disconnect(){
 }
 
 int mempool::MemPoolClient::AccessPageOnMemoryPool(KeyType PageID){
+    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
+    page_acc_info[memnode_id][page_acc_info_index[memnode_id]++] = PageID;
+    if(page_acc_info_index[memnode_id] < page_acc_info_batch_size[memnode_id])
+        return 0;
+
     int rc = 0;
 	auto rdma_mg = this->rdma_mg;
 	ibv_mr send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
     if(has_failed[memnode_id]) return -1;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
 	auto req = &send_pointer->content.access_page;
 	send_pointer->command = DSMEngine::access_page_;
-	req->page_id = PageID;
+    req->batch_size = page_acc_info_batch_size[memnode_id];
+    for(int i = 0; i < page_acc_info_batch_size[memnode_id]; i++)
+        req->page_id[i] = page_acc_info[memnode_id][i];
 	rc |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, memnode_id * 2 + 1);
 
 	ibv_wc wc[3] = {};
 	std::string qp_type("main");
 	rc |= rdma_mg->poll_completion(wc, 1, qp_type, true, memnode_id * 2 + 1);
-	
-	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
-    if(rc) has_failed[memnode_id] = true;
-    return rc;
-}
-int mempool::MemPoolClient::RemovePageOnMemoryPool(KeyType PageID){
-    int rc = 0;
-	auto rdma_mg = this->rdma_mg;
-	ibv_mr send_mr;
-    size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
-    if(has_failed[memnode_id])
-        return -1;
 
-	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
-	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
-	auto req = &send_pointer->content.remove_page;
-	send_pointer->command = DSMEngine::async_remove_page_;
-	req->page_id = PageID;
-	rc |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, memnode_id * 2 + 1);
+    page_acc_info_index[memnode_id] = 0;
+    if(page_acc_info_batch_size[memnode_id] < PAGE_ACC_INFO_BATCH_SIZE)
+        page_acc_info_batch_size[memnode_id] <<= 1;
 
-	ibv_wc wc[3] = {};
-	std::string qp_type("main");
-	rc |= rdma_mg->poll_completion(wc, 1, qp_type, true, memnode_id * 2 + 1);
-	
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
     if(rc) has_failed[memnode_id] = true;
     return rc;
 }
 void AsyncAccessPageOnMemoryPool(KeyType PageID){
-	std::function<void(void *args)> handler = [](void *args){
-		auto PageID = (KeyType*)args;
-        auto client = mempool::MemPoolClient::Get_Instance();
-        if(client == NULL) goto exit;
-		client->AccessPageOnMemoryPool(*PageID);
-    exit:
-		delete (KeyType*)args;
-	};
-	auto a = new KeyType;
-	*a = PageID;
-    handler((void*)a); // todo (te): asyncly do it with multiprocessing
-}
-void AsyncRemovePageOnMemoryPool(KeyType PageID){
-	std::function<void(void *args)> handler = [](void *args){
-		auto PageID = (KeyType*)args;
-        auto client = mempool::MemPoolClient::Get_Instance();
-        if(client == NULL) goto exit;
-		client->RemovePageOnMemoryPool(*PageID);
-    exit:
-		delete (KeyType*)args;
-	};
-	auto a = new KeyType;
-	*a = PageID;
-    handler((void*)a); // todo (te): asyncly do it with multiprocessing
+    auto client = mempool::MemPoolClient::Get_Instance();
+    if(client == NULL) return;
+    client->AccessPageOnMemoryPool(PageID);
 }
 
 void mempool::MemPoolClient::GetNewestPageAddressTable(){
