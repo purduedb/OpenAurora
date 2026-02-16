@@ -46,3 +46,5 @@ lib*.pc
 
 # IDE setting
 */.vscode
+*/compile_commands.json
+*/.cache

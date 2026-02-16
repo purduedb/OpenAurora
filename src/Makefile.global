@@ -61,8 +61,8 @@ endif
 endif
 else # not PGXS
 vpath_build = no
-abs_top_builddir = /home/guo777/postgresql-13.0
-abs_top_srcdir = /home/guo777/postgresql-13.0
+abs_top_builddir = /home/guo777/postgresql-mine
+abs_top_srcdir = /home/guo777/postgresql-mine
 
 ifneq ($(vpath_build),yes)
 top_srcdir = $(top_builddir)
@@ -183,7 +183,7 @@ with_icu	= no
 with_perl	= no
 with_python	= no
 with_tcl	= no
-with_openssl	= no
+with_ssl	= no
 with_readline	= yes
 with_selinux	= no
 with_systemd	= no
@@ -257,13 +257,14 @@ CC = gcc
 GCC = yes
 SUN_STUDIO_CC = no
 CXX = g++
-CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2
+CFLAGS = -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -O2
 CFLAGS_SL = -fPIC
-CFLAGS_VECTOR =  -funroll-loops -ftree-vectorize
+CFLAGS_UNROLL_LOOPS =  -funroll-loops
+CFLAGS_VECTORIZE =  -ftree-vectorize
 CFLAGS_SSE42 = -msse4.2
 CFLAGS_ARMV8_CRC32C = 
 PERMIT_DECLARATION_AFTER_STATEMENT = -Wno-declaration-after-statement
-CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wformat-security -fno-strict-aliasing -fwrapv -O2
+CXXFLAGS = -Wall -Wpointer-arith -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -O2
 
 LLVM_CPPFLAGS = 
 LLVM_CFLAGS = 
@@ -288,7 +289,6 @@ LIBS = -lz -lreadline -lm
 LDAP_LIBS_FE = 
 LDAP_LIBS_BE = 
 UUID_LIBS = 
-UUID_EXTRA_OBJS = 
 LLVM_LIBS=
 LD = /usr/bin/ld
 with_gnu_ld = yes
@@ -312,7 +312,7 @@ ifdef PGXS
 else
   LDFLAGS_INTERNAL = -L$(top_builddir)/src/port -L$(top_builddir)/src/common
 endif
-LDFLAGS = $(LDFLAGS_INTERNAL) -std=c++17 -lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread -libverbs -lgtest -lgmock -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin  -Wl,--as-needed
+LDFLAGS = $(LDFLAGS_INTERNAL) -std=c++17 -lstdc++ -lrocksdb -lthrift -lrt -ldl -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd -lpthread -libverbs -I. -I/usr/local/include -I/usr/include -L/usr/local/lib -L/usr/bin  -Wl,--as-needed
 
 LDFLAGS_EX = 
 # LDFLAGS_SL might have already been assigned by calling makefile
@@ -365,7 +365,7 @@ DOWNLOAD = wget -O $@ --no-use-server-timestamps
 UNICODE_VERSION = 13.0.0
 
 # Pick a release from here: <http://cldr.unicode.org/index/downloads>
-CLDR_VERSION = 37
+CLDR_VERSION = 39
 
 
 # Tree-wide build support
@@ -438,22 +438,42 @@ ld_library_path_var = LD_LIBRARY_PATH
 # need something more here. If not defined then the expansion does
 # nothing.
 with_temp_install = \
-	PATH="$(abs_top_builddir)/tmp_install$(bindir):$$PATH" \
+	PATH="$(abs_top_builddir)/tmp_install$(bindir):$(CURDIR):$$PATH" \
 	$(call add_to_path,$(strip $(ld_library_path_var)),$(abs_top_builddir)/tmp_install$(libdir)) \
 	$(with_temp_install_extra)
 
 ifeq ($(enable_tap_tests),yes)
 
+ifndef PGXS
 define prove_installcheck
 rm -rf '$(CURDIR)'/tmp_check
 $(MKDIR_P) '$(CURDIR)'/tmp_check
-cd $(srcdir) && TESTDIR='$(CURDIR)' PATH="$(bindir):$$PATH" PGPORT='6$(DEF_PGPORT)' top_builddir='$(CURDIR)/$(top_builddir)' PG_REGRESS='$(CURDIR)/$(top_builddir)/src/test/regress/pg_regress' REGRESS_SHLIB='$(abs_top_builddir)/src/test/regress/regress$(DLSUFFIX)' $(PROVE) $(PG_PROVE_FLAGS) $(PROVE_FLAGS) $(if $(PROVE_TESTS),$(PROVE_TESTS),t/*.pl)
+cd $(srcdir) && \
+   TESTDIR='$(CURDIR)' PATH="$(bindir):$(CURDIR):$$PATH" \
+   PGPORT='6$(DEF_PGPORT)' top_builddir='$(CURDIR)/$(top_builddir)' \
+   PG_REGRESS='$(CURDIR)/$(top_builddir)/src/test/regress/pg_regress' \
+   $(PROVE) $(PG_PROVE_FLAGS) $(PROVE_FLAGS) $(if $(PROVE_TESTS),$(PROVE_TESTS),t/*.pl)
 endef
+else # PGXS case
+define prove_installcheck
+rm -rf '$(CURDIR)'/tmp_check
+$(MKDIR_P) '$(CURDIR)'/tmp_check
+cd $(srcdir) && \
+   TESTDIR='$(CURDIR)' PATH="$(bindir):$(CURDIR):$$PATH" \
+   PGPORT='6$(DEF_PGPORT)' \
+   PG_REGRESS='$(top_builddir)/src/test/regress/pg_regress' \
+   $(PROVE) $(PG_PROVE_FLAGS) $(PROVE_FLAGS) $(if $(PROVE_TESTS),$(PROVE_TESTS),t/*.pl)
+endef
+endif # PGXS
 
 define prove_check
 rm -rf '$(CURDIR)'/tmp_check
 $(MKDIR_P) '$(CURDIR)'/tmp_check
-cd $(srcdir) && TESTDIR='$(CURDIR)' $(with_temp_install) PGPORT='6$(DEF_PGPORT)' PG_REGRESS='$(CURDIR)/$(top_builddir)/src/test/regress/pg_regress' REGRESS_SHLIB='$(abs_top_builddir)/src/test/regress/regress$(DLSUFFIX)' $(PROVE) $(PG_PROVE_FLAGS) $(PROVE_FLAGS) $(if $(PROVE_TESTS),$(PROVE_TESTS),t/*.pl)
+cd $(srcdir) && \
+   TESTDIR='$(CURDIR)' $(with_temp_install) PGPORT='6$(DEF_PGPORT)' \
+   top_builddir='$(CURDIR)/$(top_builddir)' \
+   PG_REGRESS='$(CURDIR)/$(top_builddir)/src/test/regress/pg_regress' \
+   $(PROVE) $(PG_PROVE_FLAGS) $(PROVE_FLAGS) $(if $(PROVE_TESTS),$(PROVE_TESTS),t/*.pl)
 endef
 
 else
@@ -482,14 +502,14 @@ MKDIR_P = /usr/bin/mkdir -p
 missing		= $(SHELL) $(top_srcdir)/config/missing
 
 STRIP		= strip
-STRIP_STATIC_LIB = strip -x
+STRIP_STATIC_LIB = strip --strip-unneeded
 STRIP_SHARED_LIB = strip --strip-unneeded
 
 # Documentation
 
 DBTOEPUB	= 
 FOP				= 
-XMLLINT			= 
+XMLLINT			= /usr/bin/xmllint
 XSLTPROC		= 
 
 # Code coverage
@@ -560,19 +580,32 @@ endif
 libpq = -L$(libpq_builddir) -lpq
 
 # libpq_pgport is for use by client executables (not libraries) that use libpq.
-# We force clients to pull symbols from the non-shared libraries libpgport
+# We want clients to pull symbols from the non-shared libraries libpgport
 # and libpgcommon rather than pulling some libpgport symbols from libpq just
 # because libpq uses those functions too.  This makes applications less
-# dependent on changes in libpq's usage of pgport (on platforms where we
-# don't have symbol export control for libpq).  To do this we link to
+# dependent on changes in libpq's usage of pgport.  To do this we link to
 # pgport before libpq.  This does cause duplicate -lpgport's to appear
-# on client link lines, since that also appears in $(LIBS).
-# libpq_pgport_shlib is the same idea, but for use in client shared libraries.
-ifdef PGXS
+# on client link lines, since that also appears in $(LIBS).  On platforms
+# where we have symbol export control for libpq, the whole exercise is
+# unnecessary because libpq won't expose any of these symbols.  Currently,
+# only macOS warns about duplicate library references, so we only suppress
+# the duplicates on macOS.
+ifeq ($(PORTNAME),darwin)
+libpq_pgport = $(libpq)
+else ifdef PGXS
 libpq_pgport = -L$(libdir) -lpgcommon -lpgport $(libpq)
-libpq_pgport_shlib = -L$(libdir) -lpgcommon_shlib -lpgport_shlib $(libpq)
 else
 libpq_pgport = -L$(top_builddir)/src/common -lpgcommon -L$(top_builddir)/src/port -lpgport $(libpq)
+endif
+
+# libpq_pgport_shlib is the same idea, but for use in client shared libraries.
+# We need those clients to use the shlib variants.  (Ideally, users of this
+# macro would strip libpgport and libpgcommon from $(LIBS), but no harm is
+# done if they don't, since they will have satisfied all their references
+# from these libraries.)
+ifdef PGXS
+libpq_pgport_shlib = -L$(libdir) -lpgcommon_shlib -lpgport_shlib $(libpq)
+else
 libpq_pgport_shlib = -L$(top_builddir)/src/common -lpgcommon_shlib -L$(top_builddir)/src/port -lpgport_shlib $(libpq)
 endif
 
