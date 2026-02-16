@@ -48,3 +48,4 @@ lib*.pc
 */.vscode
 compile_commands.json
 .cache
+.clangd
