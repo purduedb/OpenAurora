@@ -12,25 +12,22 @@
 #include <atomic>
 #include <port/port_posix.h>
 #include <assert.h>
-#include <boost/lockfree/spsc_queue.hpp>
 namespace DSMEngine {
-class DBImpl;
-enum ThreadPoolType{FlushThreadPool, CompactionThreadPool, SubcompactionThreadPool};
 struct BGItem {
   std::function<void(void* args)> function;
   void* args;
 };
-struct BGThreadMetadata {
-  void* rdma_mg;
-  void* func_args;
+struct BGQueue {
+  std::mutex mtx;
+  std::condition_variable cv;
+  std::deque<BGItem> items;
 };
 //TODO: need the thread pool to be lightweight so that the invalidation message overhead will be minimum.
 class ThreadPool{
  public:
 
   std::vector<port::Thread> bgthreads_;
-  std::vector<boost::lockfree::spsc_queue<BGItem>*> queue_pool;
-  ThreadPoolType Type_;
+  BGQueue shared_queue_;
   int total_threads_limit_;
   std::atomic<bool> exit_all_threads_ = false;
   std::atomic<bool> wait_for_jobs_to_complete_;

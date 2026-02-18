@@ -178,7 +178,7 @@ void MemPoolManager::server_communication_thread(std::string client_ip, int sock
             }
         }
         miss_poll_counter = 0;
-        auto* req_args = new request_handler_args();
+        auto req_args = new request_handler_args;
         auto& receive_msg_buf = req_args->request;
         req_args->request = *(DSMEngine::RDMA_Request*)recv_mr[buffer_position].addr;
         req_args->client_ip = client_ip;
