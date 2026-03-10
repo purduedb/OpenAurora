@@ -19,8 +19,8 @@ public:
     int tcp_port, ib_port;
     struct resources* res;
     struct page_array{
-        ibv_mr *pa_mr, *pida_mr;
-        char *pa_buf, *pida_buf;
+        ibv_mr *pa_mr;
+        char *pa_buf;
         size_t size;
     };
     DSMEngine::ThreadPool *thrd_pool;

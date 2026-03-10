@@ -44,7 +44,7 @@ extern "C" {
 #define TryReconnectionToMemPool_Interval_us 1000000
 
 struct RDMAReadPageInfo{
-	struct ibv_mr remote_pa_mr, remote_pida_mr;
+	struct ibv_mr remote_pa_mr;
 	size_t memnode_id, pa_ofs;
 };
 typedef struct RDMAReadPageInfo RDMAReadPageInfo;

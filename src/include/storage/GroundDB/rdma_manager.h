@@ -60,8 +60,11 @@ class MemPoolManager;
 
 namespace DSMEngine {
 class Cache;
-enum Chunk_type {Internal_and_Leaf, LockTable, Message, PageArray, PageIDArray, Version_edit, IndexChunk, FilterChunk, FlushBuffer, DataChunk};
-static const char * EnumStrings[] = { "Internal_and_Leaf", "LockTable", "Message", "PageArray", "PageIDArray", "Version_edit", "IndexChunk", "FilterChunk", "FlushBuffer", "DataChunk"};
+enum Chunk_type {Internal_and_Leaf, LockTable, Message, PageArray, Version_edit, IndexChunk, FilterChunk, FlushBuffer, DataChunk};
+static const char * EnumStrings[] = { "Internal_and_Leaf", "LockTable", "Message", "PageArray", "Version_edit", "IndexChunk", "FilterChunk", "FlushBuffer", "DataChunk"};
+
+#define RAT_PAGE_SIZE (BLCKSZ + sizeof(KeyType))
+#define GET_RAT_PAGE_ID(page_addr) ((KeyType*)((uint8_t*)page_addr + BLCKSZ))
 
 static char config_file_name[100] = "../connection.conf";
 

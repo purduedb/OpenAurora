@@ -272,26 +272,23 @@ void MemPoolManager::init_thread_pool(size_t thrd_num){
 }
 
 void MemPoolManager::allocate_page_array(size_t pa_size){
-    rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, BLCKSZ * pa_size);
-    rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), sizeof(KeyType) * pa_size);
+    rdma_mg->Mempool_initialize(DSMEngine::PageArray, RAT_PAGE_SIZE, RAT_PAGE_SIZE * pa_size);
 
-    ibv_mr *pa_mr, *pida_mr;
-    char *pa_buf, *pida_buf;
-    rdma_mg->Local_Memory_Register(&pa_buf, &pa_mr, BLCKSZ * pa_size, DSMEngine::PageArray);
-    rdma_mg->Local_Memory_Register(&pida_buf, &pida_mr, sizeof(KeyType) * pa_size, DSMEngine::PageIDArray);
+    ibv_mr *pa_mr;
+    char *pa_buf;
+    rdma_mg->Local_Memory_Register(&pa_buf, &pa_mr, RAT_PAGE_SIZE * pa_size, DSMEngine::PageArray);
     
     freelist.init();
     lru = DSMEngine::NewLRUCache(pa_size, &freelist);
 
-    page_arrays.push_back((struct page_array){.pa_mr = pa_mr, .pida_mr = pida_mr, .pa_buf = pa_buf, .pida_buf = pida_buf, .size = pa_size});
+    page_arrays.push_back((struct page_array){.pa_mr = pa_mr, .pa_buf = pa_buf, .size = pa_size});
     for(size_t i = 0; i < pa_size; i++){
         auto pagemeta = new struct PageMeta;
         *pagemeta = (struct PageMeta){
-            .page_addr = pa_buf + i * BLCKSZ,
-            .page_id_addr = pida_buf + i * sizeof(KeyType)
+            .page_addr = pa_buf + i * RAT_PAGE_SIZE,
         };
         freelist.push_back(pagemeta);
-        *(KeyType*)(pagemeta->page_id_addr) = nullKeyType;
+        *GET_RAT_PAGE_ID(pagemeta->page_addr) = nullKeyType;
     }
     // todo (te): multiple page_array
 }
@@ -324,7 +321,7 @@ void MemPoolManager::async_flush_page_handler(void* args){
     auto pagemeta = (PageMeta*)e->value;
     std::unique_lock<std::shared_mutex> lk(e->rw_mtx);
     memcpy(pagemeta->page_addr, req->page_data, BLCKSZ);
-    memcpy(pagemeta->page_id_addr, &req->page_id, sizeof(KeyType));
+    memcpy(GET_RAT_PAGE_ID(pagemeta->page_addr), &req->page_id, sizeof(KeyType));
     lk.unlock();
     lru->Release(e);
 
@@ -346,7 +343,7 @@ void MemPoolManager::sync_flush_page_handler(void* args){
     auto pagemeta = (PageMeta*)e->value;
     std::unique_lock<std::shared_mutex> lk(e->rw_mtx);
     memcpy(pagemeta->page_addr, req->page_data, BLCKSZ);
-    memcpy(pagemeta->page_id_addr, &req->page_id, sizeof(KeyType));
+    memcpy(GET_RAT_PAGE_ID(pagemeta->page_addr), &req->page_id, sizeof(KeyType));
     lk.unlock();
     lru->Release(e);
 
@@ -388,7 +385,7 @@ void MemPoolManager::sync_rat_handler(void* args){
 
     auto&page_array = page_arrays[req->pa_idx];
     for(int i = 0; req->pa_ofs + i < page_array.size && i < SYNC_RAT_SIZE; i++)
-        res->page_id_array[i] = *(KeyType*)(page_array.pida_buf + (req->pa_ofs + i) * sizeof(KeyType));
+        res->page_id_array[i] = *(KeyType*)(GET_RAT_PAGE_ID(page_array.pa_buf + (req->pa_ofs + i) * RAT_PAGE_SIZE));
 
     send_pointer->received = true;
     rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
@@ -411,7 +408,6 @@ void MemPoolManager::mr_info_handler(void* args){
     auto res = &send_pointer->content.mr_info;
 
     memcpy(&res->pa_mr, page_arrays[req->pa_idx].pa_mr, sizeof(ibv_mr));
-    memcpy(&res->pida_mr, page_arrays[req->pa_idx].pida_mr, sizeof(ibv_mr));
 
     send_pointer->received = true;
     rdma_mg->post_send<DSMEngine::RDMA_Reply>(&send_mr, target_node_id);
@@ -560,10 +556,10 @@ void MemPoolManager::register_page_handler(void* args){
     for(int i = 0; i < page_arrays.size(); i++){
         auto&page_array = page_arrays[i];
         if(pagemeta->page_addr < page_array.pa_buf ||
-           pagemeta->page_addr >= page_array.pa_buf + page_array.size * BLCKSZ)
+           pagemeta->page_addr >= page_array.pa_buf + page_array.size * RAT_PAGE_SIZE)
             continue;
         res->pa_idx = i;
-        res->pa_ofs = ((char*)(pagemeta->page_addr) - page_array.pa_buf) / BLCKSZ;
+        res->pa_ofs = ((char*)(pagemeta->page_addr) - page_array.pa_buf) / RAT_PAGE_SIZE;
         break;
     }
     lk.unlock();

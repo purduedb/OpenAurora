@@ -7,7 +7,6 @@ namespace mempool {
 
 struct PageMeta{
 	void* page_addr;
-	void* page_id_addr;
 };
 class FreeList{
 public:

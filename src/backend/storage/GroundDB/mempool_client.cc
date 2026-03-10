@@ -69,8 +69,7 @@ MemPoolClient::MemPoolClient(){
         has_failed.push_back(rdma_mg == NULL || !rdma_mg->memory_node_status[2 * i + 1]);
     if(NoAliveConnection())
         goto exit;
-    rdma_mg->Mempool_initialize(DSMEngine::PageArray, BLCKSZ, RECEIVE_OUTSTANDING_SIZE * BLCKSZ);
-    rdma_mg->Mempool_initialize(DSMEngine::PageIDArray, sizeof(KeyType), RECEIVE_OUTSTANDING_SIZE * sizeof(KeyType));
+    rdma_mg->Mempool_initialize(DSMEngine::PageArray, RAT_PAGE_SIZE, RECEIVE_OUTSTANDING_SIZE * RAT_PAGE_SIZE);
 
     page_acc_info_batch_size.resize(memnode_cnt);
     page_acc_info_index.resize(memnode_cnt);
@@ -128,7 +127,7 @@ bool MemPoolClient::AppendToRAT(size_t memnode_id, size_t pa_idx){
     if(has_failed[memnode_id]) return false;
 
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.mr_info;
-	rat.append_page_array(memnode_id, pa_idx, res->pa_mr.length / BLCKSZ, res->pa_mr, res->pida_mr);
+	rat.append_page_array(memnode_id, pa_idx, res->pa_mr.length / RAT_PAGE_SIZE, res->pa_mr);
 
 	rdma_mg->Deallocate_Local_RDMA_Slot(send_mr.addr, DSMEngine::Message);
 	rdma_mg->Deallocate_Local_RDMA_Slot(recv_mr.addr, DSMEngine::Message);
@@ -248,15 +247,12 @@ bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_r
     bool failed = false, ret = false;
 	ibv_mr pa_mr, pida_mr;
 	rdma_mg->Allocate_Local_RDMA_Slot(pa_mr, DSMEngine::PageArray);
-	rdma_mg->Allocate_Local_RDMA_Slot(pida_mr, DSMEngine::PageIDArray);
-	failed = rdma_mg->RDMA_Read(&rdma_read_info->remote_pa_mr, &pa_mr, rdma_read_info->pa_ofs * BLCKSZ, BLCKSZ, IBV_SEND_SIGNALED, 1, rdma_read_info->memnode_id * 2 + 1, "main");
-	if(failed) goto exit;
-	failed = rdma_mg->RDMA_Read(&rdma_read_info->remote_pida_mr, &pida_mr, rdma_read_info->pa_ofs * sizeof(KeyType), sizeof(KeyType), IBV_SEND_SIGNALED, 1, rdma_read_info->memnode_id * 2 + 1, "main");
+	failed = rdma_mg->RDMA_Read(&rdma_read_info->remote_pa_mr, &pa_mr, rdma_read_info->pa_ofs * RAT_PAGE_SIZE, RAT_PAGE_SIZE, IBV_SEND_SIGNALED, 1, rdma_read_info->memnode_id * 2 + 1, "main");
 	if(failed) goto exit;
 
     {
 	auto res_page = (uint8_t*)pa_mr.addr;
-	auto res_id = (KeyType*)pida_mr.addr;
+	auto res_id = GET_RAT_PAGE_ID(res_page);
     ret = mempool::KeyTypeEqualFunction()(*res_id, PageID);
 	if (ret)
 	    memcpy(des, res_page, BLCKSZ);
@@ -264,7 +260,6 @@ bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_r
 
 exit:
 	rdma_mg->Deallocate_Local_RDMA_Slot(pa_mr.addr, DSMEngine::PageArray);
-	rdma_mg->Deallocate_Local_RDMA_Slot(pida_mr.addr, DSMEngine::PageIDArray);
     if(failed){
         client->has_failed[rdma_read_info->memnode_id] = true;
         return false;

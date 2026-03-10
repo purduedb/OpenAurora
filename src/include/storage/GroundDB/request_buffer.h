@@ -47,7 +47,6 @@ struct mr_info_request{
 };
 struct mr_info_response{
 	ibv_mr pa_mr;
-	ibv_mr pida_mr;
 };
 
 struct flush_xlog_info_request{
