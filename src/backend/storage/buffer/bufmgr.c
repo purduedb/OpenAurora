@@ -770,25 +770,47 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	 * miss.
 	 */
 	pgstat_count_buffer_read(reln);
+#ifdef USE_MEMPOOL_STAT
+	instr_time	rb_start,
+				rb_time;
+	bool		measure_latency =
+		(reln->rd_rel->relkind == RELKIND_RELATION ||
+		 reln->rd_rel->relkind == RELKIND_MATVIEW ||
+		 reln->rd_rel->relkind == RELKIND_TOASTVALUE) &&
+		RelationGetNamespace(reln) != PG_CATALOG_NAMESPACE &&
+		RelationGetNamespace(reln) != PG_TOAST_NAMESPACE;
+
+	if (measure_latency)
+		INSTR_TIME_SET_CURRENT(rb_start);
+#endif
+
 	buf = ReadBuffer_common(RelationGetSmgr(reln), reln->rd_rel->relpersistence,
 							forkNum, blockNum, mode, strategy, &hit);
 	if (hit == 1)
 		pgstat_count_buffer_hit(reln);
 #ifdef USE_MEMPOOL_STAT
-	if ((reln->rd_rel->relkind == RELKIND_RELATION
-		|| reln->rd_rel->relkind == RELKIND_MATVIEW
-		|| reln->rd_rel->relkind == RELKIND_TOASTVALUE)
-		&& RelationGetNamespace(reln) != PG_CATALOG_NAMESPACE
-		&& RelationGetNamespace(reln) != PG_TOAST_NAMESPACE
-		// && RelationGetNamespace(reln) != get_namespace_oid("information_schema", true)
-	){
+	if (measure_latency)
+	{
+		INSTR_TIME_SET_CURRENT(rb_time);
+		INSTR_TIME_SUBTRACT(rb_time, rb_start);
+		int64 elapsed_us = (int64) INSTR_TIME_GET_MICROSEC(rb_time);
+
     	LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
 		if (hit == 1)
+		{
 			(*mpLocalCnt)++;
+			(*mpLocalLat) += elapsed_us;
+		}
 		else if (hit == 2)
+		{
 			(*mpMemCnt)++;
+			(*mpMemLat) += elapsed_us;
+		}
 		else
+		{
 			(*mpStoCnt)++;
+			(*mpStoLat) += elapsed_us;
+		}
     	LWLockRelease(mempool_client_stat_lock);
 	}
 #endif

@@ -34,7 +34,7 @@ namespace DSMEngine{
             assert(res != NULL);
             return res;
         }else{
-            printf("The returned pointer is %p size is %zu\n", res, size);
+            // printf("The returned pointer is %p size is %zu\n", res, size);
             return res;
         }
 

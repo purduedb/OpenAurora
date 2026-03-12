@@ -214,19 +214,30 @@ void proc_exit_MemPool(){
 void ReportStatForMemPool(){
     LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
     int64_t tmpLocalCnt = *mpLocalCnt, tmpMemCnt = *mpMemCnt, tmpStoCnt = *mpStoCnt;
+	int64_t tmpLocalLat = *mpLocalLat, tmpMemLat = *mpMemLat, tmpStoLat = *mpStoLat;
     int64_t totalCnt = tmpLocalCnt + tmpMemCnt + tmpStoCnt;
     if(totalCnt != 0)
-        fprintf(stderr, "pg_stat: %lld | %lld | %lld | %lld | %.3lf | %.3lf | %.3lf\n",
+	{
+		double avgLocalLat = tmpLocalCnt > 0 ? (double) tmpLocalLat / tmpLocalCnt : 0.0;
+		double avgMemLat = tmpMemCnt > 0 ? (double) tmpMemLat / tmpMemCnt : 0.0;
+		double avgStoLat = tmpStoCnt > 0 ? (double) tmpStoLat / tmpStoCnt : 0.0;
+
+        fprintf(stderr, "pg_stat: %lld | %lld | %lld | %lld | %.3lf | %.3lf | %.3lf | %.3lf | %.3lf | %.3lf\n",
             totalCnt, tmpLocalCnt, tmpMemCnt, tmpStoCnt,
             (double)tmpLocalCnt / totalCnt,
             (double)tmpMemCnt / totalCnt,
-            (double)tmpStoCnt / totalCnt
+            (double)tmpStoCnt / totalCnt,
+			avgLocalLat,
+			avgMemLat,
+			avgStoLat
         );
+	}
     LWLockRelease(mempool_client_stat_lock);
 }
 void ResetStatForMemPool(){
     LWLockAcquire(mempool_client_stat_lock, LW_EXCLUSIVE);
     *mpLocalCnt = *mpMemCnt = *mpStoCnt = 0;
+	*mpLocalLat = *mpMemLat = *mpStoLat = 0;
     LWLockRelease(mempool_client_stat_lock);
 }
 
