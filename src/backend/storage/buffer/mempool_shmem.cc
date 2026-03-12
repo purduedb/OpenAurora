@@ -21,6 +21,7 @@ size_t *rat_occupancy;
 
 HTAB_PVT *pvt;
 size_t *update_pvt_info_ptr;
+uint64_t *LsnReplayedTo;
 
 bool *is_first_mpc, *is_first_mpc_connection;
 
@@ -123,6 +124,10 @@ void MemPoolClientShmemInit(){
 	update_pvt_info_ptr = (size_t*)
 		ShmemInitStruct("MemPool Client PVT Info Pointer",
 						sizeof(size_t),
+						found_any, found_all);
+	LsnReplayedTo = (uint64_t*)
+		ShmemInitStruct("LsnReplayedTo",
+						sizeof(uint64_t),
 						found_any, found_all);
 
 	if (found_any){

@@ -241,6 +241,15 @@ void ResetStatForMemPool(){
     LWLockRelease(mempool_client_stat_lock);
 }
 
+uint64_t CurrentLSNForComputeEngine(){
+    uint64_t lsn = GetLogWrtResultLsn();
+    if(IsRpcClient > 2){
+        if(*LsnReplayedTo < lsn)
+            lsn = *LsnReplayedTo;
+    }
+    return lsn;
+}
+
 bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info) {
 	auto client = mempool::MemPoolClient::Get_Instance();
     if(client == NULL) return false;

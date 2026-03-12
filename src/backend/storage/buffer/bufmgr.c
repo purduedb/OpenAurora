@@ -1089,10 +1089,10 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 #endif
 						&& PageIsVerifiedExtended((Page)bufBlock, blockNum, 0)){
 							XLogRecPtr cur_lsn = PageXLogRecPtrGet(((PageHeader)bufBlock)->pd_lsn);
-							if(LsnIsSatisfied(cur_lsn, GetLogWrtResultLsn())){
+							if(LsnIsSatisfied(cur_lsn, CurrentLSNForComputeEngine())){
 								read_from_mempool = true;
 								*hit = 2;
-								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, GetLogWrtResultLsn());
+								toMarkDirty |= ReplayXLog(page_id, bufHdr, (char*)bufBlock, cur_lsn, CurrentLSNForComputeEngine());
 #ifndef MEMPOOL_CENTRALIZED_RAT
 								AsyncAccessPageOnMemoryPool(page_id);
 #endif

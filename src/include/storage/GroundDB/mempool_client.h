@@ -56,6 +56,8 @@ extern void proc_exit_MemPool();
 extern void ReportStatForMemPool();
 extern void ResetStatForMemPool();
 
+extern uint64_t CurrentLSNForComputeEngine();
+
 extern bool PageExistsInMemPool(KeyType PageID, RDMAReadPageInfo* rdma_read_info);
 
 extern bool FetchPageFromMemoryPool(char* des, KeyType PageID, RDMAReadPageInfo* rdma_read_info);

@@ -7856,6 +7856,7 @@ StartupXLOG(void)
 		/* Also ensure XLogReceiptTime has a sane value */
 		XLogReceiptTime = GetCurrentTimestamp();
 
+		*LsnReplayedTo = XLogCtl->replayEndRecPtr;
 		/*
 		 * Let postmaster know we've started redo now, so that it can launch
 		 * checkpointer to perform restartpoints.  We don't bother during
@@ -8442,6 +8443,7 @@ StartupXLOG(void)
 
 				/* Remember this record as the last-applied one */
 				LastRec = ReadRecPtr;
+				*LsnReplayedTo = ReadRecPtr;
 
 				/* Allow read-only connections if we're consistent now */
 //				CheckRecoveryConsistency();

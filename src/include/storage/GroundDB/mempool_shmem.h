@@ -44,6 +44,7 @@ typedef struct{
 extern PGDLLIMPORT bool *is_first_mpc, *is_first_mpc_connection;
 extern PGDLLIMPORT HTAB_PVT *pvt;
 extern PGDLLIMPORT size_t *update_pvt_info_ptr;
+extern PGDLLIMPORT uint64_t *LsnReplayedTo;
 
 extern void MemPoolClientShmemInit();
 
