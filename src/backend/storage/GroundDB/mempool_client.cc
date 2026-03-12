@@ -1868,7 +1868,7 @@ pvt_generic_idx_save(XLogReaderState *record, XLogRecPtr lsn)
 }
 
 void MemPoolSyncMain(){
-    int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, GetLogWrtResultLsn());
+    int SyncToStorageHashMapId = RpcRegisterSecondaryNode(IsRpcClient == 2, CurrentLSNForComputeEngine());
 
     size_t interval_us[6] = {CheckSyncRAT_Interval_us, SyncXLogInfo_Interval_us, SyncUpdatePVTInfo_Interval_us, HashMapComputeNodeHeartbeatInterval_us, NeonHeartbeatInterval_us, BandwidthUsageReportInterval_us};
     size_t min_interval_us = interval_us[0];
