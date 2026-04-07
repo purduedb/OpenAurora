@@ -5940,8 +5940,8 @@ readRecoverySignalFile(void)
 							   S_IRUSR | S_IWUSR);
 		if (fd >= 0)
 		{
-			(void) pg_fsync(fd);
-			close(fd);
+			(pg_fsync)(fd);
+			(close)(fd);
 		}
 		standby_signal_file_found = true;
 	}
@@ -5953,8 +5953,8 @@ readRecoverySignalFile(void)
 							   S_IRUSR | S_IWUSR);
 		if (fd >= 0)
 		{
-			(void) pg_fsync(fd);
-			close(fd);
+			(pg_fsync)(fd);
+			(close)(fd);
 		}
 		recovery_signal_file_found = true;
 	}
