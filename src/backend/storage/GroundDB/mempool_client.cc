@@ -1953,7 +1953,7 @@ skip_mempool_sync:
         now = std::chrono::steady_clock::now();
         if(now - last[3] >= interval[3]){
             last[3] = now;
-            RpcSecondaryNodeUpdatesLsn(SyncToStorageHashMapId, GetLogWrtResultLsn());
+            RpcSecondaryNodeUpdatesLsn(SyncToStorageHashMapId, CurrentLSNForComputeEngine());
         }
 
         now = std::chrono::steady_clock::now();

@@ -1137,7 +1137,7 @@ int32_t HashMapRegisterSecondaryNode(HashMap hashMap, bool primary, uint64_t lsn
     pthread_rwlock_wrlock(&hashMap->computeNodeLock);
     hashMap->computeNodeNum++;
     hashMap->computeNodeList = (ComputeNodeInfo*) realloc(hashMap->computeNodeList, sizeof(ComputeNodeInfo) * hashMap->computeNodeNum);
-    uint32_t id = hashMap->computeNodeNum <= 1 ? 0 : hashMap->computeNodeList[hashMap->computeNodeNum - 2].id;
+    uint32_t id = hashMap->computeNodeNum <= 1 ? 0 : hashMap->computeNodeList[hashMap->computeNodeNum - 2].id + 1;
     hashMap->computeNodeList[hashMap->computeNodeNum - 1].id = id;
     hashMap->computeNodeList[hashMap->computeNodeNum - 1].primary = primary;
     hashMap->computeNodeList[hashMap->computeNodeNum - 1].active = true;
