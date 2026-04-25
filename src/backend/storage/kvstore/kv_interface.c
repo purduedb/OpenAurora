@@ -245,7 +245,7 @@ int KvDelete(char *key) {
 //            (errcode(ERRCODE_INTERNAL_ERROR),
 //                    errmsg("[KvDelete]Started\n")));
     InitKvStore();
-    char * err;
+    char *err = NULL;
     rocksdb_writeoptions_t *writeoptions = rocksdb_writeoptions_create();
     rocksdb_delete(db, writeoptions, key, strlen(key), &err);
     rocksdb_writeoptions_destroy(writeoptions);
