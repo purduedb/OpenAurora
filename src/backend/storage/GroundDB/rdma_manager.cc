@@ -9,11 +9,13 @@ uint16_t RDMA_Manager::node_id = 0;
 uint16_t allocated_compute_node_id = 0;
 
 int ibv_post_send_debug(ibv_qp *qp, ibv_send_wr *wr, ibv_send_wr **bad_wr){
+    if(mpNtwkBndwdth != nullptr)
     for(int i = 0; i < wr->num_sge; i++)
         *mpNtwkBndwdth += wr->sg_list[i].length;
     return ibv_post_send(qp, wr, bad_wr);
 }
 int ibv_post_recv_debug(ibv_qp *qp, ibv_recv_wr *wr, ibv_recv_wr **bad_wr){
+    if(mpNtwkBndwdth != nullptr)
     for(int i = 0; i < wr->num_sge; i++)
         *mpNtwkBndwdth += wr->sg_list[i].length;
     return ibv_post_recv(qp, wr, bad_wr);
@@ -486,7 +488,7 @@ bool RDMA_Manager::Client_Set_Up_One_Connection(uint16_t target_node_id){
         memory_node_status[target_node_id] = false;
     }
     else{
-        printf("connect to node id %d\n", target_node_id);
+        // printf("connect to node id %d\n", target_node_id);
         Get_Remote_qp_Info_Then_Connect(target_node_id);
         memory_node_status[target_node_id] = true;
     }
@@ -557,7 +559,7 @@ bool RDMA_Manager::Client_Set_Up_Resources() {
             failed_connection_cnt++;
         }
         else{
-            printf("connect to node id %d\n", target_node_id);
+            // printf("connect to node id %d\n", target_node_id);
             //TODO: use mulitple thread to initialize the queue pairs.
             memory_handler_threads.emplace_back(&RDMA_Manager::Get_Remote_qp_Info_Then_Connect, this, target_node_id);
     //        Get_Remote_qp_Info_Then_Connect(shard_target_node_id);
@@ -739,8 +741,8 @@ bool RDMA_Manager::Get_Remote_qp_Info_Then_Connect(uint16_t target_node_id) {
     remote_con_data->lid = ntohs(tmp_con_data.lid);
     memcpy(remote_con_data->gid, tmp_con_data.gid, 16);
     node_id = tmp_con_data.node_id;
-    std::cout << "local node id is " << node_id
-                        << std::endl;
+    // std::cout << "local node id is " << node_id
+    //                     << std::endl;
 
     // fprintf(stdout, "Remote QP number = 0x%x\n", remote_con_data->qp_num);
     // fprintf(stdout, "Remote LID = 0x%x\n", remote_con_data->lid);
@@ -1013,7 +1015,7 @@ int RDMA_Manager::modify_qp_to_rtr(struct ibv_qp* qp, uint32_t remote_qpn,
     attr.ah_attr.port_num = rdma_config.ib_port;
     if (rdma_config.gid_idx >= 0) {
         attr.ah_attr.is_global = 1;
-        attr.ah_attr.port_num = 1;
+        attr.ah_attr.port_num = rdma_config.ib_port;
         memcpy(&attr.ah_attr.grh.dgid, dgid, 16);
         attr.ah_attr.grh.flow_label = 0;
         attr.ah_attr.grh.hop_limit = 0xFF;
@@ -1817,8 +1819,9 @@ int RDMA_Manager::try_poll_completions(ibv_wc* wc_p, int num_entries, std::strin
     if (poll_result > 0){
         if (wc_p[poll_result-1].status != IBV_WC_SUCCESS) // TODO:: could be modified into check all the entries in the array
         {
-            fprintf(stderr, "number %d got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
-                poll_result-1, wc_p[poll_result-1].status, wc_p[poll_result-1].vendor_err);
+            fprintf(stderr, "number %d got bad completion with status: 0x%x, vendor syndrome: 0x%x, target node id: %u\n",
+                poll_result-1, wc_p[poll_result-1].status, wc_p[poll_result-1].vendor_err, target_node_id);
+            return -1;
             assert(false);
         }
         // printf("Get a completion from try queue\n");
