@@ -432,6 +432,7 @@ public:
 
     std::map<uint16_t, std::string> compute_nodes{};
     std::map<uint16_t, std::string> memory_nodes{};
+    std::map<uint16_t, uint16_t> memory_node_ports{};
     std::atomic<uint64_t> memory_connection_counter = 0;// Reuse by both compute nodes and memory nodes
     std::atomic<uint64_t> compute_connection_counter = 0;
     // This global index table is in the node 0;

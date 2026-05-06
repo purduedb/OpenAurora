@@ -481,10 +481,14 @@ ibv_mr * RDMA_Manager::Preregister_Memory(size_t gb_number) {
 }
 
 bool RDMA_Manager::Client_Set_Up_One_Connection(uint16_t target_node_id){
-    res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+    uint16_t target_port = rdma_config.tcp_port;
+    if (memory_node_ports.find(target_node_id) != memory_node_ports.end()) {
+        target_port = memory_node_ports[target_node_id];
+    }
+    res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), target_port);
     if (res->sock_map[target_node_id] < 0) {
         fprintf(stderr, "failed to establish TCP connection to server %s, port %d\n",
-            memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+            memory_nodes[target_node_id].c_str(), target_port);
         memory_node_status[target_node_id] = false;
     }
     else{
@@ -512,34 +516,51 @@ bool RDMA_Manager::Client_Set_Up_One_Connection(uint16_t target_node_id){
 * memory node ids are even, compute node ids are odd.
 ******************************************************************************/
 bool RDMA_Manager::Client_Set_Up_Resources() {
-    char temp_char;
-
     std::string connection_conf;
-    size_t pos = 0;
     std::ifstream myfile;
     myfile.open (config_file_name, std::ios_base::in);
-    std::string space_delimiter = " ";
-
-    std::getline(myfile,connection_conf );
     uint16_t i = 0;
     uint16_t id;
-    while ((pos = connection_conf.find(space_delimiter)) != std::string::npos) {
-        id = 2*i;
-        compute_nodes.insert({id, connection_conf.substr(0, pos)});
-        connection_conf.erase(0, pos + space_delimiter.length());
-        i++;
+    while (std::getline(myfile, connection_conf)) {
+        if (connection_conf.empty() || connection_conf[0] == '#') {
+            continue;
+        }
+        // The first non-empty/non-comment line is memory node list.
+        break;
     }
-    compute_nodes.insert({2*i, connection_conf});
     i = 0;
-    std::getline(myfile,connection_conf );
-    while ((pos = connection_conf.find(space_delimiter)) != std::string::npos) {
-        id = 2*i+1;
-        memory_nodes.insert({id, connection_conf.substr(0, pos)});
-        connection_conf.erase(0, pos + space_delimiter.length());
+    std::istringstream memory_line_stream(connection_conf);
+    std::string memory_node_entry;
+    while (memory_line_stream >> memory_node_entry) {
+        if (!memory_node_entry.empty() && memory_node_entry[0] == '#') {
+            break;
+        }
+        id = 2*i + 1;
+        std::string host = memory_node_entry;
+        uint16_t port = rdma_config.tcp_port;
+        size_t port_sep_pos = memory_node_entry.rfind(':');
+        if (port_sep_pos != std::string::npos) {
+            host = memory_node_entry.substr(0, port_sep_pos);
+            std::string port_str = memory_node_entry.substr(port_sep_pos + 1);
+            if (!port_str.empty()) {
+                try {
+                    int parsed_port = std::stoi(port_str);
+                    if (parsed_port > 0 && parsed_port <= UINT16_MAX) {
+                        port = static_cast<uint16_t>(parsed_port);
+                    } else {
+                        fprintf(stderr, "invalid port '%s' for memory node %s, fallback to default port %d\n",
+                            port_str.c_str(), host.c_str(), rdma_config.tcp_port);
+                    }
+                } catch (...) {
+                    fprintf(stderr, "invalid port '%s' for memory node %s, fallback to default port %d\n",
+                        port_str.c_str(), host.c_str(), rdma_config.tcp_port);
+                }
+            }
+        }
+        memory_nodes.insert({id, host});
+        memory_node_ports.insert({id, port});
         i++;
     }
-    memory_nodes.insert({2*i + 1, connection_conf});
-    i++;
     Initialize_threadlocal_map();
     /* if client side */
     if (resources_create()) {
@@ -551,10 +572,14 @@ bool RDMA_Manager::Client_Set_Up_Resources() {
     int failed_connection_cnt = 0;
     for(int i = 0; i < memory_nodes.size(); i++){
         uint16_t target_node_id = 2*i+1;
-        res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+        uint16_t target_port = rdma_config.tcp_port;
+        if (memory_node_ports.find(target_node_id) != memory_node_ports.end()) {
+            target_port = memory_node_ports[target_node_id];
+        }
+        res->sock_map[target_node_id] = client_sock_connect(memory_nodes[target_node_id].c_str(), target_port);
         if (res->sock_map[target_node_id] < 0) {
             fprintf(stderr, "failed to establish TCP connection to server %s, port %d\n",
-                memory_nodes[target_node_id].c_str(), rdma_config.tcp_port);
+                memory_nodes[target_node_id].c_str(), target_port);
             memory_node_status[target_node_id] = false;
             failed_connection_cnt++;
         }
