@@ -8,29 +8,46 @@
 
 void MemPoolMain(int argc, char *argv[], const char *dbname, const char *username) {
     const uint32_t default_tcp_port = 122189;
+    const uint32_t default_page_array_gb = 8;
     uint32_t tcp_port = default_tcp_port;
+    uint32_t page_array_gb = default_page_array_gb;
 
-    // Support:
-    //   ./postgre --mempool <port>
+    // Support (after argv[1] == --mempool):
     //   ./postgre --mempool --port=<port>
-    if (argc > 2) {
-        const char* port_arg = nullptr;
-        if (strncmp(argv[2], "--port=", 7) == 0) {
-            port_arg = argv[2] + 7;
-        } else {
-            port_arg = argv[2];
-        }
-
-        errno = 0;
-        char* endptr = nullptr;
-        unsigned long parsed_port = strtoul(port_arg, &endptr, 10);
-        if (errno == 0 && endptr != port_arg && *endptr == '\0' &&
-            parsed_port > 0 && parsed_port <= UINT_MAX) {
-            tcp_port = static_cast<uint32_t>(parsed_port);
+    //   ./postgre --mempool --gb=<n>        # page array size in GB (default 8)
+    //   ./postgre --mempool --port=19875 --gb=16
+    for (int i = 2; i < argc; i++) {
+        const char* arg = argv[i];
+        if (strncmp(arg, "--port=", 7) == 0) {
+            const char* port_arg = arg + 7;
+            errno = 0;
+            char* endptr = nullptr;
+            unsigned long parsed = strtoul(port_arg, &endptr, 10);
+            if (errno == 0 && endptr != port_arg && *endptr == '\0' &&
+                parsed > 0 && parsed <= UINT_MAX) {
+                tcp_port = static_cast<uint32_t>(parsed);
+            } else {
+                fprintf(stderr,
+                        "Invalid mempool port '%s', fallback to default port %u\n",
+                        port_arg, default_tcp_port);
+            }
+        } else if (strncmp(arg, "--gb=", 5) == 0) {
+            const char* gb_arg = arg + 5;
+            errno = 0;
+            char* endptr = nullptr;
+            unsigned long parsed = strtoul(gb_arg, &endptr, 10);
+            if (errno == 0 && endptr != gb_arg && *endptr == '\0' &&
+                parsed > 0 && parsed <= 4096UL) {
+                page_array_gb = static_cast<uint32_t>(parsed);
+            } else {
+                fprintf(stderr,
+                        "Invalid --gb value '%s', fallback to default %u GB\n",
+                        gb_arg, default_page_array_gb);
+            }
         } else {
             fprintf(stderr,
-                    "Invalid mempool port '%s', fallback to default port %u\n",
-                    port_arg, default_tcp_port);
+                    "Unknown mempool argument '%s' (use --port=<n> or --gb=<n> only)\n",
+                    arg);
         }
     }
 
@@ -46,7 +63,7 @@ void MemPoolMain(int argc, char *argv[], const char *dbname, const char *usernam
     mempool->init_rdma_manager(88, config);
     mempool->init_xlog_info();
     mempool->init_thread_pool(20);
-    mempool->allocate_page_array_by_GB(8);
+    mempool->allocate_page_array_by_GB(page_array_gb);
     mempool->init_pvtinfo_ring(1 << 15);
     mempool->Server_to_Client_Communication();
 }
