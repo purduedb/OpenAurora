@@ -748,7 +748,7 @@ bool mempool::MemPoolClient::RegisterPageOnMemPool(KeyType PageID, RDMAReadPageI
     size_t memnode_id = DSMEngine::Hash(&PageID, 0) % memnode_cnt;
 
 	rdma_mg->Allocate_Local_RDMA_Slot(recv_mr, DSMEngine::Message);
-	has_failed[memnode_id] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, 1);
+	has_failed[memnode_id] |= rdma_mg->post_receive<DSMEngine::RDMA_Reply>(&recv_mr, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return false;
 	rdma_mg->Allocate_Local_RDMA_Slot(send_mr, DSMEngine::Message);
 	auto send_pointer = (DSMEngine::RDMA_Request*)send_mr.addr;
@@ -757,18 +757,18 @@ bool mempool::MemPoolClient::RegisterPageOnMemPool(KeyType PageID, RDMAReadPageI
 	send_pointer->buffer = recv_mr.addr;
 	send_pointer->rkey = recv_mr.rkey;
     req->page_id = PageID;
-	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return false;
 
 	ibv_wc wc[3] = {};
 	std::string qp_type("main");
-	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return false;
-	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, false, 1);
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, false, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return false;
 
 	auto res = &((DSMEngine::RDMA_Reply*)recv_mr.addr)->content.register_page;
-    rat.update(res->pa_idx, res->pa_ofs, PageID);
+	rat.update(rat.global_pa_idx(memnode_id, res->pa_idx), res->pa_ofs, PageID);
     bool exists = res->exists;
 	if(exists)
         rat.at(PageID, *rdma_read_info);
@@ -791,12 +791,12 @@ void mempool::MemPoolClient::UnregisterPageOnMemPool(KeyType PageID){
 	auto req = &send_pointer->content.unregister_page;
 	send_pointer->command = DSMEngine::unregister_page_;
     req->page_id = PageID;
-	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, 1);
+	has_failed[memnode_id] |= rdma_mg->post_send<DSMEngine::RDMA_Request>(&send_mr, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return;
 
 	ibv_wc wc[3] = {};
 	std::string qp_type("main");
-	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, 1);
+	has_failed[memnode_id] |= rdma_mg->poll_completion(wc, 1, qp_type, true, memnode_id * 2 + 1);
     if(has_failed[memnode_id]) return;
     rat.erase(PageID);
 

@@ -30,6 +30,12 @@ void PageAddressTable::get_memnode_id(size_t pa_idx, size_t& memnode_id, size_t&
 	memnode_pa_idx = mpc_pa_to_memnode[pa_idx << 1 | 1];
 	LWLockRelease(mempool_client_rat_lock);
 }
+size_t PageAddressTable::global_pa_idx(size_t memnode_id, size_t memnode_local_pa_idx){
+	LWLockAcquire(mempool_client_rat_lock, LW_SHARED);
+	size_t res = mpc_memnode_to_pa[memnode_id * MAX_PAGE_ARRAY_COUNT_PER_MEMNODE + memnode_local_pa_idx];
+	LWLockRelease(mempool_client_rat_lock);
+	return res;
+}
 void PageAddressTable::init(size_t memnode_cnt){
 	*mpc_pa_cnt = 0;
 	*mpc_pa_size = 0;

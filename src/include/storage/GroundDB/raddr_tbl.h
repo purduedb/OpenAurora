@@ -22,6 +22,7 @@ public:
 	size_t page_array_count();
 	size_t page_array_size(size_t pa_idx);
 	void get_memnode_id(size_t pa_idx, size_t& memnode_id, size_t& memnode_pa_idx);
+	size_t global_pa_idx(size_t memnode_id, size_t memnode_local_pa_idx);
 	void init(size_t memnode_cnt);
 	void append_page_array(size_t memnode_id, size_t pa_idx, size_t pa_size, const ibv_mr& pa_mr);
 	void at(KeyType pid, RDMAReadPageInfo& info);

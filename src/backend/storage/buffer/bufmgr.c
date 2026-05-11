@@ -1644,13 +1644,14 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	if (oldPartitionLock != NULL)
 	{
 #ifdef MEMPOOL_CENTRALIZED_RAT
-		UnregisterPageOnMemPool((KeyType){
-			oldTag.rnode.spcNode,
-			oldTag.rnode.dbNode,
-			oldTag.rnode.relNode,
-			oldTag.forkNum,
-			oldTag.blockNum,
-		});
+		if (IsRpcClient > 1)
+			UnregisterPageOnMemPool((KeyType){
+				oldTag.rnode.spcNode,
+				oldTag.rnode.dbNode,
+				oldTag.rnode.relNode,
+				oldTag.forkNum,
+				oldTag.blockNum,
+			});
 #endif
 		BufTableDelete(&oldTag, oldHash);
 		if (oldPartitionLock != newPartitionLock)
